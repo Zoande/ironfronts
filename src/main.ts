@@ -149,18 +149,36 @@ audio.prime(firstMenuTrack ? trackSources(firstMenuTrack).slice(0, 1) : []);
 audio.installLifecycle();
 
 // Try to start the lobby soundtrack immediately when the page opens. Browsers
-// may still block audible autoplay, so the first user gesture retries only if
-// playback did not actually begin.
+// are allowed to block audible autoplay after a navigation/refresh, so a real
+// user gesture owns AudioContext activation. Keep the recovery listeners
+// available instead of consuming them after one attempt: Chrome can reject an
+// early resume (or re-suspend audio after a tab visibility change).
 void music.setState('menu');
 
-let autoplayRetryDone = false;
-const retryMenuMusicAfterAutoplayBlock = (): void => {
-  if (autoplayRetryDone || audio.isMusicPlaying()) return;
-  autoplayRetryDone = true;
-  void music.setState('menu', { force: true });
+let menuMusicHasPlayed = false;
+let audioGestureRecoveryInFlight = false;
+const recoverAudioAfterGesture = (): void => {
+  if (audioGestureRecoveryInFlight) return;
+  audioGestureRecoveryInFlight = true;
+  void (async () => {
+    try {
+      if (!await audio.unlock()) return;
+
+      // The initial autoplay attempt may have left the director in "menu"
+      // state even though no track actually started. Retry only until menu
+      // music has successfully played once; normal director gaps afterwards
+      // must remain intentional.
+      if (!menuMusicHasPlayed && music.getState() === 'menu' && !audio.isMusicPlaying()) {
+        await music.setState('menu', { force: true });
+      }
+      if (audio.isMusicPlaying()) menuMusicHasPlayed = true;
+    } finally {
+      audioGestureRecoveryInFlight = false;
+    }
+  })();
 };
-document.addEventListener('pointerdown', retryMenuMusicAfterAutoplayBlock, { capture: true, once: true });
-document.addEventListener('keydown', retryMenuMusicAfterAutoplayBlock, { capture: true, once: true });
+document.addEventListener('pointerdown', recoverAudioAfterGesture, { capture: true });
+document.addEventListener('keydown', recoverAudioAfterGesture, { capture: true });
 
 window.addEventListener('pagehide', (event) => {
   if (!event.persisted) {
