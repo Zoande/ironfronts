@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const root = process.cwd();
 const menu = readFileSync(path.join(root, 'src/menu/menu.ts'), 'utf8');
 const audio = readFileSync(path.join(root, 'src/audio/audio-manager.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
 
 describe('menu interaction stability', () => {
   it('keeps dossier animation compositor-only', () => {
@@ -28,5 +29,20 @@ describe('menu interaction stability', () => {
 
   it('does not activate audio from passive hover before unlock', () => {
     expect(audio).toContain("if (cue === 'hover' && !this.unlocked) return");
+  });
+
+  it('keeps refresh audio recovery available until a real activation succeeds', () => {
+    expect(main).toContain("document.addEventListener('pointerdown', recoverAudioAfterGesture, { capture: true })");
+    expect(main).toContain("document.addEventListener('keydown', recoverAudioAfterGesture, { capture: true })");
+    expect(main).not.toContain("recoverAudioAfterGesture, { capture: true, once: true }");
+    expect(main).toContain("if (!await audio.unlock()) return");
+    expect(main).toContain("await music.setState('menu', { force: true })");
+  });
+
+  it('does not report music as audible while its AudioContext is suspended', () => {
+    const start = audio.indexOf('isMusicPlaying(): boolean');
+    const end = audio.indexOf('setVolume(', start);
+    const method = audio.slice(start, end);
+    expect(method).toContain("this.context?.state === 'running'");
   });
 });
