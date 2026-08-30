@@ -119,10 +119,9 @@ export class AudioManager {
   }
 
   /**
-   * Warm the first-interaction audio path while the menu is idle. Browsers
-   * still require a user gesture before playback, but fetching/decoding can
-   * happen beforehand so the first legitimate pointer/keyboard gesture does
-   * not also pay the network/decode cost.
+   * Warm the lobby soundtrack path while the menu is idle. Browsers still
+   * require a user gesture before Web Audio playback, so UI sample decoding
+   * stays lazy and AudioContext creation remains gesture-gated.
    */
   prime(musicUrls: readonly string[] = []): void {
     // Lobby music gets first claim on bandwidth.
