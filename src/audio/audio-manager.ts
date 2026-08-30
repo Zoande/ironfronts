@@ -77,7 +77,11 @@ export class AudioManager {
   }
 
   isMusicPlaying(): boolean {
-    return Boolean(this.currentMusic && !this.currentMusic.element.paused);
+    return Boolean(
+      this.context?.state === 'running'
+      && this.currentMusic
+      && !this.currentMusic.element.paused,
+    );
   }
 
   setVolume(bus: AudioBus, value: number): number {
@@ -121,13 +125,14 @@ export class AudioManager {
    * not also pay the network/decode cost.
    */
   prime(musicUrls: readonly string[] = []): void {
-    // Lobby music gets first claim on bandwidth. The two large paper samples
-    // are intentionally left lazy so they cannot delay the first soundtrack.
+    // Lobby music gets first claim on bandwidth.
     for (const url of musicUrls) this.prepareMusic(url);
-    for (const cue of ['hover', 'confirm', 'back'] as const) {
-      const url = UI_SAMPLE_URLS[cue];
-      if (url) void this.loadBuffer(url);
-    }
+
+    // Keep Web Audio creation strictly behind a real user gesture. loadBuffer()
+    // calls ensureContext(), and creating an AudioContext while the document is
+    // loading can leave Chrome with a suspended context after refresh. UI
+    // samples are small enough to decode lazily on the first activated click.
+    // This also makes the first soundtrack/SFX recovery path deterministic.
   }
 
   prepareMusic(url: string): void {
@@ -364,7 +369,9 @@ export class AudioManager {
       if (targetDocument.hidden) {
         void context.suspend().catch(() => undefined);
       } else {
-        void context.resume().catch(() => undefined);
+        void context.resume()
+          .then(() => { this.unlocked = context.state === 'running'; })
+          .catch(() => { this.unlocked = false; });
       }
     };
     targetDocument.addEventListener('visibilitychange', onVisibilityChange);
