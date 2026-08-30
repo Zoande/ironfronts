@@ -28,4 +28,16 @@ describe('lightweight lobby startup', () => {
     expect(prepareMusic).toContain("fetch(url, { cache: 'force-cache' })");
     expect(prepareMusic).not.toContain('new Audio()');
   });
+
+  it('does not create a Web Audio context while merely priming the lobby', () => {
+    const audio = readFileSync(path.join(root, 'src/audio/audio-manager.ts'), 'utf8');
+    const start = audio.indexOf('prime(musicUrls: readonly string[] = [])');
+    const end = audio.indexOf('prepareMusic(url: string)', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const prime = audio.slice(start, end);
+    expect(prime).toContain('this.prepareMusic(url)');
+    expect(prime).not.toContain('this.loadBuffer(');
+    expect(prime).not.toContain('this.ensureContext(');
+  });
 });
