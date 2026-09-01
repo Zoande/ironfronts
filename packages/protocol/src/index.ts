@@ -16,7 +16,7 @@ const attackTargetSchema = z.discriminatedUnion('kind', [
 export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('moveArmy'), armyId: z.string(), x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars }),
   z.object({ type: z.literal('attackArmy'), armyId: z.string(), target: attackTargetSchema, confirmedWarCountryIds: confirmedWars }),
-  z.object({ type: z.literal('retreatArmy'), armyId: z.string(), firstNodeId: z.number().int().nonnegative() }),
+  z.object({ type: z.literal('retreatArmy'), armyId: z.string(), x: z.number().finite(), z: z.number().finite() }),
   z.object({
     type: z.literal('splitArmy'), armyId: z.string(),
     groups: z.array(z.object({ typeId: z.string(), count: z.number().int().nonnegative() })).min(1),

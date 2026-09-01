@@ -9,13 +9,13 @@ const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
 
 /** Playtest #2 + #6: deterministic top-down spawn, and right-click issues orders. */
 describe('camera + order controls', () => {
-  it('reserves right mouse for orders — left pans, middle orbits', () => {
+  it('reserves right mouse for orders — left orbits, middle pans', () => {
     const start = camera.indexOf('private onPointerDown');
     const body = camera.slice(start, camera.indexOf('private onPointerMove', start));
     // No more `button === 2 -> orbit`.
     expect(body).not.toContain("event.button === 2 ? 'orbit'");
-    expect(body).toContain("event.button === 1 ? 'orbit' : 'pan'");
-    // Middle/right are the only mouse buttons the camera still acts on.
+    expect(body).toContain("event.button === 0 ? 'orbit' : 'pan'");
+    // Left and middle are the only mouse buttons the camera acts on.
     expect(body).toMatch(/button !== 0 && event\.button !== 1/);
   });
 

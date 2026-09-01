@@ -122,11 +122,10 @@ export function buildInstances(provinces, geometryById, provinceIds, areaCounts,
 
     if (province.terrain_type_id !== 14) continue;
     const populationScale = Math.log10(Math.max(1_000, province.population ?? 1_000));
-    // Fewer, more spaced-out buildings read better as a map-scale town than a
-    // dense box pile. Small provinces (islands like Taiwan) are scaled down
-    // hard so they get a hamlet, not a metropolis.
+    // Keep map-scale towns readable while giving their street plans a little
+    // more life. Small provinces (islands like Taiwan) still scale down hard.
     const areaFactor = clamp(Math.sqrt(area) / 24, 0.3, 1);
-    const target = Math.max(3, Math.round(clamp(Math.round((populationScale - 3) * 10), 5, 30) * areaFactor));
+    const target = Math.max(3, Math.round(clamp(Math.round((populationScale - 3) * 11.2), 6, 34) * areaFactor));
     const plan = cityPlans.get(province.province_id);
     const radius = plan?.radius ?? clamp(Math.sqrt(Math.max(30, area)) * 1.7, 7, 30);
     const placedBuildings = [];

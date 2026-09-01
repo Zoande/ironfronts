@@ -34,7 +34,7 @@ export function applyCommand(ctx: SimContext, command: GameCommand): CommandResu
     case 'attackArmy':
       return issueAttack(ctx, command);
     case 'retreatArmy':
-      return issueManualRetreat(ctx, command.armyId, command.firstNodeId);
+      return issueManualRetreat(ctx, command.armyId, command.x, command.z);
     case 'splitArmy':
       return issueSplit(ctx, command);
     case 'stopArmy':

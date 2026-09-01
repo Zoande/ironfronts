@@ -8,7 +8,7 @@ import { GAME_STATE_VERSION, emptyStockpile, type GameState } from '../../src/ga
 import { buildLandGraph, type LandGraph } from '../../src/game/movement/graph';
 import type { SimContext } from '../../src/game/sim-context';
 import type { WorldData, WorldProvince } from '../../src/game/world-data';
-import { legalRetreatPaths, stepCombat } from '../../src/game/combat';
+import { issueManualRetreat, legalRetreatPaths, stepCombat } from '../../src/game/combat';
 import type { ArmyStack } from '../../src/game/units/army';
 
 function prov(id: number, x: number, z: number): WorldProvince {
@@ -71,6 +71,10 @@ describe('retreat', () => {
     expect(routes).toHaveLength(1);
     expect(routes[0].firstNodeId).toBe(1);
     expect(routes[0].destinationProvinceId).toBe(20);
+    const result = issueManualRetreat(c, 'weak', 900, 100);
+    expect(result).toEqual({ ok: true });
+    expect(c.state.armies.weak.status).toBe('retreating');
+    expect(c.state.armies.weak.order?.destX).toBeGreaterThan(500);
   });
 
   it('withdraws a beaten stack toward its nearest owned province', () => {

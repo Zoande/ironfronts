@@ -37,9 +37,28 @@ describe('lightweight lobby startup', () => {
     expect(bootstrap).toContain('renderer.setProvinceOwners(Object.entries(session.state.provinceOwners)');
   });
 
-  it('shows retreat-exit circles only while the player is choosing a route', () => {
+  it('targets retreat on ordinary map ground instead of graph-exit circles', () => {
     const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
-    expect(main).toContain("army.status === 'engaged' && targetingMode === 'retreat'");
+    const retreat = main.slice(main.indexOf("if (targetingMode === 'retreat'"), main.indexOf('// 1b.', main.indexOf("if (targetingMode === 'retreat'")));
+    expect(retreat).toContain('renderer.groundPointAt(clientX, clientY)');
+    expect(retreat).toContain('session.orderRetreat(selectedArmyId, ground[0], ground[1])');
+    expect(main).not.toContain("army.status === 'engaged' && targetingMode === 'retreat'");
+  });
+
+  it('syncs authoritative wars into the diplomacy renderer after every replica change', () => {
+    const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+    expect(main).toContain('renderer.setDiplomaticRelations(session.state.relations)');
+    expect(main).toContain("session.addEventListener('change', syncDiplomaticRelations)");
+    expect(main).toContain("session.addEventListener('war-confirmation'");
+  });
+
+  it('keeps army commands click-only so navigation keys cannot issue orders', () => {
+    const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+    const start = main.indexOf('const onKey = (event: KeyboardEvent)');
+    const handler = main.slice(start, main.indexOf("window.addEventListener('keydown', onKey)", start));
+    expect(handler).toContain("event.key === 'Escape'");
+    expect(handler).not.toContain('orderStop');
+    expect(handler).not.toContain("event.key === 's'");
   });
 
   it('does not use a media-element preload for lobby music warming', () => {

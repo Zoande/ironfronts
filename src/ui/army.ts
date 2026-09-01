@@ -70,8 +70,7 @@ export function describeArmy(army: ArmyStackView): Array<[string, string]> {
 }
 
 export type ArmyPanelCommand =
-  | 'move' | 'attack' | 'retreat' | 'split' | 'stop' | 'extract' | 'deselect'
-  | `retreat:${number}`;
+  | 'move' | 'attack' | 'retreat' | 'split' | 'stop' | 'extract' | 'deselect';
 
 function node<K extends keyof HTMLElementTagNameMap>(
   tag: K, className?: string, text?: string,
@@ -80,16 +79,6 @@ function node<K extends keyof HTMLElementTagNameMap>(
   if (className) element.className = className;
   if (text !== undefined) element.textContent = text;
   return element;
-}
-
-function appendStat(host: HTMLElement, label: string, value: string, icon?: IconName): void {
-  const stat = node('span', 'ifg-army-stat');
-  stat.title = `${label}: ${value}`;
-  const key = node('span', 'ifg-army-stat__key');
-  if (icon) key.append(createIcon(icon, 'ifg-army-stat__icon'));
-  key.append(node('small', undefined, label));
-  stat.append(key, node('b', undefined, value));
-  host.append(stat);
 }
 
 /** Populate the large centered selected-army command overlay. */
@@ -129,10 +118,47 @@ export function renderSelectedArmyPanel(
     health.append(healthTrack, node('span', 'ifg-army-panel__health-caption', `${healthPercent} / 100 readiness`));
   }
 
+  const stats = node('section', 'ifg-army-panel__stats');
+  stats.append(node('small', 'ifg-army-panel__eyebrow', 'Combat profile'));
+  const statTable = node('table', 'ifg-army-panel__stat-table');
+  const statHead = node('thead');
+  const headingRow = node('tr');
+  headingRow.append(node('th', undefined, 'Damage'), node('th', undefined, 'S'), node('th', undefined, 'L'), node('th', undefined, 'H'));
+  statHead.append(headingRow);
+  const statBody = node('tbody');
+  const appendProfile = (label: string, icon: IconName, value: typeof army.attack): void => {
+    const row = node('tr');
+    const key = node('th');
+    key.append(createIcon(icon, 'ifg-army-stat__icon'), document.createTextNode(label));
+    row.append(
+      key,
+      node('td', undefined, value ? String(Math.round(value.soft)) : '--'),
+      node('td', undefined, value ? String(Math.round(value.light)) : '--'),
+      node('td', undefined, value ? String(Math.round(value.heavy)) : '--'),
+    );
+    statBody.append(row);
+  };
+  appendProfile('Attack', 'stat-attack', army.identified === false ? undefined : army.attack);
+  appendProfile('Defence', 'stat-defence', army.identified === false ? undefined : army.defense);
+  statTable.append(statHead, statBody);
+  const statMeta = node('div', 'ifg-army-panel__stat-meta');
+  const metric = (label: string, icon: IconName, value: string): HTMLElement => {
+    const item = node('span');
+    item.append(createIcon(icon, 'ifg-army-stat__icon'), node('small', undefined, label), node('b', undefined, value));
+    return item;
+  };
+  statMeta.append(
+    metric('Speed', 'stat-speed', army.identified === false || army.speed === undefined ? '--' : String(Math.round(army.speed))),
+    metric('Troops', 'stat-troops', army.identified === false ? '--' : String(army.unitCount)),
+  );
+  stats.append(statTable, statMeta);
+  const summary = node('div', 'ifg-army-panel__summary');
+  summary.append(health, stats);
+
   const commands = node('div', 'ifg-army-panel__commands ifg-army-panel__commands--primary');
   // Icon-first: the glyph carries the meaning, a short caption sits under it, and
   // the full label + explanation live on aria-label + the shared rich tooltip.
-  interface CommandTip { description?: string; shortcut?: string; disabledReason?: string; }
+  interface CommandTip { description?: string; disabledReason?: string; }
   const command = (
     label: string, caption: string, icon: IconName, key: ArmyPanelCommand,
     enabled: boolean, active = false, tip: CommandTip = {},
@@ -146,7 +172,6 @@ export function renderSelectedArmyPanel(
     bindTooltip(button, () => ({
       title: label,
       description: tip.description,
-      shortcut: tip.shortcut,
       disabledReason: enabled ? undefined : (tip.disabledReason ?? `${label} is unavailable right now.`),
     }));
     if (enabled) button.addEventListener('click', () => onCommand(key));
@@ -168,32 +193,26 @@ export function renderSelectedArmyPanel(
     commands.append(
       command('Move', moveActive ? 'Pick spot' : 'Move', 'cmd-move', 'move', army.canMove === true, moveActive, {
         description: 'Move this army to a chosen destination in your territory or discovered ground.',
-        shortcut: 'M',
         disabledReason: 'This formation is currently locked in combat.',
       }),
       command('Attack', attackActive ? 'Pick target' : 'Attack', 'cmd-attack', 'attack', army.canAttack === true, attackActive, {
         description: 'Advance to contact against a visible hostile force or province.',
-        shortcut: 'A',
         disabledReason: 'No visible hostile target in range.',
       }),
-      command('Retreat', retreatActive ? 'Pick exit' : 'Retreat', 'cmd-retreat', 'retreat', army.canRetreat === true, retreatActive, {
-        description: 'Withdraw along a legal retreat route.',
-        shortcut: 'R',
+      command('Retreat', retreatActive ? 'Pick spot' : 'Retreat', 'cmd-retreat', 'retreat', army.canRetreat === true, retreatActive, {
+        description: 'Choose a friendly destination away from the enemy line.',
         disabledReason: retreatHint,
       }),
       command('Split', splitActive ? 'Pick spot' : 'Split', 'cmd-split', 'split', army.canSplit === true, splitActive, {
         description: 'Divide this force into two separate formations.',
-        shortcut: 'X',
         disabledReason: 'This force is too small to divide.',
       }),
       command('Stop', 'Stop', 'cmd-stop', 'stop', army.canStop === true, false, {
         description: 'Cancel the current movement or order and hold position.',
-        shortcut: 'S',
         disabledReason: 'No active order to cancel.',
       }),
       command('Extract', 'Extract', 'cmd-extract', 'extract', army.canExtract === true, false, {
         description: 'Begin resource extraction at the deposit under this stack.',
-        shortcut: 'E',
         disabledReason: 'No extractable resource deposit at this position.',
       }),
     );
@@ -235,23 +254,6 @@ export function renderSelectedArmyPanel(
   composition.append(unitRow);
 
   const report = node('section', 'ifg-army-panel__report');
-  const stats = node('div', 'ifg-army-panel__stats');
-  stats.append(node('small', 'ifg-army-panel__eyebrow', 'Troop stats'));
-  const statGrid = node('div', 'ifg-army-panel__stat-grid');
-  if (army.identified === false) {
-    appendStat(statGrid, 'Troops', '--', 'stat-troops');
-    appendStat(statGrid, 'Attack', '--', 'stat-attack');
-    appendStat(statGrid, 'Defence', '--', 'stat-defence');
-    appendStat(statGrid, 'Speed', '--', 'stat-speed');
-  } else {
-    appendStat(statGrid, 'Troops', String(army.unitCount), 'stat-troops');
-    const profile = (value: typeof army.attack): string => value
-      ? `${Math.round(value.soft)} / ${Math.round(value.light)} / ${Math.round(value.heavy)}` : '--';
-    appendStat(statGrid, 'Attack S/L/H', profile(army.attack), 'stat-attack');
-    appendStat(statGrid, 'Defence S/L/H', profile(army.defense), 'stat-defence');
-    appendStat(statGrid, 'Speed', army.speed === undefined ? '--' : String(Math.round(army.speed)), 'stat-speed');
-  }
-  stats.append(statGrid);
 
   const activity = node('div', 'ifg-army-panel__activity');
   const remaining = (tick: number): string => {
@@ -312,27 +314,6 @@ export function renderSelectedArmyPanel(
         : 'No safe retreat'),
     );
     activity.append(battleHeader, battleSides, battleMeta);
-    // One actionable chip per *distinct* escape direction (the server already
-    // collapses the raw per-province routes and tags each with a compass
-    // bearing), not one per graph node — that used to spill 25 look-alike
-    // buttons into the panel.
-    if (army.legalRetreatExits && army.legalRetreatExits.length > 1) {
-      const box = node('div', 'ifg-army-panel__retreat');
-      box.append(node('small', 'ifg-army-panel__eyebrow', `Retreat routes · ${army.legalRetreatExits.length} open`));
-      const exits = node('div', 'ifg-army-panel__retreat-exits');
-      for (const [index, exit] of army.legalRetreatExits.entries()) {
-        const label = exit.bearing ? `Withdraw ${exit.bearing}` : `Route ${index + 1}`;
-        const chip = node('button', 'ifg-army-panel__command ifg-army-panel__retreat-chip');
-        chip.type = 'button';
-        chip.append(createIcon('cmd-retreat', 'ifg-army-panel__command-icon'), node('span', 'ifg-army-panel__command-label', label));
-        chip.setAttribute('aria-label', label);
-        chip.title = label;
-        chip.addEventListener('click', () => onCommand(`retreat:${exit.firstNodeId}`));
-        exits.append(chip);
-      }
-      box.append(exits);
-      activity.append(box);
-    }
   } else {
     activity.append(node('small', 'ifg-army-panel__eyebrow', 'Activity'));
     const activityValue = node('strong', 'ifg-army-panel__activity-value', army.activity);
@@ -343,13 +324,13 @@ export function renderSelectedArmyPanel(
         `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} bombardment: ${army.artillery.targetArmyId} · ${remaining(army.artillery.nextVolleyTick)}`));
     }
   }
-  report.append(stats, activity);
+  report.append(activity);
 
   const body = node('div', 'ifg-army-panel__body');
   const center = node('div', 'ifg-army-panel__center');
-  center.append(commands, composition);
-  body.append(health, center, report);
-  host.replaceChildren(header, body);
+  center.append(composition);
+  body.append(summary, center, report);
+  host.replaceChildren(commands, header, body);
 }
 
 /**

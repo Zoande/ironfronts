@@ -25,7 +25,8 @@ export interface RetreatArmyCommand {
   readonly type: 'retreatArmy';
   readonly countryId: number;
   readonly armyId: string;
-  readonly firstNodeId: number;
+  readonly x: number;
+  readonly z: number;
 }
 
 export interface SplitArmyCommand {

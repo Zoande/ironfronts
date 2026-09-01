@@ -85,7 +85,7 @@ export class GameRuntime {
   }
 
   command(countryId: number, payload: CommandPayload) {
-    if ((payload.type === 'moveArmy' || payload.type === 'splitArmy')
+    if ((payload.type === 'moveArmy' || payload.type === 'splitArmy' || payload.type === 'retreatArmy')
       && (payload.x < 0 || payload.x > this.world.width || payload.z < 0 || payload.z > this.world.height)) {
       return { ok: false, reason: 'Target is outside the world.' };
     }

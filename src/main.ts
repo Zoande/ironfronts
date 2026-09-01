@@ -853,6 +853,7 @@ async function bootstrapGameSession(
     provinceId: Number(provinceId), countryId,
   })));
   renderer.setPlayerCountryByName(player.name);
+  renderer.setDiplomaticRelations(session.state.relations);
   const { x, z, distance } = session.state.startCamera;
   // Deterministic near-top-down view centred on the player's homeland; no prior
   // orbit orientation carries over. The player can orbit away afterwards.
@@ -873,6 +874,10 @@ async function bootstrapGameSession(
       `This order requires war with ${names.join(', ')}. Declaration and order will be committed together.`,
     ).then(detail.respond);
   });
+  const syncDiplomaticRelations = (): void => {
+    renderer.setDiplomaticRelations(session.state.relations);
+  };
+  session.addEventListener('change', syncDiplomaticRelations);
 
   uiStore.patch({
     playerCountry: { name: player.name, color: player.color },
@@ -909,23 +914,16 @@ async function bootstrapGameSession(
   }, 400);
   const onKey = (event: KeyboardEvent): void => {
     if (event.repeat || !selectedArmyId) return;
-    if (event.key === 'm' || event.key === 'M') {
-      targetingMode = 'move'; awaitingMoveTarget = true; refreshSelectedArmy(session);
-    } else if (event.key === 'a' || event.key === 'A') {
-      handleArmyCommand('attack');
-    } else if (event.key === 's' || event.key === 'S') {
-      session.orderStop(selectedArmyId); targetingMode = null; awaitingMoveTarget = false; refreshSelectedArmy(session);
-    }
-    else if (event.key === 'r' || event.key === 'R') { handleArmyCommand('retreat'); }
-    else if (event.key === 'x' || event.key === 'X') { handleArmyCommand('split'); }
-    else if (event.key === 'e' || event.key === 'E') { handleArmyCommand('extract'); }
-    else if (event.key === 'Escape') { deselectArmy(); }
+    // Army commands are intentionally click-only so camera/navigation keys can
+    // never issue an order. Escape remains the universal cancel/deselect key.
+    if (event.key === 'Escape') deselectArmy();
   };
   window.addEventListener('keydown', onKey);
   const teardownSession = (): void => {
     window.clearInterval(hudTimer);
     window.clearInterval(civilClockTimer);
     window.removeEventListener('keydown', onKey);
+    session.removeEventListener('change', syncDiplomaticRelations);
     clearAllNotificationTimers();
     combatEffects.clear();
     if (activeSession === session) activeSession = undefined;
@@ -1116,23 +1114,6 @@ function syncArmyMarkers(
       cursor += 16;
       count += 1;
     }
-    if (army.id === selectedArmyId && army.status === 'engaged' && targetingMode === 'retreat') {
-      for (const exit of army.legalRetreatExits ?? []) {
-        if (count >= 1_024) break;
-        armyMarkerScratch[cursor] = exit.x;
-        armyMarkerScratch[cursor + 1] = exit.z;
-        armyMarkerScratch[cursor + 2] = packRgb(army.ownerColor);
-        armyMarkerScratch[cursor + 3] = 3;
-        armyMarkerScratch[cursor + 4] = 18;
-        armyMarkerScratch[cursor + 5] = 0;
-        armyMarkerScratch[cursor + 6] = 0;
-        armyMarkerScratch[cursor + 7] = 0;
-        armyMarkerScratch.fill(0, cursor + 8, cursor + 16);
-        cursor += 16;
-        count += 1;
-      }
-    }
-
     if (identified && formation.length) {
       const target = army.moveOrder;
       const marching = Boolean(target);
@@ -1446,12 +1427,8 @@ function handleMapClick(
   }
   if (targetingMode === 'retreat' && selectedArmyId && session.ownsArmy(selectedArmyId)) {
     const ground = renderer.groundPointAt(clientX, clientY);
-    const exits = session.army(selectedArmyId)?.legalRetreatExits ?? [];
-    if (ground && exits.length) {
-      const selected = [...exits].sort((a, b) =>
-        Math.hypot(a.x - ground[0], a.z - ground[1])
-        - Math.hypot(b.x - ground[0], b.z - ground[1]))[0];
-      const result = session.orderRetreat(selectedArmyId, selected.firstNodeId);
+    if (ground) {
+      const result = session.orderRetreat(selectedArmyId, ground[0], ground[1]);
       if (!result.ok) pushNotification('warning', 'Retreat', result.reason ?? 'No legal retreat.');
       targetingMode = null;
       refreshSelectedArmy(session);
@@ -1601,21 +1578,10 @@ function handleArmyCommand(command: ArmyPanelCommand): void {
     });
     return;
   }
-  if (command === 'retreat' || command.startsWith('retreat:')) {
-    const view = session.army(selectedArmyId);
-    const exits = view?.legalRetreatExits ?? [];
-    const explicit = command.startsWith('retreat:') ? Number(command.slice('retreat:'.length)) : null;
-    const firstNodeId = explicit ?? (exits.length === 1 ? exits[0].firstNodeId : null);
-    if (firstNodeId === null) {
-      targetingMode = 'retreat';
-      pushNotification('information', 'Choose retreat direction', 'Select one of the highlighted exit edges on the map.');
-      refreshSelectedArmy(session);
-      if (activeRenderer) syncArmyMarkers(session, activeRenderer);
-      return;
-    }
-    const result = session.orderRetreat(selectedArmyId, firstNodeId);
-    if (!result.ok) pushNotification('warning', 'Retreat', result.reason ?? 'No legal retreat.');
-    targetingMode = null;
+  if (command === 'retreat') {
+    targetingMode = 'retreat';
+    awaitingMoveTarget = false;
+    pushNotification('information', 'Choose retreat destination', 'Choose friendly ground away from the enemy line.');
     refreshSelectedArmy(session);
     if (activeRenderer) syncArmyMarkers(session, activeRenderer);
     return;

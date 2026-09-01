@@ -734,6 +734,23 @@ export class WorldRenderer {
     return country;
   }
 
+  /** Replace the presentation cache with the viewer's authoritative relations. */
+  setDiplomaticRelations(relations: Readonly<Record<string, 'peace' | 'war'>>): void {
+    const next = new Map<number, DiplomaticRelation>();
+    for (const [key, relation] of Object.entries(relations)) {
+      if (relation !== 'war') continue;
+      const [a, b] = key.split(':').map(Number);
+      const other = a === this.playerCountryId ? b : b === this.playerCountryId ? a : 0;
+      if (other > 0 && this.countryById.has(other)) next.set(other, 'war');
+    }
+    if (next.size === this.diplomaticRelations.size
+      && [...next].every(([id, relation]) => this.diplomaticRelations.get(id) === relation)) return;
+    this.diplomaticRelations.clear();
+    for (const [id, relation] of next) this.diplomaticRelations.set(id, relation);
+    this.refreshDiplomacyTexture();
+    this.notifyDiplomacyChange();
+  }
+
   setDiplomaticRelationByName(name: string, relation: Exclude<DiplomaticRelation, 'neutral'>): CountryRecord | undefined {
     const country = this.findCountry(name);
     if (!country || country.id === this.playerCountryId) return undefined;

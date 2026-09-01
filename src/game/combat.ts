@@ -245,12 +245,43 @@ export function legalRetreatPaths(session: SimContext, armyId: string): RetreatP
 }
 
 export function issueManualRetreat(
-  session: SimContext, armyId: string, firstNodeId: number,
+  session: SimContext, armyId: string, targetX: number, targetZ: number,
 ): { ok: boolean; reason?: string } {
   const army = session.state.armies[armyId];
   if (!army || army.status !== 'engaged') return { ok: false, reason: 'Army is not in close combat.' };
-  const route = legalRetreatPaths(session, armyId).find((candidate) => candidate.firstNodeId === firstNodeId);
-  if (!route) return { ok: false, reason: 'That retreat direction is not legal.' };
+  const front = army.battleFrontIds?.map((id) => session.state.battleFronts[id]).find(Boolean);
+  if (!front) return { ok: false, reason: 'Army is not in close combat.' };
+
+  // Retreat targeting behaves like Move: the click is a world destination.
+  // First resolve the road edge most closely aimed at the cursor, including
+  // hostile edges. If that edge is not a legal escape, do not silently snap the
+  // army sideways or through the enemy line.
+  const wrappedX = (value: number): number => {
+    const half = session.world.width / 2;
+    return (((value + half) % session.world.width) + session.world.width) % session.world.width - half;
+  };
+  const dx = wrappedX(targetX - army.x);
+  const dz = targetZ - army.z;
+  if (Math.hypot(dx, dz) < 1) return { ok: false, reason: 'Choose a retreat destination away from the battle.' };
+  let aimedFirstNode = -1;
+  let aimedScore = -Infinity;
+  for (const nodeId of session.graph.adjacency[army.graphNodeId]) {
+    const edgeX = wrappedX(session.graph.nodeX[nodeId] - army.x);
+    const edgeZ = session.graph.nodeZ[nodeId] - army.z;
+    const score = (edgeX * dx + edgeZ * dz) / (Math.hypot(edgeX, edgeZ) * Math.hypot(dx, dz) || 1);
+    if (score > aimedScore) { aimedScore = score; aimedFirstNode = nodeId; }
+  }
+
+  const routes = retreatPaths(session, army, legalFirstNodes(session, army, front))
+    .filter((candidate) => candidate.firstNodeId === aimedFirstNode);
+  if (!routes.length) return { ok: false, reason: 'Cannot retreat toward the enemy or through non-friendly territory.' };
+  const route = routes.sort((a, b) => {
+    const provinceA = session.world.provinces.find((province) => province.id === a.destinationProvinceId);
+    const provinceB = session.world.provinces.find((province) => province.id === b.destinationProvinceId);
+    const distanceA = provinceA ? Math.hypot(provinceA.center[0] - targetX, provinceA.center[1] - targetZ) : Infinity;
+    const distanceB = provinceB ? Math.hypot(provinceB.center[0] - targetX, provinceB.center[1] - targetZ) : Infinity;
+    return distanceA - distanceB || a.length - b.length;
+  })[0];
   removeArmyFromAllFronts(session, armyId);
   issueRetreatOrder(session, army, route);
   return { ok: true };

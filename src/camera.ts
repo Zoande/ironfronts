@@ -199,7 +199,7 @@ export class StrategyCamera {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
-    // 0 = left (pan), 1 = middle (orbit). Right (2) is left for the game's
+    // 0 = left (orbit), 1 = middle (pan). Right (2) is left for the game's
     // order system; touch is handled separately below.
     if (event.pointerType !== 'touch' && event.button !== 0 && event.button !== 1) return;
     if (event.pointerType === 'touch') {
@@ -215,10 +215,10 @@ export class StrategyCamera {
       }
       return;
     }
-    // Left = pan, middle = orbit. Right-click is reserved for issuing army
+    // Left = orbit, middle = pan. Right-click is reserved for issuing army
     // orders (see main.ts) and must never move the camera.
     event.preventDefault();
-    this.dragMode = event.button === 1 ? 'orbit' : 'pan';
+    this.dragMode = event.button === 0 ? 'orbit' : 'pan';
     this.dragPointerId = event.pointerId;
     this.lastPointer = [event.clientX, event.clientY];
     this.canvas?.setPointerCapture?.(event.pointerId);

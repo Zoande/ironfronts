@@ -29,7 +29,7 @@ describe('game tickets and command wire schema', () => {
       type: 'attackArmy', armyId: 'army-1', target: { kind: 'army', armyId: 'army-2' },
     })).toMatchObject({ target: { kind: 'army', armyId: 'army-2' } });
     expect(commandPayloadSchema.parse({
-      type: 'retreatArmy', armyId: 'army-1', firstNodeId: 7,
+      type: 'retreatArmy', armyId: 'army-1', x: 700, z: 900,
     }).type).toBe('retreatArmy');
     expect(commandPayloadSchema.parse({
       type: 'splitArmy', armyId: 'army-1', groups: [{ typeId: 'infantry', count: 2 }],

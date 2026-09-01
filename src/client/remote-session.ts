@@ -156,9 +156,9 @@ export class RemoteGameSession extends EventTarget {
       if (army) { army.status = 'moving'; army.moveIntent = 'attack'; }
     }, onAccepted);
   }
-  orderRetreat(armyId: string, firstNodeId: number) {
+  orderRetreat(armyId: string, x: number, z: number) {
     if (!this.ownsArmy(armyId)) return { ok: false, reason: 'Not your army.' } as const;
-    return this.send({ type: 'retreatArmy', armyId, firstNodeId }, (state) => {
+    return this.send({ type: 'retreatArmy', armyId, x, z }, (state) => {
       const army = state.armies[armyId];
       if (army) army.status = 'retreating';
     });

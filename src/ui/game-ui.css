@@ -467,7 +467,7 @@
   border-top: 2px solid var(--ifg-brass);
   border-radius: 3px;
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58), inset 0 0 0 1px rgba(255, 255, 255, 0.025);
-  overflow: hidden;
+  overflow: visible;
   opacity: 0;
   transform: translate(-50%, 14px);
   transition: transform 0.18s var(--ifg-ease), opacity 0.14s ease;
@@ -527,19 +527,27 @@
   height: calc(100% - 34px);
   min-height: 0;
   display: grid;
-  grid-template-columns: 180px minmax(360px, 1fr) 270px;
+  grid-template-columns: 220px minmax(350px, 1fr) 330px;
   overflow: hidden;
 }
+.ifg-army-panel__summary,
 .ifg-army-panel__health,
 .ifg-army-panel__composition,
 .ifg-army-panel__report { min-width: 0; min-height: 0; padding: 15px 17px; overflow: hidden; }
-.ifg-army-panel__health,
+.ifg-army-panel__summary,
 .ifg-army-panel__composition { border-right: 1px solid var(--ifg-rule-soft); }
+.ifg-army-panel__summary {
+  display: grid;
+  grid-template-rows: 92px minmax(0, 1fr);
+  padding: 0;
+}
 .ifg-army-panel__health {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
+  padding: 11px 14px 9px;
+  border-bottom: 1px solid var(--ifg-rule-soft);
 }
 .ifg-army-panel__eyebrow {
   display: block;
@@ -548,12 +556,12 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-.ifg-army-panel__health .ifg-army-panel__eyebrow { align-self: flex-start; margin-bottom: 9px; }
+.ifg-army-panel__health .ifg-army-panel__eyebrow { align-self: flex-start; margin-bottom: 5px; }
 .ifg-army-panel__health-value {
   align-self: flex-start;
-  margin-bottom: 9px;
+  margin-bottom: 5px;
   font-family: var(--ifg-serif);
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1;
   color: var(--ifg-brass-lit);
 }
@@ -574,7 +582,7 @@
 .ifg-army-panel__health-caption,
 .ifg-army-panel__unknown {
   align-self: flex-start;
-  margin-top: 7px;
+  margin-top: 4px;
   color: var(--ifg-dim);
   font-size: 9.5px;
 }
@@ -682,26 +690,50 @@
 .ifg-army-panel__units.is-dense { grid-template-columns: repeat(auto-fill, minmax(78px, 104px)); }
 .ifg-army-panel__units.is-dense .ifg-army-unit { grid-template-rows: 74px auto 4px; }
 .ifg-army-panel__units.is-dense .ifg-army-unit__visual { height: 74px; }
-.ifg-army-panel__report { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.ifg-army-panel__report { display: block; }
 .ifg-army-panel__stats > .ifg-army-panel__eyebrow,
 .ifg-army-panel__activity > .ifg-army-panel__eyebrow { margin-bottom: 6px; }
-.ifg-army-panel__stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--ifg-rule-soft); }
-.ifg-army-stat {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 7px;
-  background: #1b1e19;
+.ifg-army-panel__stats { padding: 9px 10px 10px; overflow: hidden; }
+.ifg-army-panel__stat-table {
+  width: 100%;
+  margin-top: 5px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: rgba(8, 10, 7, 0.34);
+  font-variant-numeric: tabular-nums;
 }
-.ifg-army-stat small { color: var(--ifg-dim); font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
-.ifg-army-stat b { font-size: 11px; font-variant-numeric: tabular-nums; }
+.ifg-army-panel__stat-table th,
+.ifg-army-panel__stat-table td { padding: 3px 4px; border: 1px solid var(--ifg-rule-soft); text-align: center; }
+.ifg-army-panel__stat-table th:first-child { width: 43%; text-align: left; }
+.ifg-army-panel__stat-table thead th {
+  color: var(--ifg-dim);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.ifg-army-panel__stat-table tbody th { color: #c8c1ae; font-size: 8px; font-weight: 600; }
+.ifg-army-panel__stat-table tbody td { color: #eee5d0; font-size: 9px; font-weight: 700; }
+.ifg-army-stat__icon { width: 10px; height: 10px; margin-right: 4px; vertical-align: -2px; color: var(--ifg-brass); }
+.ifg-army-panel__stat-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 6px; }
+.ifg-army-panel__stat-meta > span {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 5px;
+  background: rgba(201, 164, 99, .055);
+  border: 1px solid var(--ifg-rule-soft);
+}
+.ifg-army-panel__stat-meta small { color: var(--ifg-dim); font-size: 7px; letter-spacing: .07em; text-transform: uppercase; }
+.ifg-army-panel__stat-meta b { font-size: 9px; font-variant-numeric: tabular-nums; }
 .ifg-army-panel__activity {
+  height: 100%;
+  box-sizing: border-box;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  border-top: 1px solid var(--ifg-rule-soft);
-  padding-top: 8px;
+  padding-top: 0;
 }
 .ifg-army-panel__activity-value {
   display: block;
@@ -719,17 +751,16 @@
 .ifg-army-panel__commands:empty { display: none; }
 .ifg-army-panel__center { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .ifg-army-panel__commands--primary {
-  padding: 9px 13px 0;
-  flex-wrap: wrap;
-  background: rgba(22, 20, 17, .78);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 9px);
+  z-index: 4;
+  flex-wrap: nowrap;
+  padding: 0;
+  transform: translateX(-50%);
+  background: transparent;
+  filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .52));
 }
-.ifg-army-panel__retreat { margin-top: 8px; }
-.ifg-army-panel__retreat > .ifg-army-panel__eyebrow { display: block; margin-bottom: 5px; }
-.ifg-army-panel__retreat-exits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 0; }
-/* Direction chips size to their label and wrap as whole chips — they must not
-   collapse to slivers the way `flex: 1` command buttons do. (Row layout + final
-   sizing is set alongside `.ifg-army-panel__command` further down.) */
-.ifg-army-panel__retreat-chip { white-space: nowrap; }
 .ifg-army-panel__activity--combat { overflow: hidden; }
 .ifg-battle__header {
   display: flex;
@@ -871,6 +902,13 @@
   border-radius: 3px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -6px 12px rgba(0, 0, 0, 0.32);
   transition: border-color 0.1s ease, background 0.1s ease, transform 0.06s ease;
+}
+.ifg-army-panel__commands--primary .ifg-army-panel__command {
+  width: 50px;
+  height: 50px;
+  min-width: 50px;
+  flex: 0 0 50px;
+  padding: 5px 3px 4px;
 }
 .ifg-army-panel__command-icon { width: 22px; height: 22px; color: inherit; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
 .ifg-army-panel__command-label {
@@ -1145,8 +1183,7 @@
   .ifg-res__value { font-size: 12px; }
   .ifg-card { width: min(640px, calc(100vw - 48px)); }
   .ifg-army-panel { width: min(930px, calc(100vw - 48px)); }
-  .ifg-army-panel__body { grid-template-columns: 155px minmax(320px, 1fr) 235px; }
-  .ifg-army-panel__health,
+  .ifg-army-panel__body { grid-template-columns: 190px minmax(320px, 1fr) 280px; }
   .ifg-army-panel__composition,
   .ifg-army-panel__report { padding: 12px 13px; }
 }
@@ -1155,7 +1192,7 @@
   .ifg-topbar__country-name { display: none; }
   .ifg-topbar__resources { gap: 7px; }
   .ifg-army-panel { width: calc(100vw - 24px); bottom: 12px; }
-  .ifg-army-panel__body { grid-template-columns: 130px minmax(270px, 1fr) 200px; }
+  .ifg-army-panel__body { grid-template-columns: 180px minmax(270px, 1fr) 250px; }
   .ifg-army-panel__units { grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); }
   .ifg-army-panel__identity small { display: none; }
 }
