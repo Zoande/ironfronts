@@ -17,7 +17,7 @@ import {
   createEmptyRenderWorkload, PerformanceMonitor,
   type PerformancePhases, type PerformanceSnapshot, type RenderCategory,
 } from './performance-monitor';
-import { createHoverInfo, pickTerrainPoint, resolvePrimaryClick } from './picking';
+import { createHoverInfo, gameplayProvinceId, pickTerrainPoint, resolvePrimaryClick } from './picking';
 import { PoliticalCache } from './political-cache';
 import {
   aggregateProvinceResources, generateResourceNodes, type ProvinceResources, type ResourceNode,
@@ -215,7 +215,7 @@ export class WorldRenderer {
   private showWaterwayNetwork = false;
   private showBorders = true;
   private showCountryOverlay = true;
-  private mapMode: MapMode = 'political';
+  private mapMode: MapMode = 'balanced';
   private showProps = true;
   private showRoads = true;
   private showHiddenConnections = true;
@@ -1104,9 +1104,10 @@ export class WorldRenderer {
     return point ? [point[0], point[2]] : null;
   }
 
-  /** Raw province id under a screen point, for typed province attack orders. */
+  /** Gameplay province id under a screen point, or -1 over water/void.
+   *  The province texture stores 0 for no province and real ids as id + 1. */
   provinceIdAt(clientX: number, clientY: number): number {
-    return this.provinceAtScreenPoint(clientX, clientY);
+    return gameplayProvinceId(this.provinceAtScreenPoint(clientX, clientY));
   }
 
   /** Army stack marker under a screen coordinate (nearest within a

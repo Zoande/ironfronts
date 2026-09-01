@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePrimaryClick } from '../src/picking';
+import { gameplayProvinceId, resolvePrimaryClick } from '../src/picking';
 
 describe('resolvePrimaryClick', () => {
   it('selects the province under a normal left-click', () => {
@@ -15,5 +15,13 @@ describe('resolvePrimaryClick', () => {
       const action = resolvePrimaryClick(encodedId);
       expect(['select', 'clear-selection']).toContain(action.kind);
     }
+  });
+});
+
+describe('gameplayProvinceId', () => {
+  it('decodes the texture id before an order reaches gameplay', () => {
+    expect(gameplayProvinceId(1)).toBe(0);
+    expect(gameplayProvinceId(42)).toBe(41);
+    expect(gameplayProvinceId(0)).toBe(-1);
   });
 });

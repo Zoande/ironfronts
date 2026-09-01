@@ -14,6 +14,7 @@ function pointerEvent(
   pointerId: number,
   clientX: number,
   clientY: number,
+  pointerType = 'touch',
 ): PointerEvent {
   const event = new Event(type, { cancelable: true });
   Object.defineProperties(event, {
@@ -21,7 +22,7 @@ function pointerEvent(
     clientX: { value: clientX },
     clientY: { value: clientY },
     pointerId: { value: pointerId },
-    pointerType: { value: 'touch' },
+    pointerType: { value: pointerType },
   });
   return event as PointerEvent;
 }
@@ -65,6 +66,20 @@ describe('touch camera controls', () => {
 
     expect(camera.distance).toBeLessThan(startDistance);
     expect(camera.target[0]).not.toBe(startX);
+    camera.detach();
+  });
+});
+
+describe('mouse camera controls', () => {
+  it('updates camera matrices during a left-button pan, before pointer-up', () => {
+    const { camera, canvas, viewport } = createHarness();
+    const revision = camera.revision;
+
+    canvas.dispatchEvent(pointerEvent('pointerdown', 7, 120, 140, 'mouse'));
+    viewport.dispatchEvent(pointerEvent('pointermove', 7, 170, 140, 'mouse'));
+
+    expect(camera.revision).toBeGreaterThan(revision);
+    viewport.dispatchEvent(pointerEvent('pointerup', 7, 170, 140, 'mouse'));
     camera.detach();
   });
 });

@@ -6,7 +6,10 @@ export const GAME_VERSION = 'world-at-war@2' as const;
 
 const confirmedWars = z.array(z.number().int().positive()).optional();
 const attackTargetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('province'), provinceId: z.number().int().nonnegative() }),
+  z.object({
+    kind: z.literal('province'), provinceId: z.number().int().nonnegative(),
+    x: z.number().finite().optional(), z: z.number().finite().optional(),
+  }),
   z.object({ kind: z.literal('army'), armyId: z.string().min(1) }),
 ]);
 

@@ -6,8 +6,8 @@
  * loop, no `getBoundingClientRect` in rAF, no MutationObserver, no
  * Unicode/emoji icons. Map/renderer effects go through typed `GameUiActions`.
  *
- * The on-map resource / junction markers are a GPU instanced layer inside the
- * renderer — this module never projects or positions them.
+ * On-map junction markers are a GPU instanced layer inside the renderer; this
+ * module never projects or positions them.
  */
 
 import './game-ui.css';
@@ -29,7 +29,6 @@ export interface GameUiActions {
   navSelect(id: NavId): void;
   dismissNotification(id: string): void;
   togglePause(open: boolean): void;
-  toggleResourceOverlay(on: boolean): void;
   returnToMenu(): void;
   openDebugInspector(): void;
   focusSelected?: () => void;
@@ -204,13 +203,6 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const dock = el('nav', 'ifg-dock');
   dock.setAttribute('aria-label', 'Command');
 
-  const overlayToggle = el('button', 'ifg-dock__btn ifg-dock__btn--primary');
-  overlayToggle.type = 'button';
-  overlayToggle.title = 'Resource deposits';
-  overlayToggle.setAttribute('aria-label', 'Toggle resource deposits');
-  overlayToggle.append(createIcon('resource-overlay'), el('span', 'ifg-dock__tip', 'Resources'));
-  overlayToggle.addEventListener('click', () => actions.toggleResourceOverlay(!store.get().resourceOverlay));
-
   const expandBtn = el('button', 'ifg-dock__btn ifg-dock__expand');
   expandBtn.type = 'button';
   expandBtn.title = 'More';
@@ -236,7 +228,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     expandBtn.setAttribute('aria-expanded', String(open));
     expandBtn.classList.toggle('is-open', open);
   });
-  dock.append(overlayToggle, dockMore, expandBtn);
+  dock.append(dockMore, expandBtn);
 
   // ---------------- map-mode cluster (top-right) ----------------
   const modeCluster = el('div', 'ifg-modes');
@@ -562,10 +554,6 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-pressed', String(active));
     }
-
-    // Resource overlay toggle state.
-    overlayToggle.classList.toggle('is-on', state.resourceOverlay);
-    overlayToggle.setAttribute('aria-pressed', String(state.resourceOverlay));
 
     // Selected province card.
     const province = state.selectedProvince;

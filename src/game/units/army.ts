@@ -36,7 +36,7 @@ export interface MoveOrder {
   /** Typed strategic target. Unit targets are re-pathed while detected. */
   target?:
     | { readonly kind: 'position'; readonly x: number; readonly z: number }
-    | { readonly kind: 'province'; readonly provinceId: number }
+    | { readonly kind: 'province'; readonly provinceId: number; readonly x?: number; readonly z?: number }
     | { readonly kind: 'army'; readonly armyId: string; lastKnownX: number; lastKnownZ: number };
   /** Progress along the edge to `path[0]`, world units. */
   edgeProgress: number;

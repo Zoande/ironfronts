@@ -17,10 +17,12 @@ function state(): PlayerProjection {
 class FakeConnection extends EventTarget {
   state = state();
   catalogs: PresentationCatalogs = { units: [], buildings: [] };
-  settle: ((ok: boolean, reason?: string) => void) | null = null;
-  command(_command: unknown, callback: (ok: boolean, reason?: string) => void): string {
+  commands: unknown[] = [];
+  settle: ((ok: boolean, reason?: string, requiredWarCountryIds?: readonly number[]) => void) | null = null;
+  command(command: unknown, callback: (ok: boolean, reason?: string, requiredWarCountryIds?: readonly number[]) => void): string {
+    this.commands.push(command);
     this.settle = callback;
-    return 'command-1';
+    return `command-${this.commands.length}`;
   }
 }
 
@@ -47,6 +49,29 @@ describe('optimistic command lifecycle', () => {
     connection.settle?.(false, 'No route.');
     expect(session.army('a')?.moveOrder).toBeNull();
     expect(failed).toHaveBeenCalledWith('No route.');
+  });
+
+  it('waits for war confirmation, then re-sends the same order with consent', () => {
+    const connection = new FakeConnection();
+    const session = new RemoteGameSession(connection as unknown as GameConnection, vi.fn());
+    let respond: ((confirmed: boolean) => void) | undefined;
+    session.addEventListener('war-confirmation', (event) => {
+      const detail = (event as CustomEvent<{ countryIds: number[]; respond: (confirmed: boolean) => void }>).detail;
+      expect(detail.countryIds).toEqual([2]);
+      respond = detail.respond;
+    });
+
+    session.orderMove('a', 50, 70);
+    connection.settle?.(false, 'War declaration required.', [2]);
+    expect(respond).toBeTypeOf('function');
+    expect(session.army('a')?.moveOrder).toBeNull();
+
+    respond?.(true);
+    expect(connection.commands).toHaveLength(2);
+    expect(connection.commands[1]).toMatchObject({
+      type: 'moveArmy', armyId: 'a', x: 50, z: 70, confirmedWarCountryIds: [2],
+    });
+    expect(session.army('a')?.moveOrder).toEqual({ x: 50, z: 70 });
   });
 
   it('fails an unacknowledged command after five seconds', () => {

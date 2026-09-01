@@ -10,7 +10,7 @@ export interface MoveArmyCommand {
 }
 
 export type AttackTarget =
-  | { readonly kind: 'province'; readonly provinceId: number }
+  | { readonly kind: 'province'; readonly provinceId: number; readonly x?: number; readonly z?: number }
   | { readonly kind: 'army'; readonly armyId: string };
 
 export interface AttackCommand {

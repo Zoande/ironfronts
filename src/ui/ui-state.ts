@@ -252,7 +252,7 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
   return {
     phase: 'lobby',
     playerCountry: null,
-    mapMode: 'political',
+    mapMode: 'balanced',
     clock: null,
     weather: { raining: false, label: 'Clear' },
     resources: DEFAULT_RESOURCES,

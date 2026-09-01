@@ -155,7 +155,7 @@ describe('WGSL programs', () => {
     expect(terrainShader).toContain('preservation *= 0.45');
     expect(terrainShader).toContain('overlayStrength = 0.85');
     expect(terrainShader).not.toContain('let provinceId = provinceAt(input.mapUv)');
-    expect(terrainShader).toContain('smoothstep(\n        3000.0,\n        6500.0,\n        uniforms.camera.y');
+    expect(terrainShader).toContain('smoothstep(\n        3000.0,\n        3500.0,\n        uniforms.camera.y');
     expect(terrainShader).toContain('let balancedStrength = mix(\n        0.10,\n        0.82,\n        overview');
     expect(terrainShader).toContain('balancedStrength,\n        0.85,\n        uniforms.interaction.z > 1.5');
     expect(terrainShader).toContain('fog * 0.39');

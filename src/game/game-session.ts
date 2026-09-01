@@ -213,7 +213,7 @@ export class GameSession {
       const provinceId = this.world.provinceAt(x, z);
       if (provinceId < 0) return { ok: false, reason: 'No province at that location.' };
       return this.applyCommand({
-        type: 'attackArmy', countryId, armyId, target: { kind: 'province', provinceId },
+        type: 'attackArmy', countryId, armyId, target: { kind: 'province', provinceId, x, z },
       });
     }
     return this.applyCommand({ type: 'moveArmy', countryId, armyId, x, z });

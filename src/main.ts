@@ -541,10 +541,6 @@ async function startGame(token: number): Promise<void> {
     navSelect: () => { /* No player-facing system is implemented yet. */ },
     dismissNotification: (id) => removeNotification(id),
     togglePause: (open) => uiStore.patch({ paused: open }),
-    toggleResourceOverlay: (on) => {
-      renderer.setResourceOverlay(on);
-      uiStore.patch({ resourceOverlay: on });
-    },
     returnToMenu: () => { /* Disabled in the UI until a safe menu-return path exists. */ },
     openDebugInspector: () => {
       if (debugEnabled) window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F3', key: 'F3' }));
@@ -878,16 +874,10 @@ async function bootstrapGameSession(
     ).then(detail.respond);
   });
 
-  // Resource deposits are gameplay-relevant from turn 0 — show the overlay by
-  // default so the player can see where stone / metal / oil are, and feed
-  // the renderer the authoritative set (natural + scenario-guaranteed).
-  renderer.setResourceOverlay(true);
-  syncResourceMarkers(session, renderer);
-
   uiStore.patch({
     playerCountry: { name: player.name, color: player.color },
     resources: playerResourceLines(session),
-    resourceOverlay: true,
+    resourceOverlay: false,
   });
 
   // Initial marker upload (before the first sim tick) so armies show at once.
@@ -911,7 +901,6 @@ async function bootstrapGameSession(
     // HUD tick and share it between the marker upload and the selection card.
     uiStore.patch({ resources: playerResourceLines(session) });
     syncArmyMarkers(session, renderer);
-    syncResourceMarkers(session, renderer);
     syncCombatMarkers(session);
     refreshSelectedArmy(session);
     refreshSelectedProvince(session); // keep production / construction % live
@@ -958,34 +947,8 @@ async function bootstrapGameSession(
 
 const armyMarkerScratch = new Float32Array(16 * 1_024);
 const armyModelScratch = new Float32Array(12 * 4_096);
-const resourceMarkerScratch = new Float32Array(4 * 4_096);
 /** LineRecord (8 f32) per own-army route segment — see renderer.setOrderRoutes. */
 const routeScratch = new Float32Array(8 * 4_096);
-const RESOURCE_KIND_INDEX: Record<'stone' | 'metal' | 'oil', number> = { stone: 0, metal: 1, oil: 2 };
-
-/** Push the deposit set the PLAYER may see (own-controlled + anything inside
- *  friendly vision; all of it in sandbox) to the renderer's dynamic deposit-
- *  marker layer. Depleted nodes shrink; exhausted ones drop out. Foreign
- *  deposits are not globally revealed by the overlay. */
-function syncResourceMarkers(
-  session: RemoteGameSession, renderer: WorldRenderer,
-): void {
-  let cursor = 0;
-  let count = 0;
-  for (const value of Object.values(session.state.resourceNodes)) {
-    const node = value as { x: number; z: number; kind: 'stone' | 'metal' | 'oil'; remaining: number; initialAmount: number };
-    if (count >= 4_096 || node.remaining <= 0) continue;
-    const depletion = node.initialAmount > 0 ? node.remaining / node.initialAmount : 1;
-    const richness = Math.max(0.28, Math.min(1, (node.initialAmount / 260) * depletion));
-    resourceMarkerScratch[cursor] = node.x;
-    resourceMarkerScratch[cursor + 1] = node.z;
-    resourceMarkerScratch[cursor + 2] = RESOURCE_KIND_INDEX[node.kind];
-    resourceMarkerScratch[cursor + 3] = richness;
-    cursor += 4;
-    count += 1;
-  }
-  renderer.setGameResourceMarkers(resourceMarkerScratch, count);
-}
 
 function packRgb(hex: string): number {
   const value = Number.parseInt(hex.replace('#', ''), 16);
@@ -1460,14 +1423,17 @@ function handleMapClick(
     const result = targetArmyId && targetArmyId !== selectedArmyId && pickedTarget?.contact === 'visible'
       ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
       : (() => {
+        const ground = renderer.groundPointAt(clientX, clientY);
         const provinceId = renderer.provinceIdAt(clientX, clientY);
-        if (provinceId < 0) {
+        if (!ground || provinceId < 0) {
           return { ok: false as const, reason: 'Aim at an enemy army or a province centre to attack.' };
         }
         if (session.ownsProvince(provinceId)) {
           return { ok: false as const, reason: "That is your own territory — you can't attack it." };
         }
-        return session.orderAttackProvince(selectedArmyId!, provinceId, acknowledgeAttack);
+        return session.orderAttackProvince(
+          selectedArmyId!, provinceId, ground[0], ground[1], acknowledgeAttack,
+        );
       })();
     if (!result.ok) {
       const { title, body } = describeOrderFailure(result.reason ?? 'Invalid target.');

@@ -1,7 +1,7 @@
 import { commonWgsl } from './common';
 
 export const POLITICAL_OVERVIEW_START_ALTITUDE = 3_000;
-export const POLITICAL_OVERVIEW_FULL_ALTITUDE = 6_500;
+export const POLITICAL_OVERVIEW_FULL_ALTITUDE = 3_500;
 export const POLITICAL_CLOSE_TINT_STRENGTH = 0.1;
 export const POLITICAL_OVERVIEW_MAX_STRENGTH = 0.82;
 export const POLITICAL_MAP_TINT_STRENGTH = 0.85;

@@ -15,7 +15,10 @@ import { stepProduction } from '../../src/game/production';
 import type { ArmyStack } from '../../src/game/units/army';
 
 function graph(): LandGraph {
-  return buildLandGraph(new Float32Array([100, 100, 300, 100, 1, 0, 0, 0]), 10_000, 5_000);
+  return buildLandGraph(new Float32Array([
+    100, 100, 300, 100, 1, 0, 0, 0,
+    300, 100, 500, 100, 1, 0, 0, 0,
+  ]), 10_000, 5_000);
 }
 
 function world(): WorldData {
@@ -125,5 +128,36 @@ describe('applyCommand ownership gate', () => {
     const army = c.state.armies[done[0].armyId];
     expect(army.order).not.toBeNull();
     expect(army.status).toBe('moving');
+  });
+
+  it.each([
+    ['into neutral territory', 300],
+    ['through neutral territory', 500],
+  ])('requires explicit war consent before moving %s', (_label, destinationX) => {
+    const base = ctx();
+    base.state.provinceOwners = { 10: 1, 20: 2, 30: 1 };
+    const c: SimContext = {
+      ...base,
+      world: {
+        ...base.world,
+        provinces: [
+          { id: 10, center: [100, 100], terrainId: 4, population: 500, coastal: false, urban: true },
+          { id: 20, center: [300, 100], terrainId: 4, population: 500, coastal: false, urban: true },
+          { id: 30, center: [500, 100], terrainId: 4, population: 500, coastal: false, urban: true },
+        ],
+        provinceAt: (x) => x < 200 ? 10 : x < 400 ? 20 : 30,
+      },
+    };
+    const command = { type: 'moveArmy' as const, countryId: 1, armyId: 'a1', x: destinationX, z: 100 };
+
+    expect(applyCommand(c, command)).toMatchObject({
+      ok: false, reason: 'War declaration required.', requiredWarCountryIds: [2],
+    });
+    expect(c.state.armies.a1.order).toBeNull();
+    expect(c.state.relations['1:2']).not.toBe('war');
+
+    expect(applyCommand(c, { ...command, confirmedWarCountryIds: [2] }).ok).toBe(true);
+    expect(c.state.relations['1:2']).toBe('war');
+    expect(c.state.armies.a1.order).not.toBeNull();
   });
 });

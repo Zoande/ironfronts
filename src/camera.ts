@@ -24,6 +24,7 @@ export class StrategyCamera {
 
   private keys = new Set<string>();
   private dragMode: 'pan' | 'orbit' | null = null;
+  private dragPointerId: number | null = null;
   private lastPointer = [0, 0];
   private readonly activeTouches = new Map<number, { x: number; y: number }>();
   private pinchCenter = [0, 0];
@@ -84,6 +85,7 @@ export class StrategyCamera {
     this.activeTouches.clear();
     this.pinchDistance = 0;
     this.dragMode = null;
+    this.dragPointerId = null;
     this.canvas = undefined;
   }
 
@@ -171,6 +173,26 @@ export class StrategyCamera {
     this.target[2] += rightZ * rightAmount + forwardZ * forwardAmount;
   }
 
+  /** Keep the grabbed ground point beneath the pointer at every pitch/zoom. */
+  private panScreenDrag(fromX: number, fromY: number, toX: number, toY: number): void {
+    const from = this.groundPoint(fromX, fromY);
+    const fromWorldX = from?.[0];
+    const fromWorldZ = from?.[2];
+    const to = this.groundPoint(toX, toY);
+    if (fromWorldX !== undefined && fromWorldZ !== undefined && to) {
+      this.target[0] += fromWorldX - to[0];
+      this.target[2] += fromWorldZ - to[2];
+    } else {
+      // A ray near the horizon can miss the ground plane. Retain a predictable
+      // fallback instead of dropping that portion of the drag.
+      const scale = this.distance * 0.00145;
+      this.pan(-(toX - fromX) * scale, (toY - fromY) * scale);
+    }
+    this.normalizeTarget();
+    // A pointer-up order may run before the next animation frame.
+    this.recalculateMatrices();
+  }
+
   private normalizeTarget(): void {
     this.target[0] = ((this.target[0] % this.worldWidth) + this.worldWidth) % this.worldWidth;
     this.target[2] = clamp(this.target[2], -160, this.worldHeight + 160);
@@ -197,6 +219,7 @@ export class StrategyCamera {
     // orders (see main.ts) and must never move the camera.
     event.preventDefault();
     this.dragMode = event.button === 1 ? 'orbit' : 'pan';
+    this.dragPointerId = event.pointerId;
     this.lastPointer = [event.clientX, event.clientY];
     this.canvas?.setPointerCapture?.(event.pointerId);
   };
@@ -214,27 +237,22 @@ export class StrategyCamera {
         const centerX = (first.x + second.x) * 0.5;
         const centerY = (first.y + second.y) * 0.5;
         const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
-        const dx = centerX - this.pinchCenter[0];
-        const dy = centerY - this.pinchCenter[1];
+        const previousCenterX = this.pinchCenter[0];
+        const previousCenterY = this.pinchCenter[1];
         if (this.pinchDistance > 0) this.zoomAt(centerX, centerY, this.pinchDistance / distance);
-        const panScale = this.distance * 0.00145;
-        // Grab-and-drag: the point under the cursor should follow it on both
-        // axes. `pan`'s forward axis points up-screen, so dragging down must
-        // pan forward (+dy), not backward.
-        this.pan(-dx * panScale, dy * panScale);
+        this.panScreenDrag(previousCenterX, previousCenterY, centerX, centerY);
         this.pinchCenter = [centerX, centerY];
         this.pinchDistance = distance;
         return;
       }
 
-      const dx = event.clientX - this.lastPointer[0];
-      const dy = event.clientY - this.lastPointer[1];
+      const previousX = this.lastPointer[0];
+      const previousY = this.lastPointer[1];
       this.lastPointer = [event.clientX, event.clientY];
-      const scale = this.distance * 0.00145;
-      this.pan(-dx * scale, dy * scale);
+      this.panScreenDrag(previousX, previousY, event.clientX, event.clientY);
       return;
     }
-    if (!this.dragMode) return;
+    if (!this.dragMode || event.pointerId !== this.dragPointerId) return;
     const dx = event.clientX - this.lastPointer[0];
     const dy = event.clientY - this.lastPointer[1];
     this.lastPointer = [event.clientX, event.clientY];
@@ -243,10 +261,9 @@ export class StrategyCamera {
       // Upper bound raised so the player can orbit up to the near-top-down
       // strategic start view (~1.45 rad ≈ 83°); a true 90° degenerates picking.
       this.pitch = clamp(this.pitch + dy * 0.0035, 0.43, 1.45);
+      this.recalculateMatrices();
     } else {
-      const scale = this.distance * 0.00145;
-      // Grab-and-drag: dragging down pulls the map down, so pan forward (+dy).
-      this.pan(-dx * scale, dy * scale);
+      this.panScreenDrag(event.clientX - dx, event.clientY - dy, event.clientX, event.clientY);
     }
   };
 
@@ -263,7 +280,9 @@ export class StrategyCamera {
       this.pinchDistance = 0;
       return;
     }
+    if (event.pointerId !== this.dragPointerId) return;
     this.dragMode = null;
+    this.dragPointerId = null;
   };
 
   private onWheel = (event: WheelEvent): void => {

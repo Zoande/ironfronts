@@ -21,6 +21,15 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
     const provinceId = command.target.provinceId;
     const province = ctx.world.provinces.find((item) => item.id === provinceId);
     if (!province) return { ok: false, reason: 'No such province.' };
+    const hasClickPoint = command.target.x !== undefined && command.target.z !== undefined;
+    if ((command.target.x === undefined) !== (command.target.z === undefined)) {
+      return { ok: false, reason: 'Attack point is incomplete.' };
+    }
+    const destinationX = hasClickPoint ? command.target.x! : province.center[0];
+    const destinationZ = hasClickPoint ? command.target.z! : province.center[1];
+    if (hasClickPoint && ctx.world.provinceAt(destinationX, destinationZ) !== provinceId) {
+      return { ok: false, reason: 'Attack point does not belong to that province.' };
+    }
     // You cannot order a strike on ground you already hold. The client normally
     // routes a right-click on own territory to a plain move; this is the
     // server-side backstop for a modified or out-of-sync client.
@@ -28,8 +37,9 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
       return { ok: false, reason: 'You already hold that province — move there instead.' };
     }
     return issueMoveOrder(
-      ctx, army.id, province.center[0], province.center[1], 'attack',
-      { kind: 'province', provinceId: province.id }, command.confirmedWarCountryIds,
+      ctx, army.id, destinationX, destinationZ, 'attack',
+      { kind: 'province', provinceId: province.id, x: destinationX, z: destinationZ },
+      command.confirmedWarCountryIds,
       [ctx.state.provinceOwners[province.id] ?? 0],
     );
   }

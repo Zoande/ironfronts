@@ -230,7 +230,9 @@ body { user-select: none; }
 
 .diagnostics {
   position: fixed;
-  z-index: 3;
+  /* The in-game HUD lives in its own z-index:30 stacking context. Keep the
+     inspector above that context so map-mode controls cannot cover it. */
+  z-index: 50;
   top: 20px;
   right: 20px;
   width: 410px;

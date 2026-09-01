@@ -35,7 +35,7 @@ describe('attack-order feedback', () => {
     // ...that is handed to the order as its onAccepted callback, never called
     // from the synchronous (optimistic) path.
     expect(branch).toContain('session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)');
-    expect(branch).toContain('session.orderAttackProvince(selectedArmyId!, provinceId, acknowledgeAttack)');
+    expect(branch).toMatch(/session\.orderAttackProvince\([\s\S]*provinceId, ground\[0\], ground\[1\], acknowledgeAttack/);
     expect(branch).not.toMatch(/}\s*else\s*{\s*\n\s*flashAttackTarget/);
   });
 

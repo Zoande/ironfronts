@@ -33,6 +33,12 @@ export type PrimaryClickAction =
   | { readonly kind: 'select'; readonly encodedProvinceId: number }
   | { readonly kind: 'clear-selection' };
 
+/** Convert the GPU province field's 1-based value into the 0-based gameplay
+ * province id. Zero is reserved for water/void. */
+export function gameplayProvinceId(encodedProvinceId: number): number {
+  return encodedProvinceId > 0 ? encodedProvinceId - 1 : -1;
+}
+
 /**
  * Resolve a normal left-click / tap on the map. This is selection only: it never
  * changes province ownership. Ownership changes are authoritative GameState

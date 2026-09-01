@@ -99,4 +99,26 @@ describe('attack target validation', () => {
     const result = issueAttack(c, { type: 'attackArmy', countryId: 1, armyId: 'p', target: { kind: 'province', provinceId: 20 } });
     expect(result.reason ?? '').not.toMatch(/already hold|own/i);
   });
+
+  it('requires confirmation before declaring war and routes to the clicked point', () => {
+    const c = ctx([army('p', 1, 100, 100, 0)], { 10: 2 });
+    const target = { kind: 'province' as const, provinceId: 10, x: 300, z: 100 };
+
+    const challenged = issueAttack(c, {
+      type: 'attackArmy', countryId: 1, armyId: 'p', target,
+    });
+    expect(challenged).toMatchObject({ ok: false, requiredWarCountryIds: [2] });
+    expect(c.state.armies.p.order).toBeNull();
+    expect(c.state.relations['1:2']).not.toBe('war');
+
+    const accepted = issueAttack(c, {
+      type: 'attackArmy', countryId: 1, armyId: 'p', target,
+      confirmedWarCountryIds: [2],
+    });
+    expect(accepted.ok).toBe(true);
+    expect(c.state.relations['1:2']).toBe('war');
+    const order = c.state.armies.p.order!;
+    expect(order.target).toMatchObject({ kind: 'province', provinceId: 10, x: 300, z: 100 });
+    expect(order.path[order.path.length - 1]).toBe(nearestNode(graph(), 300, 100));
+  });
 });

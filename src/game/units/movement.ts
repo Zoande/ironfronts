@@ -187,6 +187,9 @@ export function issueStop(session: SimContext, armyId: string): boolean {
 
 function targetPoint(session: SimContext, army: ArmyStack, order: MoveOrder): [number, number] {
   if (order.target?.kind === 'province') {
+    if (order.target.x !== undefined && order.target.z !== undefined) {
+      return [order.target.x, order.target.z];
+    }
     const center = session.world.provinces[order.target.provinceId]?.center;
     return center ? [center[0], center[1]] : [order.destX, order.destZ];
   }
