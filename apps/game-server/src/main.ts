@@ -6,7 +6,9 @@ import { loadWorld } from './world-loader';
 import { GameRuntime } from './runtime';
 import { diffProjection } from './projection';
 import { AuthoritativeGameClock } from './game-clock';
-import { CLOCK_SYNC_INTERVAL_MS, SIMULATION_INTERVAL_MS, SIMULATION_TICK_HOURS } from './timing';
+import {
+  CLOCK_SYNC_INTERVAL_MS, SIMULATION_INTERVAL_MS, SIMULATION_TICK_HOURS, clampSimSpeed,
+} from './timing';
 import { GamePersistence, type PersistedGame } from './persistence';
 import { createInternalApiServer } from './internal-api';
 import { collectPendingEvents, eventsForCountry } from './event-feed';
@@ -59,6 +61,22 @@ const server = createInternalApiServer({
   afterJoin: saveGame,
   log,
 });
+// devSimSpeed is 1 in production; a local tester can set IRONFRONTS_DEV_SIM_SPEED
+// (startup default) or the in-session debug-panel control to fast-forward the
+// simulation (movement/production/combat) without touching any balance
+// constant. The multiplier is a single live value shared by the whole server
+// process — every connected player sees the same pace, which is expected for
+// a one-tester dev/QA lever, not a per-player setting.
+const devControlsEnabled = process.env.NODE_ENV !== 'production';
+let simSpeedMultiplier = config.devSimSpeed;
+if (simSpeedMultiplier !== 1) log('warn', 'dev_sim_speed_active', { multiplier: simSpeedMultiplier });
+/** Clamped (see clampSimSpeed; 0 = paused). No-op outside dev, no matter who calls it. */
+function setDevSimSpeed(multiplier: number): void {
+  if (!devControlsEnabled) return;
+  simSpeedMultiplier = clampSimSpeed(multiplier);
+  log('info', 'dev_sim_speed_changed', { multiplier: simSpeedMultiplier });
+}
+
 const gateway = new GameplayGateway({
   server,
   runtime,
@@ -68,10 +86,14 @@ const gateway = new GameplayGateway({
   clock: gameClock,
   revision: () => revision,
   saveGameInBackground,
+  devSimSpeed: { get: () => simSpeedMultiplier, set: setDevSimSpeed, enabled: devControlsEnabled },
   log,
 });
 
-const simulationTimer = setInterval(() => runtime.tick(SIMULATION_TICK_HOURS), SIMULATION_INTERVAL_MS);
+const simulationTimer = setInterval(
+  () => runtime.tick(SIMULATION_TICK_HOURS * simSpeedMultiplier),
+  SIMULATION_INTERVAL_MS,
+);
 const persistenceTimer = setInterval(saveGameInBackground, 5_000);
 // Civil time is interpolated by clients. This sparse sample corrects drift;
 // it is intentionally independent of the 10 Hz authoritative simulation.

@@ -1,11 +1,12 @@
 import './menu.css';
 import type { AudioManager, UiAudioCue } from '../audio/audio-manager';
-import { phase, runChoreo, smooth } from './choreo';
 import {
   isQualityLevel, loadQuality, QUALITY_PRESETS, saveQuality, type QualityLevel,
 } from '../graphics/quality';
-import type { GameLobby } from '@ironfronts/protocol';
+import type { CommanderProfile, GameLobby } from '@ironfronts/protocol';
 import { assignedCountry as resolveAssignedCountry, selectableCountries } from './lobby-state';
+import { resolveFlagUrl } from '../ui/flags';
+import { mountCommander } from './commander';
 
 export interface MenuHandlers {
   /**
@@ -14,6 +15,8 @@ export interface MenuHandlers {
    */
   lobby: GameLobby;
   username: string;
+  /** Persisted commander progression from the auth server's session response. */
+  profile?: CommanderProfile;
   onLaunch: (countryId: number) => void | Promise<void>;
   onLogout: () => void;
   audio?: AudioManager;
@@ -25,36 +28,60 @@ export interface MenuHandlers {
   onGraphicsQuality?: (level: QualityLevel) => void;
 }
 
-const OPEN_DURATION = 760;
-
-/** Natural aspect (height/width) of public/menu/desk-scene.jpg, for computing its cover-fit pixel size. */
-const MAP_ASPECT = 2620 / 2402;
+/**
+ * Hard ceiling on how long a dossier open/close may hold `busy`. The visual
+ * transition is a pure CSS `transition` on the compositor (see menu.css), so it
+ * keeps running even if the main thread or rAF is momentarily starved; this
+ * timeout only bounds the JS-side `busy` flag if `transitionend` never fires.
+ */
+const TRANSITION_TIMEOUT_MS = 680;
 
 export function mountMenu(handlers: MenuHandlers): void {
   const root = requiredId<HTMLElement>('menu-root');
   const brand = document.querySelector<HTMLElement>('.brand');
-  const main = requiredId<HTMLElement>('ifm-main');
-  const map = requiredChild<HTMLElement>(root, '.ifm__map');
   const masterVolume = document.getElementById('ifm-master-volume') as HTMLInputElement | null;
   const musicVolume = document.getElementById('ifm-music-volume') as HTMLInputElement | null;
   const newCampaign = requiredId<HTMLButtonElement>('ifm-new-campaign');
   const continueButton = requiredId<HTMLButtonElement>('ifm-continue');
   const assignedCountry = resolveAssignedCountry(handlers.lobby);
-  requiredId<HTMLElement>('ifm-account-name').textContent = handlers.username;
-  requiredId<HTMLButtonElement>('ifm-logout').addEventListener('click', handlers.onLogout);
-  newCampaign.disabled = assignedCountry !== null;
-  newCampaign.classList.toggle('is-disabled', assignedCountry !== null);
+  mountCommander({
+    username: handlers.username,
+    profile: handlers.profile,
+    onLogout: handlers.onLogout,
+  });
+  // A second campaign slot is not implemented yet. Rather than lock New
+  // Campaign entirely once a campaign exists, keep it open as a clearly
+  // labelled *preview* of the nation-selection flow that can never deploy —
+  // so the existing save is untouchable from here.
+  const previewOnly = assignedCountry !== null;
+  newCampaign.disabled = false;
+  newCampaign.classList.remove('is-disabled');
+  newCampaign.classList.toggle('is-preview', previewOnly);
+  if (previewOnly) {
+    const sub = newCampaign.querySelector('small');
+    if (sub) sub.textContent = "Inspect the setup flow — your campaign stays untouched.";
+  }
   continueButton.disabled = assignedCountry === null;
   continueButton.classList.toggle('is-disabled', assignedCountry === null);
+  continueButton.classList.toggle('is-assigned', assignedCountry !== null);
   requiredId<HTMLElement>('ifm-continue-detail').textContent = assignedCountry
-    ? `Continue as ${assignedCountry.name}.` : 'No field assignment.';
-  if (assignedCountry) continueButton.addEventListener('click', () => void deploy(assignedCountry.id));
+    ? `${assignedCountry.name} — resume where you left off.` : 'No field assignment.';
+  if (assignedCountry) {
+    continueButton.addEventListener('click', () => void deploy(assignedCountry.id));
+    const flagUrl = resolveFlagUrl(assignedCountry.name);
+    if (flagUrl) {
+      const icon = continueButton.querySelector<HTMLElement>('.ifm__icon');
+      // Quote the URL: resolveFlagUrl can return a data: URI whose commas /
+      // parens would break an unquoted url().
+      if (icon) icon.style.setProperty('--flag', `url("${flagUrl}")`);
+      else continueButton.classList.remove('is-assigned');
+    } else {
+      continueButton.classList.remove('is-assigned');
+    }
+  }
 
   let busy = false;
   let openScreen: string | null = null;
-  let transitionPage: HTMLElement | null = null;
-  let riseDistance = 0;
-  let panOffsetPx = 0;
 
   const playCue = (cue: UiAudioCue): void => {
     if (!handlers.audio) return;
@@ -83,67 +110,45 @@ export function mountMenu(handlers: MenuHandlers): void {
   }
 
   /**
-   * One update() drives every sub-motion from the same t (0=on the menu,
-   * 1=dossier open). The desk photo pans down (no extra zoom — the source
-   * is already at cover-fit scale, and zooming further just softens it).
-   * The logo/cards are measured to move by the exact same pixel amount the
-   * backdrop's visible window shifts, so they read as scrolling with the
-   * desk rather than drifting at their own independent speed. The dossier
-   * page rides the same pan curve, sliding up fully opaque from below the
-   * fold so it reads as having been on the desk the whole time rather than
-   * fading into place.
+   * Play the dossier open (`direction === 1`) or close (`-1`) transition.
+   *
+   * All three moving layers — the desk backdrop, the main menu screen, and the
+   * dossier — animate via plain CSS `transition`s keyed off the `.is-dossier-open`
+   * / `.is-open` classes (see menu.css). Those run on the compositor and cannot
+   * be stalled by main-thread or rAF starvation, which is exactly the failure the
+   * earlier rAF-driven version hit. JS only flips a class and waits for
+   * `transitionend`, with a timeout so `busy` is released even if the event is
+   * missed.
    */
-  function update(t: number): void {
-    const panT = smooth(phase(t, 0, 0.92));
-    const offsetPx = panOffsetPx * panT;
+  function playTransition(page: HTMLElement, direction: 1 | -1): Promise<void> {
+    root.classList.add('is-transitioning');
 
-    // Keep transitions compositor-only. Animating background-position and
-    // CSS filters on the full-screen desk image forced expensive repaints on
-    // every frame and could stall/crash the browser GPU process.
-    main.style.transform = `translate3d(0, ${(-offsetPx).toFixed(2)}px, 0)`;
-
-    if (transitionPage) {
-      transitionPage.style.transform =
-        `translate3d(0, ${((1 - panT) * riseDistance).toFixed(2)}px, 0)`;
+    if (direction === 1) {
+      // display:none -> visible needs a reflow before the class flip so the
+      // browser has a "from" state to animate out of.
+      page.hidden = false;
+      void page.offsetWidth;
+      page.classList.add('is-open');
+    } else {
+      page.classList.remove('is-open');
     }
-  }
 
-  async function playTransition(page: HTMLElement, direction: 1 | -1): Promise<void> {
-    transitionPage = page;
-    page.style.transform = 'none';
-    main.style.willChange = 'transform';
-    page.style.willChange = 'transform';
-
-    // Measure once before animation. The previous implementation called
-    // getBoundingClientRect() every frame, forcing repeated layout work while
-    // moving large full-screen menu layers.
-    const pageBox = page.getBoundingClientRect();
-    const mapBox = map.getBoundingClientRect();
-    riseDistance = pageBox.height;
-    const renderedHeight = mapBox.width * MAP_ASPECT;
-    const excess = Math.max(0, renderedHeight - mapBox.height);
-    panOffsetPx = excess * 0.62;
-
-    const target = direction === 1 ? 1 : 0;
-
-    try {
-      update(direction === 1 ? 0 : 1);
-      await runChoreo(OPEN_DURATION, direction, update);
-    } catch (error) {
-      // A menu transition must never leave the interface permanently frozen.
-      // If animation work fails, snap to the requested final state and keep
-      // the control flow moving.
-      console.error('Menu dossier transition failed; snapping to end state.', error);
-      try {
-        update(target);
-      } catch (snapError) {
-        console.error('Unable to snap dossier transition to end state.', snapError);
-      }
-    } finally {
-      main.style.willChange = '';
-      page.style.willChange = '';
-      transitionPage = null;
-    }
+    return new Promise<void>((resolve) => {
+      let done = false;
+      const finish = (): void => {
+        if (done) return;
+        done = true;
+        page.removeEventListener('transitionend', onEnd);
+        window.clearTimeout(timer);
+        root.classList.remove('is-transitioning');
+        resolve();
+      };
+      const onEnd = (event: TransitionEvent): void => {
+        if (event.target === page && event.propertyName === 'opacity') finish();
+      };
+      page.addEventListener('transitionend', onEnd);
+      const timer = window.setTimeout(finish, TRANSITION_TIMEOUT_MS);
+    });
   }
 
   async function openDossier(card: HTMLButtonElement): Promise<void> {
@@ -155,15 +160,14 @@ export function mountMenu(handlers: MenuHandlers): void {
 
     busy = true;
     openScreen = name;
+    // Menu-card interactivity is now driven purely by this class (see menu.css),
+    // so it cannot be left stranded by an interrupted transition.
+    root.classList.add('is-dossier-open');
     playCue('dossier-open');
 
-    page.hidden = false;
-    page.style.pointerEvents = 'none';
     try {
       await playTransition(page, 1);
     } finally {
-      page.style.pointerEvents = '';
-      main.style.pointerEvents = 'none';
       busy = false;
     }
   }
@@ -172,20 +176,46 @@ export function mountMenu(handlers: MenuHandlers): void {
     if (busy || !openScreen) return;
     const name = openScreen;
     const page = document.getElementById(`ifm-${name}`);
-    if (!page?.querySelector<HTMLElement>('.ifm__file')) return;
+    if (!page?.querySelector<HTMLElement>('.ifm__file')) {
+      // Nothing to animate — still clear the state so the menu stays usable.
+      openScreen = null;
+      root.classList.remove('is-dossier-open');
+      return;
+    }
 
     busy = true;
     playCue('dossier-close');
-    main.style.pointerEvents = '';
-    page.style.pointerEvents = 'none';
     try {
       await playTransition(page, -1);
     } finally {
       page.hidden = true;
-      page.style.pointerEvents = '';
+      page.classList.remove('is-open');
       openScreen = null;
+      root.classList.remove('is-dossier-open');
       busy = false;
     }
+  }
+
+  /**
+   * Hard reset to the primary menu screen. Used when a launch attempt started
+   * from an open dossier is abandoned (Return to Command), so the menu never
+   * comes back panned, half-open, or with dead cards.
+   */
+  function resetToMainScreen(): void {
+    busy = false;
+    closeNationPicker();
+    if (openScreen) {
+      const page = document.getElementById(`ifm-${openScreen}`);
+      if (page) {
+        page.hidden = true;
+        page.classList.remove('is-open');
+      }
+      openScreen = null;
+    }
+    root.classList.remove('is-dossier-open', 'is-transitioning');
+    // The pan is entirely class-driven: dropping `is-dossier-open` lets the desk
+    // backdrop and #ifm-main ease back on their own transitions — no inline
+    // styles to unwind.
   }
 
   root.querySelectorAll<HTMLButtonElement>('[data-open]').forEach((card) => {
@@ -195,54 +225,64 @@ export function mountMenu(handlers: MenuHandlers): void {
     button.addEventListener('click', () => void closeDossier());
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') void closeDossier();
+    if (event.key !== 'Escape') return;
+    // The nation overlay is layered above the dossier: Escape backs out of it
+    // first, only closing the dossier once nothing is stacked on top.
+    if (pickerOpen) { closeNationPicker(); return; }
+    void closeDossier();
   });
 
-  const briefing = {
-    objective: document.getElementById('ifm-briefing-objective'),
-    theater: document.getElementById('ifm-briefing-theater'),
-    date: document.getElementById('ifm-briefing-date'),
-    duration: document.getElementById('ifm-briefing-duration'),
-    risk: document.getElementById('ifm-briefing-risk'),
-    mapLabel: document.getElementById('ifm-map-theater'),
-  };
-
-  /** Campaign's operation rows carry briefing data; other rows have none and are skipped. */
-  function updateBriefing(row: HTMLElement): void {
-    const { objective, theater, date, duration, risk, mapLabel } = briefing;
-    if (!objective || !theater || !date || !duration || !risk) return;
-    objective.textContent = row.dataset.objective ?? '';
-    theater.textContent = row.dataset.theater ?? '';
-    date.textContent = row.dataset.date ?? '';
-    duration.textContent = row.dataset.duration ?? '';
-    const level = row.dataset.risk ?? 'medium';
-    risk.textContent = level.charAt(0).toUpperCase() + level.slice(1);
-    risk.className = `is-risk-${level}`;
-    // Keep the preview-map caption in step with the selected operation's theatre.
-    if (mapLabel) mapLabel.textContent = row.dataset.theater ?? mapLabel.textContent;
-  }
-
-  // ---- Country selection (Choose Your Nation) -------------------------
-  const countryGrid = document.getElementById('ifm-country-grid');
+  // ---- Nation selection overlay (Mobilization Registry) --------------
+  // The operation dossier no longer carries the country list; "Begin Operation"
+  // opens this dedicated overlay, and only an explicit Confirm launches.
+  const nationPicker = document.getElementById('ifm-nation-picker');
+  const beginOperation = document.getElementById('ifm-begin-operation') as HTMLButtonElement | null;
+  const confirmNation = document.getElementById('ifm-confirm-nation') as HTMLButtonElement | null;
+  const nationCancel = document.getElementById('ifm-nation-cancel');
+  const nationSelected = document.getElementById('ifm-nation-selected');
+  const roster = document.getElementById('ifm-country-grid');
   const countryHint = document.getElementById('ifm-country-hint');
-  const startButton = document.getElementById('ifm-start-operation') as HTMLButtonElement | null;
-  const DEFAULT_SCENARIO = 'OP-1939-01';
   let selectedCountryId: number | null = null;
-  void DEFAULT_SCENARIO;
+  let pickerOpen = false;
 
-  function updateStartEnabled(): void {
-    if (startButton) startButton.disabled = selectedCountryId === null;
+  function updateConfirmEnabled(): void {
+    const country = selectedCountryId === null
+      ? null
+      : selectableCountries(handlers.lobby).find((c) => c.id === selectedCountryId) ?? null;
+    if (confirmNation) {
+      confirmNation.disabled = country === null;
+      confirmNation.textContent = previewOnly ? 'Preview only' : 'Confirm';
+    }
+    if (nationSelected) {
+      nationSelected.textContent = country ? `Assigned: ${country.name}` : 'No nation selected';
+      nationSelected.classList.toggle('is-ready', country !== null);
+    }
     if (countryHint) {
-      countryHint.textContent = selectedCountryId === null
-        ? 'Select the country you will command.'
-        : 'Ready. Begin the operation when you are.';
+      countryHint.textContent = previewOnly
+        ? `Preview of the nation-selection flow. A second campaign slot isn't built yet, so this cannot deploy — your current campaign is safe.`
+        : country === null
+          ? 'Select the nation you will command.'
+          : `${country.name} — confirm to take command for the whole campaign.`;
     }
   }
 
-  function renderCountryGrid(preferCountryId: number | null): void {
-    if (!countryGrid) return;
+  function selectRosterEntry(button: HTMLButtonElement): void {
+    if (!roster || button.classList.contains('is-unavailable')) return;
+    selectedCountryId = Number(button.dataset.countryId);
+    for (const other of roster.querySelectorAll('.ifm__country')) {
+      const on = other === button;
+      other.classList.toggle('is-selected', on);
+      other.setAttribute('aria-selected', String(on));
+    }
+    button.scrollIntoView({ block: 'nearest' });
+    playCue('select');
+    updateConfirmEnabled();
+  }
+
+  function renderRoster(preferCountryId: number | null): void {
+    if (!roster) return;
     const playable = selectableCountries(handlers.lobby);
-    countryGrid.replaceChildren();
+    roster.replaceChildren();
     const keep = preferCountryId !== null && playable.some((c) => c.id === preferCountryId);
     selectedCountryId = keep ? preferCountryId : null;
     for (const country of playable) {
@@ -251,11 +291,20 @@ export function mountMenu(handlers: MenuHandlers): void {
       button.className = 'ifm__country';
       button.setAttribute('role', 'option');
       button.dataset.countryId = String(country.id);
-      button.setAttribute('aria-selected', String(country.id === selectedCountryId));
-      button.classList.toggle('is-selected', country.id === selectedCountryId);
+      const selected = country.id === selectedCountryId;
+      button.setAttribute('aria-selected', String(selected));
+      button.classList.toggle('is-selected', selected);
       const flag = document.createElement('span');
       flag.className = 'ifm__country-flag';
-      flag.setAttribute('style', `background:${country.color}`);
+      const flagUrl = resolveFlagUrl(country.name);
+      if (flagUrl) {
+        flag.style.backgroundImage = `url("${flagUrl}")`;
+      } else {
+        // No period-accurate flag for this entity — a colour standard, not a
+        // wrong flag. (docs/flags.md explains which entities these are.)
+        flag.classList.add('is-standard');
+        flag.style.background = country.color;
+      }
       const body = document.createElement('span');
       body.className = 'ifm__country-body';
       const name = document.createElement('span');
@@ -266,35 +315,74 @@ export function mountMenu(handlers: MenuHandlers): void {
       meta.textContent = `${country.startingCities} starting cities`;
       body.append(name, meta);
       button.append(flag, body);
-      button.addEventListener('click', () => {
-        selectedCountryId = country.id;
-        for (const other of countryGrid.querySelectorAll('.ifm__country')) {
-          const on = other === button;
-          other.classList.toggle('is-selected', on);
-          other.setAttribute('aria-selected', String(on));
-        }
-        playCue('select');
-        updateStartEnabled();
-      });
-      countryGrid.append(button);
+      button.addEventListener('click', () => selectRosterEntry(button));
+      roster.append(button);
     }
-    updateStartEnabled();
+    updateConfirmEnabled();
   }
 
-  root.querySelectorAll<HTMLButtonElement>('.ifm__row').forEach((row) => {
-    row.addEventListener('click', () => {
-      const list = row.parentElement;
-      list?.querySelectorAll('.ifm__row').forEach((sibling) => sibling.classList.remove('is-selected'));
-      row.classList.add('is-selected');
-      playCue('select');
-      if (row.dataset.objective) updateBriefing(row);
-      if (row.dataset.op) {
-        renderCountryGrid(selectedCountryId);
-      }
-    });
-  });
+  /** Count roster columns from layout so Up/Down move a visual row, not one cell. */
+  function rosterColumns(entries: HTMLElement[]): number {
+    if (entries.length < 2) return 1;
+    const top = entries[0].offsetTop;
+    let columns = 1;
+    while (columns < entries.length && entries[columns].offsetTop === top) columns += 1;
+    return columns;
+  }
 
-  renderCountryGrid(null);
+  /** Arrow-key navigation across the roster grid; Enter/Space confirms. */
+  function onRosterKeydown(event: KeyboardEvent): void {
+    if (!roster) return;
+    const entries = [...roster.querySelectorAll<HTMLButtonElement>('.ifm__country')];
+    if (!entries.length) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (selectedCountryId !== null && !confirmNation?.disabled) { event.preventDefault(); void deployFromPicker(selectedCountryId); }
+      return;
+    }
+    const columns = rosterColumns(entries);
+    const deltas: Record<string, number> = {
+      ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns,
+    };
+    const step = deltas[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const current = entries.findIndex((entry) => entry.classList.contains('is-selected'));
+    let next = current < 0 ? (step > 0 ? 0 : entries.length - 1) : current + step;
+    // Skip unavailable entries; stop at the ends rather than wrapping.
+    while (next >= 0 && next < entries.length && entries[next].classList.contains('is-unavailable')) next += step;
+    if (next < 0 || next >= entries.length) return;
+    selectRosterEntry(entries[next]);
+    entries[next].focus();
+  }
+  roster?.addEventListener('keydown', onRosterKeydown);
+
+  function openNationPicker(): void {
+    if (pickerOpen || !nationPicker) return;
+    renderRoster(selectedCountryId);
+    pickerOpen = true;
+    nationPicker.hidden = false;
+    document.getElementById('ifm-campaign')?.setAttribute('inert', '');
+    playCue('dossier-open');
+    (roster?.querySelector<HTMLButtonElement>('.ifm__country.is-selected')
+      ?? roster?.querySelector<HTMLButtonElement>('.ifm__country:not(.is-unavailable)')
+      ?? roster)?.focus();
+  }
+
+  function closeNationPicker(): void {
+    if (!pickerOpen || !nationPicker) return;
+    pickerOpen = false;
+    nationPicker.hidden = true;
+    document.getElementById('ifm-campaign')?.removeAttribute('inert');
+    playCue('dossier-close');
+    beginOperation?.focus();
+  }
+
+  beginOperation?.addEventListener('click', () => openNationPicker());
+  nationCancel?.addEventListener('click', () => closeNationPicker());
+  confirmNation?.addEventListener('click', () => {
+    if (selectedCountryId === null) return;
+    void deployFromPicker(selectedCountryId);
+  });
 
   // Graphics quality selector. Reads/persists the choice locally and only
   // notifies handlers - it never initializes the world renderer from the lobby.
@@ -332,6 +420,9 @@ export function mountMenu(handlers: MenuHandlers): void {
       if (brand) brand.hidden = false;
       await handlers.onLaunch(countryId);
     } catch (error) {
+      // The launch was abandoned (e.g. "Return to Command"). Bring the menu
+      // back on its primary screen with interaction fully restored.
+      resetToMainScreen();
       root.hidden = false;
       root.style.opacity = '1';
       if (brand) brand.hidden = true;
@@ -340,6 +431,7 @@ export function mountMenu(handlers: MenuHandlers): void {
   }
 
   async function deploy(countryId: number): Promise<void> {
+    if (busy) return; // don't launch while a menu transition is still animating
     try {
       await launch(countryId);
     } catch (error) {
@@ -347,21 +439,29 @@ export function mountMenu(handlers: MenuHandlers): void {
     }
   }
 
-  startButton?.addEventListener('click', () => {
-    if (selectedCountryId === null) return;
-    void deploy(selectedCountryId);
-  });
+  /**
+   * New Campaign's nation-picker entry point (Confirm button + roster Enter).
+   * While a campaign is already loaded this is preview-only: it never launches,
+   * so the New Campaign flow can be inspected without risking data/game.json.
+   * Continue does NOT go through here — it calls `deploy` directly.
+   */
+  async function deployFromPicker(countryId: number): Promise<void> {
+    if (previewOnly) {
+      if (countryHint) {
+        countryHint.textContent = `Preview only — a second campaign slot isn't built yet. `
+          + `Your campaign${assignedCountry ? ` as ${assignedCountry.name}` : ''} is untouched; use Continue to resume it.`;
+      }
+      playCue('select');
+      return;
+    }
+    await deploy(countryId);
+  }
+
   document.getElementById('ifm-apply-settings')?.addEventListener('click', () => playCue('confirm'));
 }
 
 function requiredId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing menu element: #${id}`);
-  return el as unknown as T;
-}
-
-function requiredChild<T extends HTMLElement>(parent: Element, selector: string): T {
-  const el = parent.querySelector(selector);
-  if (!el) throw new Error(`Missing menu element: ${selector}`);
   return el as unknown as T;
 }

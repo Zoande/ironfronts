@@ -13,14 +13,20 @@ describe('lightweight lobby startup', () => {
 
   it('loads the renderer only after the player launches an operation', () => {
     const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
-    expect(main).toContain("await import('./renderer')");
+    // The renderer module graph is still loaded lazily, only once the player
+    // commits to an operation (now wrapped in a launch-timeout guard).
+    expect(main).toMatch(/(await |withTimeout\()import\('\.\/renderer'\)/);
     expect(main).toContain("import type { WorldRenderer, MapMode, TimeOfDayState } from './renderer';");
     expect(main).not.toMatch(/import\s+\{\s*WorldRenderer[,}]/);
   });
 
   it('cannot let optional opening music block Continue or a new deployment', () => {
     const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
-    expect(main).toContain("loadingStage.textContent = lobby.assignedCountryId === null ? 'Joining operation' : 'Restoring operation'");
+    // A new operation registers (join) only when no country is assigned yet; a
+    // Continue skips straight to the renderer. Either way the join call is
+    // time-bounded so it can never hang the launch.
+    expect(main).toContain('if (lobby.assignedCountryId === null)');
+    expect(main).toMatch(/withTimeout\(joinGame\(countryId\)/);
     expect(main).toContain("void music.setState('opening').catch");
     expect(main).not.toContain("await music.setState('opening')");
   });

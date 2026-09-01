@@ -50,7 +50,7 @@ export interface QualityPreset {
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
   low: {
     label: 'Low',
-    blurb: 'Best performance',
+    blurb: 'Best performance — 0.75× render scale, no road furniture, ~9k trees, props fade in close.',
     renderScale: 0.75,
     propDistanceScale: 0.45,
     treeInstanceBudget: 9_000,
@@ -65,7 +65,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
   },
   medium: {
     label: 'Medium',
-    blurb: 'Balanced',
+    blurb: 'Balanced — 1× render scale, ~22k trees / 14k buildings, no road furniture, reduced shader detail.',
     renderScale: 1,
     propDistanceScale: 0.7,
     treeInstanceBudget: 22_000,
@@ -77,7 +77,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
   },
   high: {
     label: 'High',
-    blurb: 'High-quality strategic map',
+    blurb: 'High-quality strategic map — 1.25× render scale, road furniture on, ~60k trees / 40k buildings, full relief shading.',
     renderScale: 1.25,
     propDistanceScale: 1,
     treeInstanceBudget: 60_000,
@@ -89,7 +89,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
   },
   ultra: {
     label: 'Ultra',
-    blurb: 'Maximum world detail',
+    blurb: 'Maximum world detail — 1.5× render scale, finest terrain LOD, near-unlimited trees/buildings, every shader pass on.',
     renderScale: 1.5,
     propDistanceScale: 1.25,
     treeInstanceBudget: 400_000,

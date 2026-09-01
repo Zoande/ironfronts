@@ -1,0 +1,42 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Infantry">
+  <defs>
+    <linearGradient id="u-inf-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20261b"/>
+      <stop offset="0.62" stop-color="#12150e"/>
+      <stop offset="1" stop-color="#0b0d08"/>
+    </linearGradient>
+    <linearGradient id="u-inf-coat" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7f846a"/>
+      <stop offset="1" stop-color="#4f5442"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#u-inf-bg)"/>
+  <path d="M0 70h100v30H0z" fill="#0e100c" opacity="0.55"/>
+  <ellipse cx="50" cy="88" rx="30" ry="6" fill="#000" opacity="0.35"/>
+  <!-- rifle, slung across the body -->
+  <path d="M22 78 L74 40" stroke="#26241d" stroke-width="4.4" stroke-linecap="round"/>
+  <path d="M22 78 L74 40" stroke="#3d3a2d" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M70 43 l9 -6" stroke="#1c1a15" stroke-width="2.6" stroke-linecap="round"/>
+  <!-- legs -->
+  <path d="M41 62 l-4 26 h9 l3 -22z" fill="#43483a"/>
+  <path d="M52 62 l4 26 h-9 l-3 -22z" fill="#4c5142"/>
+  <path d="M33 88 h13 v5 h-15z" fill="#211f19"/>
+  <path d="M54 88 h13 v5 h-15z" fill="#26241d"/>
+  <!-- torso / greatcoat -->
+  <path d="M34 40 q16 -10 32 0 l3 26 q-19 8 -38 0z" fill="url(#u-inf-coat)"/>
+  <path d="M50 33 l0 33" stroke="#3a3e30" stroke-width="1.6"/>
+  <path d="M37 44 l26 0" stroke="#3a3e30" stroke-width="1.4" opacity="0.7"/>
+  <!-- webbing + pouches -->
+  <path d="M40 42 l6 22 M60 42 l-6 22" stroke="#2c2a21" stroke-width="2.4"/>
+  <rect x="44" y="52" width="12" height="9" rx="1.5" fill="#39362b"/>
+  <!-- arms -->
+  <path d="M34 41 q-8 8 -12 20 l6 3 q6 -12 12 -18z" fill="#565b48"/>
+  <path d="M66 41 q10 4 12 12 l-6 4 q-4 -8 -12 -12z" fill="#5e6350"/>
+  <!-- collar + neck -->
+  <path d="M43 36 l7 5 l7 -5 l-2 6 h-10z" fill="#3c4032"/>
+  <rect x="46" y="30" width="8" height="8" rx="2" fill="#8a7f66"/>
+  <!-- helmet -->
+  <path d="M38 30 q1 -15 12 -16 q11 1 12 16 q-12 5 -24 0z" fill="#5a5f4c"/>
+  <path d="M38 30 q1 -15 12 -16 q4 0 6 1 q-7 3 -8 15 q-6 1 -10 -1z" fill="#727863"/>
+  <path d="M37 30 q13 6 26 0 l0 3 q-13 6 -26 0z" fill="#3e4234"/>
+</svg>

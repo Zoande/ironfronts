@@ -6,6 +6,7 @@ export { lineShader } from './shaders/lines';
 export { mapMarkerShader } from './shaders/map-markers';
 export { armyMarkerShader } from './shaders/army-markers';
 export { armyModelShader } from './shaders/army-models';
+export { combatEffectShader } from './shaders/combat-effects';
 export { polarCapShader } from './shaders/polar-caps';
 export { propShader } from './shaders/props';
 export { rainShader } from './shaders/rain';

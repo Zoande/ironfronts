@@ -1,0 +1,41 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Medium Tank">
+  <defs>
+    <linearGradient id="u-mt-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20261b"/>
+      <stop offset="0.62" stop-color="#12150e"/>
+      <stop offset="1" stop-color="#0b0d08"/>
+    </linearGradient>
+    <linearGradient id="u-mt-hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#787c5d"/>
+      <stop offset="1" stop-color="#3f4335"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#u-mt-bg)"/>
+  <path d="M0 68h100v32H0z" fill="#0e100c" opacity="0.55"/>
+  <ellipse cx="50" cy="84" rx="43" ry="8" fill="#000" opacity="0.42"/>
+  <!-- track -->
+  <path d="M8 66 q4 -12 14 -13 h56 q10 1 14 13 q4 12 -5 14 h-88 q-9 -2 9 -14z" fill="#1c1b16"/>
+  <g fill="#43453b">
+    <circle cx="18" cy="73" r="6.2"/><circle cx="32" cy="74" r="6.2"/>
+    <circle cx="46" cy="74" r="6.2"/><circle cx="60" cy="74" r="6.2"/>
+    <circle cx="74" cy="74" r="6.2"/><circle cx="86" cy="72" r="5"/>
+  </g>
+  <path d="M10 64 q7 -11 16 -11 h52 q10 0 16 11z" fill="#363a2e"/>
+  <!-- hull, sloped glacis -->
+  <path d="M14 56 l10 -14 h52 l10 14z" fill="url(#u-mt-hull)"/>
+  <path d="M14 56 l10 -14 h9 l-7 14z" fill="#888c6c" opacity="0.85"/>
+  <path d="M24 42 l52 0" stroke="#2f3327" stroke-width="1.4"/>
+  <!-- big rounded turret -->
+  <path d="M30 44 q3 -17 21 -17 q18 0 21 17z" fill="#666a52"/>
+  <path d="M30 44 q3 -17 21 -17 q5 0 8 1 q-12 3 -14 16z" fill="#808466"/>
+  <!-- mantlet + long gun -->
+  <rect x="66" y="33" width="8" height="8" rx="2" fill="#54583f"/>
+  <path d="M72 35 l24 -2 v3.6 l-24 2z" fill="#232219"/>
+  <path d="M94 33 l4 -0.3 v4 l-4 0.3z" fill="#131210"/>
+  <!-- cupola + hatch -->
+  <ellipse cx="44" cy="30" rx="6" ry="3" fill="#2c2b22"/>
+  <circle cx="55" cy="33" r="2.4" fill="#1f1e17"/>
+  <!-- fender bolts -->
+  <path d="M12 62 q38 8 76 0" fill="none" stroke="#1c201800" stroke-width="0"/>
+  <g fill="#20241b"><circle cx="22" cy="55" r="1.3"/><circle cx="40" cy="52" r="1.3"/><circle cx="60" cy="52" r="1.3"/><circle cx="72" cy="55" r="1.3"/></g>
+</svg>

@@ -39,7 +39,13 @@ fn waterVertex(input: WaterVertexInput, @builtin(instance_index) instanceIndex: 
 fn waterFragment(input: WaterVertexOutput) -> @location(0) vec4f {
   let riverField = waterwayFieldAt(input.mapUv);
   if (riverField.r > 0.45 || riverField.g > 0.45) { discard; }
-  if (landAt(input.mapUv) >= 0.5) { discard; }
+  // Water covers exactly the complement of terrain: terrain discards at
+  // landAt <= 0.5 - COAST_OVERLAP, water at landAt > 0.5. The blocky-rectangle
+  // shoreline holes were a chunk-LOD tessellation MISMATCH — the water grid was
+  // coarser than terrain at LOD 0/1, so the interpolated landAt disagreed and a
+  // fragment could fall in both discard zones. The water meshes now match the
+  // terrain resolutions (renderer.ts), so this split is exact and gap-free.
+  if (landAt(input.mapUv) > 0.5) { discard; }
   let visualRiver = 0.0;
   let debugMode = u32(uniforms.map.w + 0.5);
   if (debugMode == 6u) {

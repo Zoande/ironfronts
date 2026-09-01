@@ -63,6 +63,20 @@ export interface ProvinceResourceTotals {
   readonly oil: number;
 }
 
+/** One entry in a production or construction queue, 0 A.D.-style. */
+export interface QueueItem {
+  readonly id: string;
+  readonly label: string;
+  /** True only for the head order — the one actually advancing. */
+  readonly active: boolean;
+  /** 0..1, only meaningful when `active`. */
+  readonly progress: number;
+  /** Estimated seconds of real time left at normal (1x) simulation speed,
+   *  only meaningful when `active`. A dev speed-up will finish sooner than
+   *  this reads — it is a normal-play estimate, not a live server countdown. */
+  readonly etaSeconds: number;
+}
+
 export interface SelectedProvince {
   /** 0-based province id (matches FrameStats.hoveredProvince / renderer ids). */
   readonly id: number;
@@ -80,6 +94,12 @@ export interface SelectedProvince {
   readonly isOwn?: boolean;
   /** Province has sea access (drives the water / naval marker). */
   readonly coastal?: boolean;
+  /** Production facilities standing in this province (own provinces only). */
+  readonly buildings?: {
+    readonly barracks: number;
+    readonly tankPlant: number;
+    readonly ordnance: number;
+  } | null;
   /** Deposit control/extraction state, own provinces only. */
   readonly deposits?: {
     readonly controlled: boolean;
@@ -91,8 +111,9 @@ export interface SelectedProvince {
     readonly name: string;
     readonly costLabel: string;
   }[];
-  /** Current production queue (unit names), own provinces only. */
-  readonly queue?: readonly string[];
+  /** Current production queue, own provinces only. Only the head order (index
+   *  0) is actively being worked and carries live progress/eta. */
+  readonly queue?: readonly QueueItem[];
   /** Buildings this own urban province could still take. Unaffordable ones are
    *  included (rendered disabled) so the cost is visible before it can be met. */
   readonly buildable?: readonly {
@@ -101,8 +122,9 @@ export interface SelectedProvince {
     readonly costLabel: string;
     readonly affordable: boolean;
   }[];
-  /** Buildings currently under construction here (labels), own provinces only. */
-  readonly construction?: readonly string[];
+  /** Buildings currently under construction here, own provinces only. Only the
+   *  head order (index 0) is actively being worked. */
+  readonly construction?: readonly QueueItem[];
   /** World-space rally point newly produced units march to, or null. */
   readonly rally?: { readonly x: number; readonly z: number } | null;
   /** UI is waiting for a map click to place this province's rally point. */
@@ -123,6 +145,11 @@ export interface GameNotification {
   readonly body?: string;
   /** epoch ms */
   readonly at: number;
+  /** When true the toast stays until dismissed (action-required); else it auto-expires. */
+  readonly sticky?: boolean;
+  /** World point this event happened at. When present the toast is clickable
+   *  and re-centres the camera there (e.g. "force under attack"). */
+  readonly focus?: { readonly x: number; readonly z: number };
 }
 
 export type CombatStatus = 'idle' | 'moving' | 'engaged' | 'retreating';
@@ -179,6 +206,7 @@ export interface ArmyStackView {
   readonly simulationTick?: number;
   readonly legalRetreatExits?: ReadonlyArray<{
     firstNodeId: number; destinationProvinceId: number; x: number; z: number;
+    readonly bearing?: string;
   }>;
   readonly battleFronts?: ReadonlyArray<{
     id: string; directionNodeId: number; role: 'attack' | 'defense';
@@ -224,7 +252,7 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
   return {
     phase: 'lobby',
     playerCountry: null,
-    mapMode: 'balanced',
+    mapMode: 'political',
     clock: null,
     weather: { raining: false, label: 'Clear' },
     resources: DEFAULT_RESOURCES,

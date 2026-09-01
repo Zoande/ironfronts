@@ -1,6 +1,19 @@
 import { commonWgsl } from './common';
 
 export const propShader = commonWgsl + /* wgsl */ `
+// Map-scale prop sizing. The world buffers were baked when props read larger;
+// rather than force a full world rebuild these bring towns and forests down to a
+// strategic-map scale. Footprint is trimmed harder than height so a town still
+// has a silhouette. Nothing gameplay reads these (no picking, no road/army
+// height) — terrain height stays the shared authoritative path.
+// Trimmed again (0.60 -> 0.42 footprint, 0.72 -> 0.52 height): at strategic
+// zoom a town should read as a small dense cluster, not a handful of
+// road-width-wide blocks. The landmark archetype (4) still mixes back toward
+// full size below so a capital keeps its presence.
+const BUILDING_FOOTPRINT_SCALE = 0.42;
+const BUILDING_HEIGHT_SCALE = 0.52;
+const TREE_MAP_SCALE = 0.66;
+
 struct InstanceRecord { a: vec4f, b: vec4f };
 struct InstanceParams { count: u32, kind: u32, enabled: u32, padding: u32 };
 @group(1) @binding(0) var<storage, read> instances: array<InstanceRecord>;
@@ -138,7 +151,7 @@ fn propVertex(input: PropVertexInput, @builtin(instance_index) instanceIndex: u3
     let variant = min(u32(record.a.w + 0.5), 4u);
     let part = u32(input.materialPart + 0.5);
     let partScale = treePartScale(variant, part);
-    local = (local * partScale + treePartCenter(variant, part)) * record.a.z;
+    local = (local * partScale + treePartCenter(variant, part)) * record.a.z * TREE_MAP_SCALE;
     angle = record.b.x;
     transformedNormal = rotateY(normalize(input.normal / max(partScale, vec3f(0.001))), angle);
     opacity = select(0.0, 1.0, treePartVisible(variant, part));
@@ -160,6 +173,11 @@ fn propVertex(input: PropVertexInput, @builtin(instance_index) instanceIndex: u3
       local.y = 1.0 + (local.y - 1.0) * 0.42;
     }
     local *= vec3f(record.a.z, record.a.w, record.b.x);
+    // Landmark archetype (4) keeps most of its bulk so a capital still reads;
+    // every other structure is pulled down to a map-scale block.
+    let mapFootprint = select(BUILDING_FOOTPRINT_SCALE, mix(BUILDING_FOOTPRINT_SCALE, 1.0, 0.55), archetype == 4u);
+    let mapHeight = select(BUILDING_HEIGHT_SCALE, mix(BUILDING_HEIGHT_SCALE, 1.0, 0.5), archetype == 4u);
+    local *= vec3f(mapFootprint, mapHeight, mapFootprint);
     // As the camera pulls back to regional/overview zoom, dense city clusters
     // read as oversized miniature towns. Keep the silhouette and the landmark
     // archetype (4) intact, but tighten every other building's footprint,

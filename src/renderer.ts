@@ -43,6 +43,10 @@ import { loadWorldAssetBuffers, worldAssetUrl } from './world-assets';
 import { getVisibleInstanceView, updateVisibleInstanceView } from './visible-instance-cache';
 
 const LABELS_ABOVE_PROPS_DISTANCE = 2_500;
+
+/** Player-start camera: north-up, near top-down (~83°; a true 90° breaks picking). */
+const PLAYER_START_YAW = 0;
+const PLAYER_START_PITCH = 1.45;
 // Strategic markers are a regional / close-zoom aid; above this orbit distance
 // the overview map stays clean and the marker draw is skipped entirely.
 const MAP_MARKER_MAX_DISTANCE = 5_000;
@@ -64,6 +68,8 @@ export class WorldRenderer {
   /** Gameplay-layer map tap handler. Return true to consume the click
    *  (army selection / move order) and suppress province selection. */
   onMapClick?: (clientX: number, clientY: number) => boolean;
+  /** Right-click / secondary tap: issue a move/attack order for the selected army. */
+  onMapCommand?: (clientX: number, clientY: number) => boolean;
   onTimeOfDayChange?: (state: TimeOfDayState) => void;
 
   private readonly canvas: HTMLCanvasElement;
@@ -94,6 +100,7 @@ export class WorldRenderer {
   private armyMarkerPipeline!: GPURenderPipeline;
   private armyCompositionPipeline!: GPURenderPipeline;
   private armyModelPipeline!: GPURenderPipeline;
+  private combatEffectPipeline!: GPURenderPipeline;
   private countryLabelPipeline!: GPURenderPipeline;
   private countryLabelBuffer?: GPUBuffer;
   private countryLabelParamsBuffer?: GPUBuffer;
@@ -152,11 +159,21 @@ export class WorldRenderer {
   private static readonly ARMY_MARKER_CAPACITY = 1_024;
   private static readonly ARMY_MODEL_CAPACITY = 4_096;
   private static readonly ARMY_MODEL_VERTEX_COUNT = 6 * 36;
+  /** Base camera distance for the strategic-marker <-> 3D-model LOD swap. */
+  private static readonly ARMY_MODEL_RANGE_BASE = 1_900;
   /** The ONLY resource-deposit marker layer: fed the player-visible authoritative
    *  set (natural + scenario-guaranteed, fog-filtered) via `setGameResourceMarkers`.
    *  The static `mapMarkers` layer carries junctions/towns only. */
   private gameResourceMarkers?: InstanceLayer;
   private static readonly RESOURCE_MARKER_CAPACITY = 4_096;
+  /** Pooled world-space combat effects (see CombatEffectPool). 8 floats each. */
+  private combatEffects?: InstanceLayer;
+  private static readonly COMBAT_EFFECT_CAPACITY = 384;
+  private static readonly COMBAT_EFFECT_MAX_DISTANCE = 5_000;
+  /** Own-army movement/attack routes (line mode 3), one LineRecord per segment. */
+  private routeLines?: InstanceLayer;
+  private static readonly ROUTE_SEGMENT_CAPACITY = 4_096;
+  private static readonly ROUTE_MAX_DISTANCE = 6_400;
   /** Flat (ax, az, bx, bz) edges of the movement/road graph — junction input. */
   private connectionGraph?: Float32Array;
   /** World-space centres of the more populous provinces (junction spacing). */
@@ -176,6 +193,10 @@ export class WorldRenderer {
   private frameHandle = 0;
   private previousTime = performance.now();
   private elapsed = 0;
+  /** While the tab is hidden the rAF loop keeps ticking (to resume instantly)
+   *  but does no GPU/pick/uniform work — the WS session and audio are elsewhere
+   *  and keep running. */
+  private renderingSuspended = typeof document !== 'undefined' && document.hidden;
   private quality: QualityLevel = DEFAULT_QUALITY;
   private readonly environment = new EnvironmentController();
   private reportedClock = '';
@@ -194,7 +215,7 @@ export class WorldRenderer {
   private showWaterwayNetwork = false;
   private showBorders = true;
   private showCountryOverlay = true;
-  private mapMode: MapMode = 'balanced';
+  private mapMode: MapMode = 'political';
   private showProps = true;
   private showRoads = true;
   private showHiddenConnections = true;
@@ -245,6 +266,38 @@ export class WorldRenderer {
   /** Backing-store scale actually in use (× CSS pixels). */
   get effectiveRenderScale(): number {
     return resolveRenderPixelRatio(this.quality);
+  }
+
+  /**
+   * Camera distance below which close 3D army models draw (above it, only the
+   * strategic markers). Scaled by the preset prop-distance knob so LOW drops to
+   * markers sooner and ULTRA holds the models further out. Floored so LOW still
+   * shows models when the camera is genuinely low.
+   */
+  private get armyModelDrawDistance(): number {
+    return Math.max(900, WorldRenderer.ARMY_MODEL_RANGE_BASE * this.qualityPreset.propDistanceScale);
+  }
+
+  /**
+   * Resolved preset knobs + the live counts they gate, for the graphics dev
+   * readout. Lets QA prove a preset switch actually changed the renderer.
+   */
+  get qualityReadout(): {
+    propDistanceScale: number; terrainLodScale: number; detailFactor: number;
+    treeBudget: number; buildingBudget: number; furniture: boolean;
+    armyModelRange: number; armyModelCount: number;
+  } {
+    const p = this.qualityPreset;
+    return {
+      propDistanceScale: p.propDistanceScale,
+      terrainLodScale: p.terrainLodScale,
+      detailFactor: p.detailFactor,
+      treeBudget: p.treeInstanceBudget,
+      buildingBudget: p.buildingInstanceBudget,
+      furniture: p.furniture,
+      armyModelRange: Math.round(this.armyModelDrawDistance),
+      armyModelCount: this.armyModels?.count ?? 0,
+    };
   }
 
   /** Deterministic visual resource-deposit layer (no economy wiring). */
@@ -497,7 +550,16 @@ export class WorldRenderer {
     this.terrainMeshes = [this.manifest.terrain.gridResolution, 33, 17, 9]
       .map((resolution) => createTerrainMesh(this.device, resolution, true));
     this.polarCapMesh = createTerrainMesh(this.device, 65);
-    this.waterMeshes = [33, 25, 17, 9].map((resolution) => createTerrainMesh(this.device, resolution));
+    // Water MUST tessellate identically to terrain at every LOD. Both passes
+    // key off the same per-chunk `draw.lod` and decide coast coverage from
+    // landAt(interpolated mapUv); when the water grid was coarser (was
+    // [33,25,17,9] vs terrain's [49,33,17,9]) the 0.5 coast contour landed on a
+    // different polyline in each pass, so at a fine LOD (Ultra) a shoreline
+    // fragment could be discarded by BOTH — the black rectangles. Matching the
+    // resolutions makes landAt(mapUv) per-pixel identical, so the
+    // terrain `<= 0.5` / water `> 0.5` split covers every fragment exactly once.
+    this.waterMeshes = [this.manifest.terrain.gridResolution, 33, 17, 9]
+      .map((resolution) => createTerrainMesh(this.device, resolution));
     this.roadMesh = uploadIndexedMesh(this.device, 'terrain roads', roadVertexBuffer, roadIndexBuffer, this.manifest.buffers.roadIndices.count);
     this.hiddenConnectionMesh = uploadIndexedMesh(this.device, 'floating hidden connections', hiddenConnectionVertexBuffer,
       hiddenConnectionIndexBuffer, this.manifest.buffers.hiddenConnectionIndices.count);
@@ -729,6 +791,15 @@ export class WorldRenderer {
     this.camera.update(0);
   }
 
+  /**
+   * Deterministic player-start view: centred on the player's homeland, north-up,
+   * near top-down. No prior camera orientation leaks in. The player can orbit
+   * away afterwards (the orbit clamp now reaches this pitch).
+   */
+  focusPlayerStart(x: number, z: number, distance: number): void {
+    this.focus(x, z, distance, PLAYER_START_YAW, PLAYER_START_PITCH);
+  }
+
   getPerformanceSnapshot(): PerformanceSnapshot {
     return this.performanceMonitor.snapshot();
   }
@@ -787,6 +858,7 @@ export class WorldRenderer {
     this.armyMarkerPipeline = pipelines.armyMarkers;
     this.armyCompositionPipeline = pipelines.armyComposition;
     this.armyModelPipeline = pipelines.armyModels;
+    this.combatEffectPipeline = pipelines.combatEffects;
     this.countryLabelPipeline = pipelines.countryLabels;
   }
 
@@ -909,6 +981,59 @@ export class WorldRenderer {
     this.gameResourceMarkers = this.createInstanceLayer(
       'game resource markers', zeroR.buffer as ArrayBuffer, 0, 0, this.lineLayout,
     );
+    const zeroRoutes = new Float32Array(WorldRenderer.ROUTE_SEGMENT_CAPACITY * 8);
+    this.routeLines = this.createInstanceLayer(
+      'order routes', zeroRoutes.buffer as ArrayBuffer, 0, 3, this.lineLayout,
+    );
+    const zeroEffects = new Float32Array(WorldRenderer.COMBAT_EFFECT_CAPACITY * 8);
+    this.combatEffects = this.createInstanceLayer(
+      'combat effects', zeroEffects.buffer as ArrayBuffer, 0, 0, this.lineLayout,
+    );
+  }
+
+  /**
+   * Replace the drawn combat effects. `records` is 8 floats per instance
+   * (see combatEffectShader); `count` is the used prefix. One buffer write.
+   */
+  setCombatEffects(records: Float32Array, count: number): void {
+    if (!this.combatEffects) return;
+    const capped = Math.min(count, WorldRenderer.COMBAT_EFFECT_CAPACITY);
+    if (capped > 0) {
+      this.device.queue.writeBuffer(
+        this.combatEffects.buffer, 0,
+        records.buffer as ArrayBuffer, records.byteOffset, capped * 8 * 4,
+      );
+    }
+    this.device.queue.writeBuffer(
+      this.combatEffects.params, 0, new Uint32Array([Math.max(1, capped), 0, 1, 0]),
+    );
+    this.combatEffects.count = capped;
+  }
+
+  /** Camera distance past which combat effects stop drawing (markers only). */
+  get combatEffectMaxDistance(): number {
+    return WorldRenderer.COMBAT_EFFECT_MAX_DISTANCE;
+  }
+
+  /**
+   * Replace the drawn order-route polylines. `records` is 8 floats per segment
+   * (LineRecord: a = x0,z0,x1,z1; b = colorFlag, dim, retreatFlag, 0), where
+   * colorFlag 0 = move / 1 = attack, dim > 0.5 = a non-selected army's route,
+   * retreatFlag > 0.5 = withdrawal. One buffer write, no pipeline churn.
+   */
+  setOrderRoutes(records: Float32Array, count: number): void {
+    if (!this.routeLines) return;
+    const capped = Math.min(count, WorldRenderer.ROUTE_SEGMENT_CAPACITY);
+    if (capped > 0) {
+      this.device.queue.writeBuffer(
+        this.routeLines.buffer, 0,
+        records.buffer as ArrayBuffer, records.byteOffset, capped * 8 * 4,
+      );
+    }
+    this.device.queue.writeBuffer(
+      this.routeLines.params, 0, new Uint32Array([Math.max(1, capped), 3, 1, 0]),
+    );
+    this.routeLines.count = capped;
   }
 
   /** Replace the authoritative resource-deposit markers. `records` is 4 floats
@@ -1052,6 +1177,10 @@ export class WorldRenderer {
     this.attachInteraction(this.interactionAbort.signal);
     this.resizeObserver ??= new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.canvas);
+    this.renderingSuspended = document.hidden;
+    document.addEventListener('visibilitychange', this.onVisibilityChange, {
+      signal: this.interactionAbort.signal,
+    });
   }
 
   private detachRuntimeBindings(): void {
@@ -1068,6 +1197,13 @@ export class WorldRenderer {
   }
 
   private attachInteraction(signal: AbortSignal): void {
+    // Right-click issues an order for the selected army (see main.ts). The
+    // browser context menu is already suppressed by the camera; this makes the
+    // gameplay layer act on it.
+    this.canvas.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      this.onMapCommand?.(event.clientX, event.clientY);
+    }, { signal });
     this.canvas.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
       if (event.pointerType === 'touch' && !event.isPrimary) {
@@ -1137,8 +1273,20 @@ export class WorldRenderer {
     this.camera.resize(width, height);
   }
 
+  private onVisibilityChange = (): void => {
+    this.renderingSuspended = document.hidden;
+    if (!document.hidden) this.previousTime = performance.now();
+  };
+
   private frame = (time: number): void => {
     if (!this.running) return;
+    // Tab hidden: keep the loop alive so a return to the tab resumes with the
+    // same camera/state and no reload, but skip all rendering and picking.
+    if (this.renderingSuspended) {
+      this.previousTime = time;
+      this.frameHandle = requestAnimationFrame(this.frame);
+      return;
+    }
     const frameStarted = performance.now();
     const frameMs = Math.max(0, time - this.previousTime);
     const deltaMs = Math.min(50, frameMs);
@@ -1346,6 +1494,15 @@ export class WorldRenderer {
       pass.draw(6, instances, 0, WORLD_COPY_INDICES[0] * this.waterwayNetwork.count);
       this.recordTriangleDraw('debugLines', instances * 2, instances);
     }
+    // Own-army movement / attack routes: authoritative road path, terrain-draped,
+    // only below strategic altitude (declutters the overview).
+    if (this.routeLines && this.routeLines.count > 0
+      && this.camera.distance < WorldRenderer.ROUTE_MAX_DISTANCE) {
+      pass.setBindGroup(1, this.routeLines.bindGroup);
+      const instances = this.routeLines.count * WORLD_COPY_INDICES.length;
+      pass.draw(6, instances, 0, WORLD_COPY_INDICES[0] * this.routeLines.count);
+      this.recordTriangleDraw('debugLines', instances * 2, instances);
+    }
 
     // Strategic map markers. Two independent instanced draws, both projected on
     // the GPU — locked to the terrain while panning, no CPU/DOM cost, only below
@@ -1367,10 +1524,21 @@ export class WorldRenderer {
         this.recordTriangleDraw('debugLines', instances * 2, instances);
       }
     }
+    // World-space combat effects (muzzle / tracer / impact / smoke / explosion /
+    // battle markers). Drawn under the army markers so smoke never hides a
+    // stack; the CPU pool already distance-culled the transients.
+    if (this.combatEffects && this.combatEffects.count > 0
+      && this.camera.distance < WorldRenderer.COMBAT_EFFECT_MAX_DISTANCE && this.debugView === 0) {
+      const instances = this.combatEffects.count * WORLD_COPY_INDICES.length;
+      pass.setPipeline(this.combatEffectPipeline);
+      pass.setBindGroup(1, this.combatEffects.bindGroup);
+      pass.draw(6, instances, 0, WORLD_COPY_INDICES[0] * this.combatEffects.count);
+      this.recordTriangleDraw('debugLines', instances * 2, instances);
+    }
     // Army-stack markers: always on (they are gameplay, not an overlay), and
     // visible further out than the resource overlay. The shader fades the last
     // stretch before strategic altitude.
-    if (this.armyModels && this.armyModels.count > 0 && this.camera.distance < 1_900) {
+    if (this.armyModels && this.armyModels.count > 0 && this.camera.distance < this.armyModelDrawDistance) {
       const instances = this.armyModels.count * WORLD_COPY_INDICES.length;
       pass.setPipeline(this.armyModelPipeline);
       pass.setBindGroup(1, this.armyModels.bindGroup);

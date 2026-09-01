@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, scrypt as nodeScrypt, timingSafeEqual, createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { promisify } from 'node:util';
+import { type CommanderProfile, commanderProfileFromXp } from '@ironfronts/protocol';
 
 const scrypt = promisify(nodeScrypt);
 
@@ -56,7 +57,67 @@ export class AuthStore {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS sessions_account_id ON sessions(account_id);
       CREATE INDEX IF NOT EXISTS sessions_expires_at ON sessions(expires_at);
+      CREATE TABLE IF NOT EXISTS commander_profiles (
+        account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        xp INTEGER NOT NULL DEFAULT 0,
+        achievements TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      ) STRICT;
     `);
+  }
+
+  /**
+   * Commander progression for an account, creating the default row
+   * (`level 1, 0 XP, no commendations`) on first access. `level` is derived
+   * from stored `xp`, never persisted separately.
+   */
+  commanderProfile(accountId: string): CommanderProfile {
+    const row = this.database
+      .prepare('SELECT xp, achievements FROM commander_profiles WHERE account_id = ?')
+      .get(accountId) as { xp: number; achievements: string } | undefined;
+    if (!row) {
+      const now = Date.now();
+      this.database.prepare(`
+        INSERT INTO commander_profiles (account_id, xp, achievements, created_at, updated_at)
+        VALUES (?, 0, '[]', ?, ?)
+        ON CONFLICT(account_id) DO NOTHING
+      `).run(accountId, now, now);
+      return commanderProfileFromXp(0, []);
+    }
+    let achievements: string[] = [];
+    try {
+      const parsed = JSON.parse(row.achievements) as unknown;
+      if (Array.isArray(parsed)) achievements = parsed.filter((entry): entry is string => typeof entry === 'string');
+    } catch { /* corrupt row — treat as no commendations */ }
+    return commanderProfileFromXp(row.xp, achievements);
+  }
+
+  /**
+   * Award XP and/or achievements. No gameplay path calls this yet; it is the
+   * server-authoritative entry point for when XP is designed. Returns the
+   * updated profile.
+   */
+  grantCommanderProgress(
+    accountId: string,
+    { xp = 0, achievements = [] }: { xp?: number; achievements?: string[] },
+  ): CommanderProfile {
+    this.commanderProfile(accountId); // ensure a row exists
+    const current = this.database
+      .prepare('SELECT xp, achievements FROM commander_profiles WHERE account_id = ?')
+      .get(accountId) as { xp: number; achievements: string };
+    const merged = new Set<string>();
+    try {
+      for (const entry of JSON.parse(current.achievements) as unknown[]) {
+        if (typeof entry === 'string') merged.add(entry);
+      }
+    } catch { /* ignore corrupt row */ }
+    for (const entry of achievements) merged.add(entry);
+    const nextXp = Math.max(0, current.xp + Math.max(0, Math.floor(xp)));
+    this.database.prepare(`
+      UPDATE commander_profiles SET xp = ?, achievements = ?, updated_at = ? WHERE account_id = ?
+    `).run(nextXp, JSON.stringify([...merged]), Date.now(), accountId);
+    return commanderProfileFromXp(nextXp, [...merged]);
   }
 
   async register(username: string, password: string): Promise<Account> {

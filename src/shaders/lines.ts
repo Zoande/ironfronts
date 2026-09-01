@@ -39,6 +39,10 @@ fn lineVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) 
   } else if (lineParams.mode == 2u) {
     height0 = line.b.x + 2.35;
     height1 = line.b.y + 2.35;
+  } else if (lineParams.mode == 3u) {
+    // Order route: drape along the terrain a touch above the road surface.
+    height0 = heightAt(uv0) + 2.1;
+    height1 = heightAt(uv1) + 2.1;
   }
   let world0 = vec3f(line.a.x + copyOffset, height0, line.a.y);
   let world1 = vec3f(line.a.z + copyOffset, height1, line.a.w);
@@ -96,6 +100,17 @@ fn lineVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) 
   } else if (lineParams.mode == 2u) {
     widthPixels = 2.1 + nearFactor * 0.75;
     color = select(vec4f(0.05, 0.91, 1.0, 0.94), vec4f(0.98, 0.71, 0.12, 0.96), line.b.z > 0.5);
+  } else if (lineParams.mode == 3u) {
+    // Order route. b.x: 0 move (cream) / 1 attack (muted red) / 2 rally (blue);
+    // b.z > 0.5 retreat (amber, overrides); b.w > 0.5 = destination chevron.
+    widthPixels = 1.9 + nearFactor * 1.0;
+    var routeColor = vec4f(0.94, 0.89, 0.74, 0.92);
+    if (line.b.x > 1.5) { routeColor = vec4f(0.42, 0.66, 0.95, 0.88); }
+    else if (line.b.x > 0.5) { routeColor = vec4f(0.82, 0.30, 0.24, 0.94); }
+    if (line.b.z > 0.5) { routeColor = vec4f(0.92, 0.62, 0.24, 0.94); }
+    if (line.b.w > 0.5) { widthPixels += 1.4; routeColor.a = min(1.0, routeColor.a + 0.06); }
+    color = routeColor;
+    innerColor = routeColor;
   }
 
   // Line hierarchy at overview zoom (uniforms.interaction.y is the camera

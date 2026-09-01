@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#7692a0" />
+    <meta name="theme-color" content="#060807" />
     <link rel="preconnect" href="https://raw.githubusercontent.com" crossorigin />
     <link rel="icon" href="data:," />
     <title>Ironfronts — World Renderer</title>
@@ -21,8 +21,9 @@
       <div class="ifm__backdrop" aria-hidden="true">
         <div class="ifm__map"></div>
         <div class="ifm__wash"></div>
-        <div class="ifm__grain"></div>
       </div>
+
+      <div class="commander" id="commander"></div>
 
       <div class="ifm__main-area">
         <main class="ifm__screen" id="ifm-main" data-screen="main">
@@ -35,9 +36,10 @@
             <button class="ifm__card" id="ifm-new-campaign" data-open="campaign" aria-label="New Campaign">
               <i class="ifm__corner ifm__corner--tl"></i><i class="ifm__corner ifm__corner--tr"></i>
               <i class="ifm__corner ifm__corner--bl"></i><i class="ifm__corner ifm__corner--br"></i>
+              <span class="ifm__card-badge">Preview</span>
               <span class="ifm__icon" style="--icon:url(/menu/icons/laurels.svg)"></span>
               <strong>New Campaign</strong>
-              <small>Start a new war.</small>
+              <small>Choose a nation and take command.</small>
               <span class="ifm__card-foot"><i>01</i><span>Command</span></span>
             </button>
 
@@ -55,51 +57,58 @@
               <i class="ifm__corner ifm__corner--bl"></i><i class="ifm__corner ifm__corner--br"></i>
               <span class="ifm__icon" style="--icon:url(/menu/icons/cog.svg)"></span>
               <strong>Settings</strong>
-              <small>Adjust game preferences.</small>
+              <small>Display, audio, and graphics quality.</small>
               <span class="ifm__card-foot"><i>03</i><span>Config</span></span>
             </button>
           </nav>
         </main>
 
-        <section class="ifm__subpage" id="ifm-campaign" data-screen="campaign" hidden>
-          <article class="ifm__file">
+        <section class="ifm__subpage ifm__subpage--dossier" id="ifm-campaign" data-screen="campaign" hidden>
+          <article class="ifm__file ifm__file--dossier">
             <i class="ifm__file-grunge"></i>
             <i class="ifm__file-corner ifm__file-corner--tl"></i><i class="ifm__file-corner ifm__file-corner--tr"></i>
             <i class="ifm__file-corner ifm__file-corner--bl"></i><i class="ifm__file-corner ifm__file-corner--br"></i>
             <header class="ifm__file-header">
               <button class="ifm__back" data-back>&larr; Command</button>
-              <div><small>Operation Order</small><h2>World at War</h2><p>Choose the nation you will command.</p></div>
+              <div><small>Operation Order</small><h2>World at War</h2><p>Theater briefing and strategic assessment.</p></div>
               <div class="ifm__doc-code"><span>DMO File <b>IF-01</b></span><span>Clearance <b>New</b></span></div>
             </header>
-            <div class="ifm__body ifm__body--map-left">
-              <div class="ifm__map-frame">
-                <div class="ifm__map-photo"><span id="ifm-map-theater">Global</span><i class="ifm__map-compass"></i></div>
+
+            <div class="ifm__dossier">
+              <div class="ifm__dossier-map">
+                <div class="ifm__map-frame">
+                  <div class="ifm__map-photo"><span id="ifm-map-theater">Global</span><i class="ifm__map-compass"></i></div>
+                </div>
+                <div class="ifm__op-stamp"><i class="ifm__row-insignia" style="--icon:url(/menu/kit/insignia-globe.png)"></i><span><b>OP-1939-01</b>World at War</span></div>
               </div>
-              <div class="ifm__list">
-                <button class="ifm__row is-selected" data-op="OP-1939-01" data-objective="Coordinate a global mobilization and hold every theater at once." data-theater="Global" data-date="1 Sep 1939" data-duration="68 Months" data-risk="medium" data-readiness="3">
-                  <span><span class="ifm__row-code">OP-1939-01</span><b>World at War</b><small>Global campaign across every theater.</small></span>
-                  <span class="ifm__row-meta"><i class="ifm__row-insignia" style="--icon:url(/menu/kit/insignia-globe.png)"></i><span class="ifm__row-readiness"><i class="is-filled"></i><i class="is-filled"></i><i class="is-filled"></i></span></span>
-                </button>
-              </div>
-              <div class="ifm__briefing">
-                <div class="ifm__briefing-head"><span>&#9733;</span><span>Selected Operation Briefing</span></div>
-                <p class="ifm__briefing-objective" id="ifm-briefing-objective">Coordinate a global mobilization and hold every theater at once.</p>
-                <div class="ifm__briefing-grid">
-                  <div><span>Theater</span><b id="ifm-briefing-theater">Global</b></div>
-                  <div><span>Deployment Date</span><b id="ifm-briefing-date">1 Sep 1939</b></div>
-                  <div><span>Est. Duration</span><b id="ifm-briefing-duration">68 Months</b></div>
-                  <div><span>Strategic Risk</span><b id="ifm-briefing-risk" class="is-risk-medium">Medium</b></div>
+
+              <div class="ifm__dossier-info">
+                <div class="ifm__briefing">
+                  <div class="ifm__briefing-head"><span>&#9733;</span><span>Operation Briefing</span></div>
+                  <p class="ifm__briefing-objective" id="ifm-briefing-objective">Coordinate a global mobilization and hold every theater at once.</p>
+                  <div class="ifm__briefing-grid">
+                    <div><span>Theater</span><b id="ifm-briefing-theater">Global</b></div>
+                    <div><span>Deployment Date</span><b id="ifm-briefing-date">1 Sep 1939</b></div>
+                    <div><span>Est. Duration</span><b id="ifm-briefing-duration">68 Months</b></div>
+                    <div><span>Strategic Risk</span><b id="ifm-briefing-risk" class="is-risk-medium">Medium</b></div>
+                  </div>
+                </div>
+                <div class="ifm__op-detail">
+                  <h3>Operation Information</h3>
+                  <p>Every theater opens at once. Poland is overrun within weeks; the Low Countries, the Mediterranean and the Pacific follow as the belligerents commit. You take a single nation through the whole war &mdash; there is no separate front to sit out.</p>
+                  <ul>
+                    <li>All eligible nations are live from the first turn.</li>
+                    <li>Borders, supply and diplomacy reflect the September 1939 situation.</li>
+                    <li>Your command assignment is permanent for this campaign.</li>
+                  </ul>
                 </div>
               </div>
             </div>
-            <div class="ifm__deploy">
-              <div class="ifm__countries" id="ifm-country-select">
-                <div class="ifm__countries-head">Choose Your Nation<span class="ifm__countries-hint" id="ifm-country-hint">Select the country you will command.</span></div>
-                <div class="ifm__country-grid" id="ifm-country-grid" role="listbox" aria-label="Playable countries"></div>
-              </div>
-              <button class="ifm__primary" id="ifm-start-operation">Begin Operation <span>&rarr;</span></button>
-            </div>
-            <footer class="ifm__doc-footer"><span>Department of Military Operations</span><span>File IF-01</span></footer>
+
+            <footer class="ifm__file-actions">
+              <span class="ifm__file-actions-note" id="ifm-dossier-note">Assignment pending &mdash; select your nation to deploy.</span>
+              <button class="ifm__primary" id="ifm-begin-operation">Begin Operation <span>&rarr;</span></button>
+            </footer>
           </article>
         </section>
 
@@ -140,12 +149,31 @@
       </div>
 
       <footer class="ifm__footer">
-        <button type="button" id="ifm-logout" class="ifm__back">Log out</button>
-        <div class="ifm__footer-spacer"></div>
-        <span id="ifm-account-name"></span>
-        <span class="ifm__footer-version">Prototype<br><small>v0.1.0</small></span>
         <span class="ifm__shield">I</span>
+        <span class="ifm__footer-title">Ironfronts &mdash; Strategic Command</span>
+        <div class="ifm__footer-spacer"></div>
+        <span class="ifm__footer-version">Prototype<br><small>v0.1.0</small></span>
       </footer>
+
+      <div class="ifm__overlay" id="ifm-nation-picker" hidden>
+        <div class="ifm__registry" role="dialog" aria-modal="true" aria-labelledby="ifm-registry-title">
+          <header class="ifm__registry-head">
+            <div>
+              <small>Mobilization Registry</small>
+              <h2 id="ifm-registry-title">National Command Assignment</h2>
+            </div>
+            <div class="ifm__doc-code"><span>DMO File <b>IF-02</b></span><span>Operation <b>OP-1939-01</b></span></div>
+          </header>
+          <p class="ifm__registry-hint" id="ifm-country-hint">Select the nation you will command.</p>
+          <div class="ifm__roster" id="ifm-country-grid" role="listbox" tabindex="0" aria-label="Theater command roster"></div>
+          <footer class="ifm__registry-actions">
+            <button type="button" class="ifm__back" id="ifm-nation-cancel">&larr; Operation Order</button>
+            <div class="ifm__footer-spacer"></div>
+            <span class="ifm__registry-selected" id="ifm-nation-selected">No nation selected</span>
+            <button type="button" class="ifm__primary" id="ifm-confirm-nation" disabled>Confirm Command <span>&rarr;</span></button>
+          </footer>
+        </div>
+      </div>
     </div>
 
     <section id="loading" class="loading" aria-live="polite" hidden>
@@ -156,9 +184,17 @@
         <blockquote id="loading-quote-text"></blockquote>
         <cite id="loading-quote-source"></cite>
       </div>
-      <div class="loading__foot">
-        <div class="loading__line"><span id="loading-stage">Preparing WebGPU</span><span id="loading-value">0%</span></div>
+      <div class="loading__foot" id="loading-foot">
+        <div class="loading__line"><span id="loading-stage">Connecting to command server</span><span id="loading-value">0%</span></div>
         <div class="loading__track"><span id="loading-bar"></span></div>
+      </div>
+      <div class="loading__error" id="loading-error" hidden>
+        <p class="loading__error-eyebrow">Deployment failed</p>
+        <p class="loading__error-message" id="loading-error-message">The operation could not be reached.</p>
+        <div class="loading__error-actions">
+          <button type="button" id="loading-retry" class="is-primary">Retry</button>
+          <button type="button" id="loading-return">Return to command</button>
+        </div>
       </div>
     </section>
 
@@ -182,8 +218,8 @@
 
       <div class="diagnostics__panel" data-debug-panel="world">
         <div class="time-controls">
-          <div class="time-controls__heading"><strong>TIME OF DAY</strong><output id="debug-time-state">Morning · 08:00</output></div>
-          <label class="time-controls__clock" for="debug-time">World clock
+          <div class="time-controls__heading"><strong>LIGHTING &mdash; VISUAL ONLY</strong><output id="debug-time-state">Morning · 08:00</output></div>
+          <label class="time-controls__clock" for="debug-time">Lighting clock
             <input id="debug-time" type="time" value="08:00" step="60" />
           </label>
           <div class="time-controls__presets" aria-label="Jump to time of day">
@@ -195,7 +231,19 @@
           <label class="time-controls__speed" for="debug-time-multiplier">Cycle multiplier
             <span><input id="debug-time-multiplier" type="number" value="1.0" min="0" max="999.9" step="0.1" inputmode="decimal" /><b>×</b></span>
           </label>
-          <small>1.0× completes a full day in 10 minutes. 0.0× freezes time.</small>
+          <small>Sun, sky and shadows only &mdash; the game clock, movement, combat and economy are unaffected. 1.0× = a full day in 10 min; 0.0× freezes the light.</small>
+        </div>
+        <div class="diagnostics__group sim-speed-controls">
+          <div class="time-controls__heading"><strong>SIMULATION SPEED &mdash; DEV ONLY</strong><output id="debug-sim-speed-state">1&times;</output></div>
+          <div class="sim-speed-controls__buttons" role="group" aria-label="Simulation speed">
+            <button type="button" data-sim-speed="0">Pause</button>
+            <button type="button" data-sim-speed="1" aria-pressed="true">1&times;</button>
+            <button type="button" data-sim-speed="2">2&times;</button>
+            <button type="button" data-sim-speed="4">4&times;</button>
+            <button type="button" data-sim-speed="8">8&times;</button>
+            <button type="button" data-sim-speed="16">16&times;</button>
+          </div>
+          <small>Server-authoritative: movement, production, construction, combat and game time all scale together for every player on this server. Not available against a production server. Separate from the lighting clock above, which is visual only.</small>
         </div>
         <div class="diagnostics__group weather-controls">
           <strong>WEATHER</strong>
@@ -276,10 +324,10 @@
     <fieldset id="map-modes" class="map-modes" aria-label="Map overlay" hidden>
       <legend>MAP OVERLAY</legend>
       <div class="map-modes__options">
-        <label><input type="radio" name="map-mode" value="political" /> Political map</label>
+        <label><input type="radio" name="map-mode" value="political" checked /> Political map</label>
         <label><input type="radio" name="map-mode" value="diplomacy" /> Diplomacy map</label>
         <label><input type="radio" name="map-mode" value="clear" /> Clear map</label>
-        <label><input type="radio" name="map-mode" value="balanced" checked /> Balanced map</label>
+        <label><input type="radio" name="map-mode" value="balanced" /> Balanced map</label>
       </div>
     </fieldset>
 
@@ -288,6 +336,11 @@
       <h1>WebGPU is required.</h1>
       <p>Open this build in a current version of Chrome or Edge with hardware acceleration enabled.</p>
     </section>
+
+    <div id="now-playing" class="now-playing" aria-live="off" hidden>
+      <span class="now-playing__note" aria-hidden="true"></span>
+      <span class="now-playing__title" id="now-playing-title"></span>
+    </div>
 
     <script type="module" src="/apps/client/src/main.ts"></script>
   </body>

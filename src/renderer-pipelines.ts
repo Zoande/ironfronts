@@ -1,6 +1,6 @@
 import {
-  armyMarkerShader, armyModelShader, cityLightShader, countryLabelShader, infrastructureShader, lineShader, mapMarkerShader,
-  polarCapShader, propShader, rainShader, terrainShader, waterShader, waterwayShader,
+  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, infrastructureShader,
+  lineShader, mapMarkerShader, polarCapShader, propShader, rainShader, terrainShader, waterShader, waterwayShader,
 } from './shaders';
 
 export interface RendererLayouts {
@@ -25,6 +25,7 @@ export interface RendererPipelines {
   armyComposition: GPURenderPipeline;
   armyModels: GPURenderPipeline;
   armyKindCounts: GPURenderPipeline;
+  combatEffects: GPURenderPipeline;
   countryLabels: GPURenderPipeline;
 }
 
@@ -216,6 +217,15 @@ export function createRendererPipelines(
     primitive: { topology: 'triangle-list', cullMode: 'none' },
     depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
   });
+  const combatEffectModule = device.createShaderModule({ label: 'combat effect shader', code: combatEffectShader });
+  const combatEffects = device.createRenderPipeline({
+    label: 'world-space combat effects pipeline',
+    layout: device.createPipelineLayout({ bindGroupLayouts: [layouts.common, layouts.lines] }),
+    vertex: { module: combatEffectModule, entryPoint: 'combatEffectVertex' },
+    fragment: { module: combatEffectModule, entryPoint: 'combatEffectFragment', targets: [{ format, blend: alphaBlend }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
+  });
   const countryLabels = device.createRenderPipeline({
     label: 'country label pipeline',
     layout: device.createPipelineLayout({ bindGroupLayouts: [layouts.common, layouts.countryLabels] }),
@@ -226,7 +236,7 @@ export function createRendererPipelines(
   });
   return {
     terrain, polarCaps, water, waterways, infrastructure, props, cityLights, rain, lines, mapMarkers, armyMarkers,
-    armyComposition, armyModels, armyKindCounts,
+    armyComposition, armyModels, armyKindCounts, combatEffects,
     countryLabels,
   };
 }

@@ -16,33 +16,85 @@ export class GameConnection extends EventTarget {
   catalogs!: PresentationCatalogs;
   world!: WorldDescriptor;
   revision = 0;
+  /** Current server-wide sim-speed multiplier and whether the dev control is
+   *  even usable (always false against a production server). */
+  devSimSpeed = 1;
+  devSimSpeedEnabled = false;
   private readonly gameClock = new InterpolatedGameClock();
   private socket: WebSocket | null = null;
   private closed = false;
   private commandSequence = 0;
   private readonly pending = new Map<string, PendingCommand>();
 
-  static async open(): Promise<GameConnection> {
+  static async open(onStage?: (stage: string) => void): Promise<GameConnection> {
     const connection = new GameConnection();
-    await connection.connect();
+    await connection.connect(onStage);
     return connection;
   }
 
-  private async connect(): Promise<void> {
+  private async connect(onStage?: (stage: string) => void): Promise<void> {
+    onStage?.('Contacting command server');
     const descriptor = await connectGame();
-    if (descriptor.protocolVersion !== PROTOCOL_VERSION) throw new Error('The game uses an unsupported protocol version.');
+    if (descriptor.protocolVersion !== PROTOCOL_VERSION) {
+      throw new Error('The game uses an unsupported protocol version.');
+    }
+
     await new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(descriptor.websocketUrl);
       this.socket = socket;
       let ready = false;
-      const timeout = window.setTimeout(() => reject(new Error('Game connection timed out.')), 10_000);
-      socket.addEventListener('open', () => socket.send(JSON.stringify({
-        type: 'authenticate', protocolVersion: PROTOCOL_VERSION, ticket: descriptor.ticket,
-      })));
+      let settled = false;
+
+      const settleError = (error: Error, closeCode?: number, closeReason?: string): void => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        reject(error);
+        if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+          try { socket.close(closeCode ?? 1000, closeReason ?? 'Connection failed'); } catch { /* ignore close races */ }
+        }
+      };
+
+      const settleReady = (): void => {
+        if (settled) return;
+        settled = true;
+        ready = true;
+        window.clearTimeout(timeout);
+        resolve();
+      };
+
+      const timeout = window.setTimeout(() => {
+        settleError(new Error('Game connection timed out.'), 4000, 'Connection timeout');
+      }, 10_000);
+
+      socket.addEventListener('open', () => {
+        onStage?.('Authenticating operation');
+        socket.send(JSON.stringify({
+          type: 'authenticate', protocolVersion: PROTOCOL_VERSION, ticket: descriptor.ticket,
+        }));
+      });
+
       socket.addEventListener('message', (event) => {
-        const message: ServerMessage = serverMessageSchema.parse(JSON.parse(String(event.data)));
+        let message: ServerMessage;
+        try {
+          message = serverMessageSchema.parse(JSON.parse(String(event.data)));
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error);
+          if (!ready) {
+            settleError(new Error(`Invalid response from game server: ${detail}`), 1002, 'Invalid server message');
+          } else {
+            console.error('[game-connection] invalid server message', error);
+            this.dispatchEvent(new CustomEvent('connection-error', { detail: 'Invalid response from game server.' }));
+          }
+          return;
+        }
+
         if (message.type === 'hello') {
-          if (message.protocolVersion !== PROTOCOL_VERSION) { reject(new Error('Protocol mismatch.')); socket.close(); return; }
+          if (message.protocolVersion !== PROTOCOL_VERSION) {
+            settleError(new Error('Protocol mismatch.'), 1002, 'Protocol mismatch');
+            return;
+          }
+          onStage?.('Receiving battlefield state');
           this.world = message.world;
         } else if (message.type === 'baseline') {
           this.state = message.state;
@@ -50,7 +102,7 @@ export class GameConnection extends EventTarget {
           this.revision = message.revision;
           this.gameClock.synchronize(message.clock);
           this.dispatchEvent(new Event('state'));
-          if (!ready) { ready = true; clearTimeout(timeout); resolve(); }
+          if (!ready) settleReady();
         } else if (message.type === 'delta') {
           if (message.fromRevision !== this.revision) {
             socket.send(JSON.stringify({ type: 'resync', afterRevision: this.revision }));
@@ -59,7 +111,9 @@ export class GameConnection extends EventTarget {
           this.state = applyDelta(this.state, message.delta);
           this.revision = message.revision;
           this.dispatchEvent(new Event('state'));
-          for (const filteredEvent of message.events) this.dispatchEvent(new CustomEvent('game-event', { detail: filteredEvent }));
+          for (const filteredEvent of message.events) {
+            this.dispatchEvent(new CustomEvent('game-event', { detail: filteredEvent }));
+          }
         } else if (message.type === 'commandAck') {
           const pending = this.pending.get(message.commandId);
           if (pending) {
@@ -70,16 +124,36 @@ export class GameConnection extends EventTarget {
         } else if (message.type === 'clockSync') {
           this.gameClock.synchronize(message.clock);
           this.dispatchEvent(new Event('clock-sync'));
+        } else if (message.type === 'devSimSpeed') {
+          this.devSimSpeed = message.multiplier;
+          this.devSimSpeedEnabled = message.devControlsEnabled;
+          this.dispatchEvent(new Event('dev-sim-speed'));
         } else if (message.type === 'error') {
+          if (!ready) {
+            settleError(new Error(message.message), 1008, 'Server rejected connection');
+            return;
+          }
           this.dispatchEvent(new CustomEvent('connection-error', { detail: message.message }));
         }
       });
-      socket.addEventListener('error', () => { if (!ready) reject(new Error('Unable to connect to game server.')); });
+
+      socket.addEventListener('error', () => {
+        if (!ready) settleError(new Error('Unable to connect to game server.'));
+      });
+
       socket.addEventListener('close', () => {
-        clearTimeout(timeout);
-        for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.settle(false, 'Connection lost.'); }
+        window.clearTimeout(timeout);
+        for (const pending of this.pending.values()) {
+          clearTimeout(pending.timer);
+          pending.settle(false, 'Connection lost.');
+        }
         this.pending.clear();
-        if (!this.closed && ready) window.setTimeout(() => void this.reconnect(), 1_000);
+
+        if (!ready) {
+          settleError(new Error('Game connection closed before the battlefield state arrived.'));
+          return;
+        }
+        if (!this.closed) window.setTimeout(() => void this.reconnect(), 1_000);
       });
     });
   }
@@ -108,6 +182,12 @@ export class GameConnection extends EventTarget {
   }
 
   readClock(): GameClockReading { return this.gameClock.read(); }
+
+  /** Dev/test only — server ignores this against a production server. */
+  setDevSimSpeed(multiplier: number): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({ type: 'devSetSimSpeed', multiplier }));
+  }
 
   close(): void { this.closed = true; this.socket?.close(1000, 'Client closed'); }
 }

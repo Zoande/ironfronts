@@ -104,7 +104,15 @@
   width: 23px; height: 23px;
   filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.75)) brightness(1.06);
 }
+.ifg-res__stack { display: inline-flex; flex-direction: column; line-height: 1.05; }
 .ifg-res__value { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13.5px; color: var(--ifg-text); }
+.ifg-res__rate {
+  font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums;
+  font-size: 9.5px; letter-spacing: .02em; color: #9aa196;
+}
+.ifg-res__rate:empty { display: none; }
+.ifg-res__rate.is-positive { color: #8fbf7f; }
+.ifg-res__rate.is-negative { color: #d98a5f; }
 .ifg-res.is-pending .ifg-res__icon { filter: grayscale(0.55) brightness(0.82) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); opacity: 0.78; }
 .ifg-res.is-pending .ifg-res__value { color: #aab0a5; font-weight: 600; }
 .ifg-res.is-demo .ifg-res__value { color: var(--ifg-brass-lit); }
@@ -293,31 +301,64 @@
   position: absolute;
   top: 58px;
   right: 12px;
-  width: 244px;
+  width: 288px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 .ifg-notify__item {
   display: grid;
-  grid-template-columns: 22px 1fr 16px;
+  grid-template-columns: 26px 1fr 16px;
   align-items: start;
-  gap: 9px;
-  padding: 9px 10px;
+  gap: 10px;
+  padding: 11px 12px;
   background: var(--ifg-panel);
   border: 1px solid var(--ifg-rule-soft);
   border-left: 3px solid var(--ifg-brass);
   border-radius: 2px;
   box-shadow: var(--ifg-lift);
+  animation: ifg-notify-in 0.22s var(--ifg-ease);
 }
+@keyframes ifg-notify-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
 .ifg-notify__item[data-kind="warning"] { border-left-color: #d9a441; }
-.ifg-notify__item[data-kind="combat"] { border-left-color: #c9603f; }
+.ifg-notify__item[data-kind="combat"] {
+  border-left-width: 4px;
+  border-left-color: #c9603f;
+  border-color: rgba(201, 96, 63, 0.4);
+}
+/* An attack alert must not be missable — a brief pulsing halo when it lands. */
+.ifg-notify__item[data-kind="combat"] { animation: ifg-notify-in 0.22s var(--ifg-ease), ifg-notify-alert 1.5s var(--ifg-ease) 3; }
+@keyframes ifg-notify-alert {
+  0%, 100% { box-shadow: var(--ifg-lift), 0 0 0 0 rgba(201, 96, 63, 0); }
+  40% { box-shadow: var(--ifg-lift), 0 0 0 3px rgba(201, 96, 63, 0.28), 0 0 22px rgba(201, 96, 63, 0.4); }
+}
+/* A located combat alert reads louder and invites a click to jump there. */
+.ifg-notify__item.is-locatable {
+  cursor: pointer;
+  border-color: rgba(201, 96, 63, 0.5);
+  box-shadow: var(--ifg-lift), 0 0 0 1px rgba(201, 96, 63, 0.35), 0 0 18px rgba(201, 96, 63, 0.22);
+}
+.ifg-notify__item.is-locatable:hover { border-color: #c9603f; }
+.ifg-notify__item.is-locatable strong { color: #f0b49c; }
+.ifg-notify__item.is-locatable::after {
+  content: "Jump to the fighting →";
+  grid-column: 2 / 3;
+  margin-top: 3px;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e0876a;
+}
 .ifg-notify__item[data-kind="completed"] { border-left-color: #7f9e5a; }
 .ifg-notify__item[data-kind="diplomacy"] { border-left-color: #6f8fae; }
-.ifg-notify__icon { width: 18px; height: 18px; margin-top: 1px; color: var(--ifg-brass-lit); }
-.ifg-notify__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ifg-notify__body strong { font-size: 12px; font-weight: 700; }
-.ifg-notify__body span { font-size: 11px; color: var(--ifg-dim); }
+.ifg-notify__icon { width: 22px; height: 22px; margin-top: 1px; color: var(--ifg-brass-lit); }
+.ifg-notify__item[data-kind="combat"] .ifg-notify__icon { color: #e88a6c; }
+.ifg-notify__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ifg-notify__body strong { font-size: 13px; font-weight: 700; line-height: 1.25; }
+.ifg-notify__body span { font-size: 11.5px; line-height: 1.35; color: #b7bdb2; }
+@media (prefers-reduced-motion: reduce) {
+  .ifg-notify__item, .ifg-notify__item[data-kind="combat"] { animation: none; }
+}
 .ifg-notify__dismiss { width: 16px; height: 16px; color: var(--ifg-dim); display: inline-flex; }
 .ifg-notify__dismiss .ifg-icon { width: 12px; height: 12px; }
 .ifg-notify__dismiss:hover { color: var(--ifg-text); }
@@ -325,31 +366,32 @@
 /* ================= compact selected-province card ================= */
 .ifg-card {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
-  width: clamp(320px, 24vw, 430px);
-  padding: 12px 14px 13px;
+  left: 50%;
+  bottom: 18px;
+  width: min(720px, calc(100vw - 80px));
+  padding: 13px 18px 15px 20px;
   background-color: #171911;
   background-image: var(--ifg-panel);
   border: 1px solid var(--ifg-rule);
   border-top: 2px solid var(--ifg-brass);
-  border-radius: 2px;
-  box-shadow: var(--ifg-lift);
-  transform: translateY(10px);
+  border-radius: 3px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.58), inset 0 0 0 1px rgba(255, 255, 255, 0.025);
   opacity: 0;
-  transition: transform 0.16s var(--ifg-ease), opacity 0.14s ease;
+  transform: translate(-50%, 14px);
+  transition: transform 0.18s var(--ifg-ease), opacity 0.14s ease;
 }
-.ifg-card:not([hidden]) { transform: translateY(0); opacity: 1; }
-/* two asymmetric corner ticks — a printed-document cue, not four boxes */
-.ifg-card::before, .ifg-card::after {
+.ifg-card:not([hidden]) { transform: translate(-50%, 0); opacity: 1; }
+/* Owner-colour left edge, exactly like the selected-army panel. */
+.ifg-card::before {
   content: "";
   position: absolute;
-  width: 8px; height: 8px;
-  border: 1px solid var(--ifg-brass);
-  opacity: 0.7;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--pv-country, var(--ifg-brass));
+  opacity: 0.9;
+  border: 0;
 }
-.ifg-card::before { top: 5px; left: 5px; border-right: 0; border-bottom: 0; }
-.ifg-card::after { bottom: 5px; right: 5px; border-left: 0; border-top: 0; }
+.ifg-card::after { content: none; }
 
 .ifg-card__head { display: flex; align-items: flex-start; gap: 9px; }
 .ifg-card__flag { flex: none; margin-top: 3px; }
@@ -373,14 +415,22 @@
 
 .ifg-card__grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 18px;
-  margin: 11px 0 12px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px 16px;
+  margin: 10px 0 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--ifg-rule-soft);
+  border-bottom: 1px solid var(--ifg-rule-soft);
 }
-.ifg-field { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+@media (max-width: 720px) { .ifg-card__grid { grid-template-columns: 1fr 1fr; } }
+.ifg-field { display: flex; flex-direction: column; gap: 2px; line-height: 1.2; min-width: 0; }
 .ifg-field small { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ifg-dim); }
-.ifg-field b { font-size: 12.5px; font-weight: 700; }
+.ifg-field b { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ifg-field.is-pending b { color: var(--ifg-dim); font-weight: 500; }
+
+.ifg-card__facilities { margin-bottom: 10px; }
+.ifg-card__facchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.ifg-card__facchips .ifg-rchip__value { text-transform: none; letter-spacing: 0.02em; }
 
 .ifg-card__actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .ifg-card__act {
@@ -534,9 +584,10 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-  align-content: stretch;
-  gap: 7px;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 132px));
+  align-content: start;
+  justify-content: start;
+  gap: 8px;
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -552,9 +603,8 @@
 }
 .ifg-army-unit {
   position: relative;
-  min-height: 112px;
   display: grid;
-  grid-template-rows: 1fr auto 4px;
+  grid-template-rows: 96px auto 4px;
   overflow: hidden;
   background: linear-gradient(155deg, rgba(56, 60, 51, 0.72), rgba(24, 27, 23, 0.92));
   border: 1px solid var(--ifg-rule-soft);
@@ -567,25 +617,49 @@
   background: radial-gradient(circle at 50% 28%, rgba(201, 164, 99, 0.12), transparent 58%);
   pointer-events: none;
 }
-.ifg-army-unit__visual { display: grid; place-items: center; min-height: 63px; color: #cbc5b2; }
-.ifg-army-unit__glyph {
-  width: 50px;
-  height: 50px;
-  overflow: visible;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.65));
+.ifg-army-unit__visual { position: relative; display: block; overflow: hidden; line-height: 0; height: 96px; }
+/* Portrait fills the tile top — the drawing is the identity, not a line glyph. */
+.ifg-army-unit__portrait { display: block; width: 100%; height: 100%; }
+.ifg-army-unit__portrait svg {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  filter: brightness(1.16) contrast(1.12) saturate(1.06);
+}
+.ifg-army-unit__portrait img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Dev-only Call of War reference art (see dev-assets/callofwar-reference) —
+   flagged unmistakably so it is never confused for shipped Ironfronts art. */
+.ifg-army-unit__portrait[data-prototype="true"]::after {
+  content: "REF"; position: absolute; top: 2px; right: 2px; z-index: 2;
+  padding: 1px 4px; font: 700 7px/1.4 var(--ifg-sans, sans-serif); letter-spacing: 0.08em;
+  color: #1a1a14; background: rgba(232, 201, 136, 0.88); border-radius: 2px;
+}
+/* soft top spotlight so the figure separates from the panel */
+.ifg-army-unit__visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 55% at 50% 34%, rgba(214, 220, 190, 0.14), transparent 70%);
+  pointer-events: none;
+}
+.ifg-army-unit__count { z-index: 1; }
+.ifg-army-unit__count {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ifg-brass-lit);
+  background: rgba(9, 11, 8, 0.82);
+  border: 1px solid var(--ifg-rule-soft);
+  border-radius: 2px;
 }
 .ifg-army-unit__details {
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 5px;
-  padding: 5px 7px;
+  justify-content: center;
+  padding: 4px 6px;
   background: rgba(9, 11, 8, 0.62);
   border-top: 1px solid var(--ifg-rule-soft);
 }
@@ -594,13 +668,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9px;
-  letter-spacing: 0.05em;
+  font-size: 8.5px;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  color: #d8d2c0;
 }
-.ifg-army-unit__details b { color: var(--ifg-brass-lit); font-size: 11px; }
 .ifg-army-unit__condition { display: block; height: 4px; background: #090b08; }
-.ifg-army-unit__condition i { display: block; height: 100%; background: #819c58; }
+.ifg-army-unit__condition i { display: block; height: 100%; background: #819c58; transition: width 0.2s ease; }
+.ifg-army-unit__condition[data-state="worn"] i { background: #c9a044; }
+.ifg-army-unit__condition[data-state="spent"] i { background: #c05a3c; }
+.ifg-army-unit:hover { border-color: var(--ifg-brass); }
+/* Denser layout once the stack fields >4 unit families. */
+.ifg-army-panel__units.is-dense { grid-template-columns: repeat(auto-fill, minmax(78px, 104px)); }
+.ifg-army-panel__units.is-dense .ifg-army-unit { grid-template-rows: 74px auto 4px; }
+.ifg-army-panel__units.is-dense .ifg-army-unit__visual { height: 74px; }
 .ifg-army-panel__report { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
 .ifg-army-panel__stats > .ifg-army-panel__eyebrow,
 .ifg-army-panel__activity > .ifg-army-panel__eyebrow { margin-bottom: 6px; }
@@ -642,6 +723,13 @@
   flex-wrap: wrap;
   background: rgba(22, 20, 17, .78);
 }
+.ifg-army-panel__retreat { margin-top: 8px; }
+.ifg-army-panel__retreat > .ifg-army-panel__eyebrow { display: block; margin-bottom: 5px; }
+.ifg-army-panel__retreat-exits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 0; }
+/* Direction chips size to their label and wrap as whole chips — they must not
+   collapse to slivers the way `flex: 1` command buttons do. (Row layout + final
+   sizing is set alongside `.ifg-army-panel__command` further down.) */
+.ifg-army-panel__retreat-chip { white-space: nowrap; }
 .ifg-army-panel__activity--combat { overflow: hidden; }
 .ifg-battle__header {
   display: flex;
@@ -766,22 +854,149 @@
 .ifg-command-dialog button.is-primary { background: #713c30; border-color: #a45a44; }
 .ifg-split-dialog label { display: grid; grid-template-columns: 1fr 76px auto; align-items: center; gap: 7px; margin: 7px 0; }
 .ifg-split-dialog input { width: 70px; color: #eee2c8; background: #141311; border: 1px solid #625744; padding: 5px; }
+/* Command strip — chunky stamped-metal RTS buttons, icon-forward. */
 .ifg-army-panel__command {
   flex: 1;
-  min-width: 0;
-  padding: 6px 5px;
+  min-width: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 9px 4px 7px;
   color: var(--ifg-text);
-  background: var(--ifg-chip);
+  background: linear-gradient(180deg, rgba(58, 62, 53, 0.95), rgba(28, 31, 26, 0.96));
+  border: 1px solid var(--ifg-rule-soft);
+  border-top-color: rgba(255, 255, 255, 0.09);
+  border-radius: 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -6px 12px rgba(0, 0, 0, 0.32);
+  transition: border-color 0.1s ease, background 0.1s ease, transform 0.06s ease;
+}
+.ifg-army-panel__command-icon { width: 22px; height: 22px; color: inherit; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.ifg-army-panel__command-label {
+  font-size: 8px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ifg-dim);
+}
+.ifg-army-panel__command:not(:disabled):hover {
+  color: var(--ifg-brass-lit);
+  border-color: var(--ifg-brass);
+  background: linear-gradient(180deg, rgba(201, 164, 99, 0.22), rgba(40, 34, 24, 0.96));
+}
+.ifg-army-panel__command:not(:disabled):active { transform: translateY(1px); }
+.ifg-army-panel__command:not(:disabled):hover .ifg-army-panel__command-label,
+.ifg-army-panel__command.is-active .ifg-army-panel__command-label { color: var(--ifg-brass-lit); }
+.ifg-army-panel__command.is-active {
+  color: var(--ifg-brass-lit);
+  border-color: var(--ifg-brass-lit);
+  background: linear-gradient(180deg, rgba(201, 164, 99, 0.34), rgba(201, 164, 99, 0.12));
+  box-shadow: inset 0 0 0 1px rgba(232, 201, 136, 0.4), 0 0 12px rgba(201, 164, 99, 0.28);
+}
+/* Dimmed, but still hoverable so the tooltip can explain why it is blocked. */
+.ifg-army-panel__command:disabled { opacity: 0.3; cursor: help; pointer-events: auto; }
+
+/* ---- graphical Build / Produce buttons (province card) ---- */
+/* Icon-first, 0 A.D.-style build/produce button: the artwork IS the control —
+   name, cost, and description live on the hover tooltip, not stacked as
+   permanent text next to a small glyph. */
+.ifg-buildbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 60px;
+  padding: 5px 4px 4px;
+  color: var(--ifg-text);
+  background: linear-gradient(180deg, rgba(52, 56, 48, 0.95), rgba(26, 29, 24, 0.96));
+  border: 1px solid var(--ifg-rule-soft);
+  border-top-color: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  box-shadow: inset 0 -5px 10px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.1s ease, color 0.1s ease, box-shadow 0.1s ease;
+}
+.ifg-buildbtn__thumb {
+  width: 52px;
+  height: 52px;
+  flex: none;
   border: 1px solid var(--ifg-rule-soft);
   border-radius: 2px;
-  font-size: 8.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  overflow: hidden;
+  background: #12140f;
 }
-.ifg-army-panel__command:not(:disabled):hover,
-.ifg-army-panel__command.is-active { color: var(--ifg-brass-lit); border-color: var(--ifg-brass); }
-.ifg-army-panel__command.is-active { background: rgba(201, 164, 99, 0.18); }
-.ifg-army-panel__command:disabled { opacity: 0.32; }
+.ifg-buildbtn__thumb.ifg-icon { display: grid; place-items: center; }
+.ifg-buildbtn__thumb.ifg-icon img,
+.ifg-buildbtn__thumb.ifg-icon svg { width: 34px; height: 34px; }
+.ifg-buildbtn__thumb svg { display: block; width: 100%; height: 100%; }
+.ifg-buildbtn__label {
+  max-width: 100%;
+  font-size: 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ifg-buildbtn:not(:disabled):hover {
+  border-color: var(--ifg-brass);
+  color: var(--ifg-brass-lit);
+  box-shadow: inset 0 -5px 10px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(201, 164, 99, 0.25);
+}
+.ifg-buildbtn:disabled { opacity: 0.42; cursor: help; pointer-events: auto; }
+
+/* 0 A.D.-style production/construction queue: active order gets a thumb +
+   fill bar + countdown; anything queued behind it is a smaller inert icon. */
+.ifg-queue { display: flex; align-items: flex-end; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.ifg-queue__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+.ifg-queue__item:not(.is-active) { opacity: 0.55; }
+.ifg-queue__item.is-active {
+  border-color: var(--ifg-rule-soft);
+  background: linear-gradient(180deg, rgba(52, 56, 48, 0.7), rgba(26, 29, 24, 0.75));
+}
+.ifg-queue__thumb {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--ifg-rule-soft);
+  border-radius: 2px;
+  overflow: hidden;
+  background: #12140f;
+}
+.ifg-queue__thumb.ifg-icon { display: grid; place-items: center; }
+.ifg-queue__thumb.ifg-icon img,
+.ifg-queue__thumb.ifg-icon svg { width: 20px; height: 20px; }
+.ifg-queue__thumb svg,
+.ifg-queue__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ifg-queue__meta { display: flex; flex-direction: column; gap: 3px; min-width: 52px; }
+.ifg-queue__bar { width: 100%; height: 4px; background: #090b08; border-radius: 2px; overflow: hidden; }
+.ifg-queue__bar i { display: block; height: 100%; background: var(--ifg-brass-lit, #c9a044); transition: width 0.2s linear; }
+.ifg-queue__eta { font-size: 9.5px; letter-spacing: 0.03em; color: var(--ifg-dim); font-variant-numeric: tabular-nums; }
+
+/* stat rows: small key icon + label on the left, value on the right */
+.ifg-army-stat__key { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.ifg-army-stat__icon { width: 12px; height: 12px; color: var(--ifg-dim); flex: none; }
+.ifg-army-panel__eyebrow-icon { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; color: inherit; }
+
+/* combat overview: visual strength bars instead of raw HP text */
+.ifg-army-panel__front-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ifg-army-panel__front-head strong { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #e6a088; }
+.ifg-army-panel__front-volley { font-size: 9px; color: var(--ifg-dim); font-variant-numeric: tabular-nums; }
+.ifg-army-panel__front-bar { display: grid; grid-template-columns: 34px 1fr 30px; align-items: center; gap: 6px; margin-top: 4px; }
+.ifg-army-panel__front-bar-label { font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ifg-dim); }
+.ifg-army-panel__front-bar-track { height: 6px; background: #090b08; border: 1px solid var(--ifg-rule-soft); }
+.ifg-army-panel__front-bar-track i { display: block; height: 100%; }
+.ifg-army-panel__front-bar.is-friendly i { background: linear-gradient(90deg, #677f49, #9eb66a); }
+.ifg-army-panel__front-bar.is-enemy i { background: linear-gradient(90deg, #8a3d30, #c9603f); }
+.ifg-army-panel__front-bar b { font-size: 9px; font-variant-numeric: tabular-nums; text-align: right; }
+.ifg-army-panel__front-note { display: block; margin-top: 4px; color: var(--ifg-dim); font-size: 9px; }
+.ifg-army-panel__retreat-chip { flex: 0 0 auto; flex-direction: row; gap: 5px; padding: 5px 9px; min-width: 88px; }
 
 /* ---- province card: deposit abundance (not production/day) ---- */
 .ifg-card__resources {
@@ -900,8 +1115,11 @@
 .ifg-counter__glyph { width: 13px; height: 13px; }
 .ifg-counter__bar { width: 100%; height: 4px; background: rgba(0, 0, 0, 0.6); }
 .ifg-counter__bar i { display: block; height: 100%; background: linear-gradient(90deg, #7f9e5a, #d9a441); }
-.ifg-counter[data-combat="engaged"] { animation: ifg-counter-alert 1.1s steps(2, end) infinite; }
-@keyframes ifg-counter-alert { 50% { border-color: #c9603f; } }
+.ifg-counter[data-combat="engaged"] { animation: ifg-counter-alert 1.2s var(--ifg-ease) infinite; }
+@keyframes ifg-counter-alert {
+  0%, 100% { border-color: var(--ifg-rule); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(0, 0, 0, 0.5); }
+  50% { border-color: #e5533a; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 0 14px 2px rgba(201, 96, 63, 0.55), inset 0 0 12px rgba(0, 0, 0, 0.5); }
+}
 .ifg-order-arrow line { stroke-width: 3; }
 .ifg-order-arrow path { fill: currentColor; }
 .ifg-order-arrow--move { color: var(--ifg-brass-lit); }
@@ -925,7 +1143,7 @@
   .ifg-dock { top: 50px; }
   .ifg-topbar__country-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ifg-res__value { font-size: 12px; }
-  .ifg-card { width: clamp(300px, 30vw, 380px); }
+  .ifg-card { width: min(640px, calc(100vw - 48px)); }
   .ifg-army-panel { width: min(930px, calc(100vw - 48px)); }
   .ifg-army-panel__body { grid-template-columns: 155px minmax(320px, 1fr) 235px; }
   .ifg-army-panel__health,
@@ -949,3 +1167,83 @@
 
 .ifg-card__prodlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .ifg-card__prodlist .ifg-card__act { flex: 0 0 auto; }
+
+/* ============ attack-order target reticle (one-shot, DOM) ============ */
+.ifg-attack-flash {
+  position: fixed;
+  z-index: 40;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  border: 2px solid #e5533a;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 14px 2px rgba(229, 83, 58, 0.55);
+}
+.ifg-attack-flash::before,
+.ifg-attack-flash::after {
+  content: "";
+  position: absolute;
+  background: #e5533a;
+}
+.ifg-attack-flash::before { left: 50%; top: -7px; bottom: -7px; width: 2px; margin-left: -1px; }
+.ifg-attack-flash::after { top: 50%; left: -7px; right: -7px; height: 2px; margin-top: -1px; }
+.ifg-attack-flash.is-firing { animation: ifg-attack-flash 620ms var(--ifg-ease, ease-out) forwards; }
+@keyframes ifg-attack-flash {
+  0%   { opacity: 0; transform: scale(1.9) rotate(-18deg); }
+  22%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.72) rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ifg-attack-flash.is-firing { animation-duration: 300ms; }
+  .ifg-attack-flash.is-firing { animation-name: ifg-attack-flash-fade; }
+  @keyframes ifg-attack-flash-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* ================= shared rich tooltip (see src/ui/tooltip.ts) ================= */
+.ifg-tip {
+  position: fixed;
+  z-index: 60;
+  max-width: 248px;
+  padding: 8px 10px 9px;
+  border: 1px solid rgba(241, 226, 190, 0.34);
+  border-left: 3px solid rgba(241, 226, 190, 0.5);
+  border-radius: 3px;
+  background: rgba(16, 24, 24, 0.94);
+  box-shadow: 0 10px 34px rgba(4, 12, 12, 0.4);
+  backdrop-filter: blur(9px);
+  color: #d9d2be;
+  pointer-events: none;
+  animation: ifg-tip-in 90ms var(--ifg-ease, ease-out);
+}
+.ifg-tip.is-blocked { border-left-color: #c66; }
+@keyframes ifg-tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ifg-tip { animation: none; } }
+.ifg-tip__title {
+  display: block;
+  color: #f3ead3;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ifg-tip__detail { display: block; margin-top: 3px; font-size: 11px; line-height: 1.35; color: #b9c4ba; }
+.ifg-tip__detail.is-blocked { color: #e6a99c; }
+.ifg-tip__metas { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; }
+.ifg-tip__meta { display: inline-flex; align-items: baseline; gap: 5px; font-size: 11px; font-weight: 700; color: #e6ddc4; }
+.ifg-tip__meta i { font-style: normal; font-size: 8.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: #8a978c; }
+.ifg-tip__key { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 5px; border-top: 1px solid rgba(241, 226, 190, 0.14); }
+.ifg-tip__key i { font-style: normal; font-size: 8.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: #8a978c; }
+.ifg-tip__key kbd {
+  min-width: 15px;
+  padding: 1px 5px;
+  border: 1px solid rgba(241, 226, 190, 0.3);
+  border-radius: 3px;
+  background: rgba(241, 226, 190, 0.08);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  color: #f1e2be;
+  text-align: center;
+}

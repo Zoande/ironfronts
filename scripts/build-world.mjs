@@ -2,6 +2,7 @@ import { access, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/pr
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildInfrastructure } from './build-infrastructure.mjs';
+import { auditLandConnections } from './infrastructure/segment-audit.mjs';
 import { FIELD_HEIGHT, FIELD_WIDTH, ID_HEIGHT, ID_WIDTH, SEED, WORLD_HEIGHT, WORLD_WIDTH } from './world/config.mjs';
 import { blurField, clamp, distanceToValue } from './world/raster.mjs';
 import { writeTypedArtifact } from './world/artifact-writer.mjs';
@@ -198,7 +199,12 @@ async function main() {
   let topographyReport = topography.report;
 
   console.log('Packing movement graph, forests, and cities…');
-  const connections = buildConnections(connectionData);
+  const suppressedLandConnections = auditLandConnections(connectionData, {
+    landField, fieldWidth: FIELD_WIDTH, fieldHeight: FIELD_HEIGHT,
+    worldWidth: WORLD_WIDTH, worldHeight: WORLD_HEIGHT,
+  });
+  console.log(`Movement graph: ${suppressedLandConnections.size} land connection segments cross water — flagged untraversable (node ids unchanged).`);
+  const connections = buildConnections(connectionData, suppressedLandConnections);
 
   // The first pass supplies the exclusion mask used to distinguish authored
   // movement rivers from visual-only topology channels.
@@ -339,6 +345,10 @@ async function main() {
     waterways: waterways.report,
     visualRivers: visualRivers.report,
     roads: infrastructure.roadReport,
+    movementGraph: {
+      landConnections: connectionData.segments.filter((segment) => segment.medium === 'land').length,
+      waterCrossingSuppressed: suppressedLandConnections.size,
+    },
     props: {
       rejectedCoastalFootprints: generatedInstances.audit.rejectedCoastalFootprints,
       coastalProvincesAffected: generatedInstances.audit.coastalProvincesAffected,
@@ -406,6 +416,7 @@ async function main() {
       trees: trees.length / 8,
       buildings: buildings.length / 8,
       connections: connections.length / 8,
+      waterCrossingSuppressedConnections: suppressedLandConnections.size,
       ...waterways.stats,
       ...visualRivers.stats,
       ...infrastructure.stats,

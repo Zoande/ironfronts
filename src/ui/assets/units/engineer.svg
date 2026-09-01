@@ -1,0 +1,41 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Engineers">
+  <defs>
+    <linearGradient id="u-eng-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20261b"/>
+      <stop offset="0.62" stop-color="#12150e"/>
+      <stop offset="1" stop-color="#0b0d08"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#u-eng-bg)"/>
+  <path d="M0 70h100v30H0z" fill="#0e100c" opacity="0.55"/>
+  <ellipse cx="50" cy="88" rx="31" ry="6" fill="#000" opacity="0.35"/>
+  <!-- sandbags -->
+  <g fill="#6a6a52" stroke="#43432f" stroke-width="1.2">
+    <ellipse cx="26" cy="82" rx="12" ry="7"/>
+    <ellipse cx="40" cy="86" rx="12" ry="7"/>
+    <ellipse cx="33" cy="74" rx="12" ry="7" fill="#767659"/>
+  </g>
+  <!-- shovel leaning -->
+  <path d="M70 86 L58 44" stroke="#3d3a2d" stroke-width="3.4" stroke-linecap="round"/>
+  <path d="M54 40 q4 -7 8 0 q-1 8 -4 9 q-3 -1 -4 -9z" fill="#8b8f7d"/>
+  <!-- legs -->
+  <path d="M44 60 l-4 26 h9 l3 -22z" fill="#43483a"/>
+  <path d="M55 60 l4 26 h-9 l-3 -22z" fill="#4c5142"/>
+  <path d="M36 86 h13 v5 h-15z" fill="#211f19"/>
+  <path d="M57 86 h13 v5 h-15z" fill="#26241d"/>
+  <!-- torso, rolled sleeves -->
+  <path d="M37 38 q16 -9 30 0 l3 24 q-18 7 -36 0z" fill="#6f7459"/>
+  <path d="M37 38 q16 -9 30 0 l1 8 q-16 -7 -30 0z" fill="#82876c"/>
+  <path d="M52 32 l0 30" stroke="#4a4e3c" stroke-width="1.6"/>
+  <!-- tool belt with wrench -->
+  <path d="M38 54 h30 l-1 6 h-28z" fill="#39362b"/>
+  <path d="M46 55 l8 4 M50 53 l-2 8" stroke="#9aa08c" stroke-width="2" stroke-linecap="round"/>
+  <!-- bare forearms + hands -->
+  <path d="M37 39 q-9 7 -12 18 l6 3 q5 -11 12 -16z" fill="#8a7f66"/>
+  <path d="M67 39 q10 5 12 14 l-6 3 q-3 -8 -12 -13z" fill="#93886d"/>
+  <!-- neck + face -->
+  <rect x="46" y="26" width="8" height="9" rx="2" fill="#8a7f66"/>
+  <!-- side cap -->
+  <path d="M40 26 q10 -12 21 -3 q-1 5 -3 6 q-9 -5 -18 1z" fill="#565b48"/>
+  <path d="M40 26 q10 -3 20 2 l0 3 q-10 -4 -20 -1z" fill="#3e4234"/>
+</svg>

@@ -11,6 +11,7 @@ import { mountGameUi, type GameUiActions } from './ui/game-ui';
 import {
   createInitialState, createUiStore, type GameNotification, type ResourceLine,
 } from './ui/ui-state';
+import { autoDismissDelay, isSticky } from './ui/notification-lifecycle';
 import { DEMO_ARMY, type ArmyPanelCommand } from './ui/army';
 import { aggregateTroopStat, armyActivityLabel } from './ui/army-presentation';
 import { iconMarkup } from './ui/icons';
@@ -23,6 +24,7 @@ import { getGame, getSession, joinGame, logout } from './client/auth-api';
 import { GameConnection } from './client/game-connection';
 import { RemoteGameSession } from './client/remote-session';
 import { configureWorldAssetBase } from './world-assets';
+import { CombatEffectPool, EFFECT_KIND, effectDensityForDistance } from './combat-effects';
 import type { SessionResponse } from '@ironfronts/protocol';
 import { buildArmyCompositionRows, buildArmyFormation, dominantVisualKind } from './army-map-presentation';
 
@@ -37,6 +39,12 @@ const buildingCostLabel = (id: BuildingId): string => Object.entries((activeSess
   .map(([k, v]) => `${v} ${k}`).join(' · ');
 const orderPercent = (o: { progressHours: number; totalHours: number }): number =>
   o.totalHours > 0 ? Math.min(99, Math.floor((o.progressHours / o.totalHours) * 100)) : 0;
+/** Simulation runs at a fixed 0.05 game-hour / 100ms tick — 0.5 game-hours
+ *  per real second at normal (1x, production) speed. Dev-only sim speed-ups
+ *  are server-side and invisible here, so this is a normal-play estimate. */
+const GAME_HOURS_PER_REAL_SECOND = 0.5;
+const orderEtaSeconds = (o: { progressHours: number; totalHours: number }): number =>
+  Math.max(0, (o.totalHours - o.progressHours) / GAME_HOURS_PER_REAL_SECOND);
 
 /** Player queues a unit from the selected-province PRODUCE panel. */
 function handleProduce(provinceId: number, unitTypeId: string): void {
@@ -88,6 +96,11 @@ const loadingBar = required<HTMLElement>('loading-bar');
 const loadingKind = required<HTMLElement>('loading-kind');
 const loadingQuoteText = required<HTMLElement>('loading-quote-text');
 const loadingQuoteSource = required<HTMLElement>('loading-quote-source');
+const loadingFoot = required<HTMLElement>('loading-foot');
+const loadingError = required<HTMLElement>('loading-error');
+const loadingErrorMessage = required<HTMLElement>('loading-error-message');
+const loadingRetry = required<HTMLButtonElement>('loading-retry');
+const loadingReturn = required<HTMLButtonElement>('loading-return');
 const tooltip = required<HTMLElement>('tooltip');
 const tooltipName = required<HTMLElement>('tooltip-name');
 const tooltipTerrain = required<HTMLElement>('tooltip-terrain');
@@ -102,6 +115,8 @@ const debugTimeMultiplier = required<HTMLInputElement>('debug-time-multiplier');
 const debugTimePresets = [...document.querySelectorAll<HTMLButtonElement>('[data-debug-time]')];
 const debugRain = required<HTMLInputElement>('debug-rain');
 const debugThunder = required<HTMLButtonElement>('debug-thunder');
+const debugSimSpeedState = required<HTMLOutputElement>('debug-sim-speed-state');
+const debugSimSpeedButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-sim-speed]')];
 const debugView = required<HTMLSelectElement>('debug-view');
 const debugConnections = required<HTMLInputElement>('debug-connections');
 const debugRivers = required<HTMLInputElement>('debug-rivers');
@@ -143,24 +158,49 @@ const debugEnabled = urlParams.has('debug') || urlParams.has('benchmark');
 const uiStore = createUiStore(createInitialState({ quality: loadQuality(), debugEnabled }));
 
 const audio = new AudioManager(safeLocalStorage());
-const music = new MusicDirector(audio);
+const music = new MusicDirector(audio, {
+  onTrackChange: (track) => updateNowPlaying(track ? track.title : null),
+});
 const firstMenuTrack = TRACK_BY_ID.get('honor-bound');
 audio.prime(firstMenuTrack ? trackSources(firstMenuTrack).slice(0, 1) : []);
 audio.installLifecycle();
 
-// Try to start the lobby soundtrack immediately when the page opens. Browsers
-// may still block audible autoplay, so the first user gesture retries only if
-// playback did not actually begin.
-void music.setState('menu');
+// Try to start the lobby soundtrack immediately when the page opens. This is
+// fire-and-forget: the browser is allowed to block audible autoplay after a
+// navigation/refresh, and nothing in the app may ever wait on it.
+void music.setState('menu').catch(() => undefined);
 
-let autoplayRetryDone = false;
-const retryMenuMusicAfterAutoplayBlock = (): void => {
-  if (autoplayRetryDone || audio.isMusicPlaying()) return;
-  autoplayRetryDone = true;
-  void music.setState('menu', { force: true });
+// Refresh-safe audio activation (concept adapted from PR #46). The listeners
+// stay attached rather than firing once: an early resume() can be rejected or
+// left pending by the autoplay policy, so every genuine gesture gets a chance
+// to activate audio — and to recover playback for whatever musical state is
+// current now, not always "menu". The gesture still does its normal job; this
+// runs alongside it and never blocks it.
+let audioActivationInFlight = false;
+let audioPlaybackRecovered = false;
+const recoverAudioAfterGesture = (): void => {
+  if (audioActivationInFlight || (audioPlaybackRecovered && audio.isMusicPlaying())) return;
+  audioActivationInFlight = true;
+  // Yield a macrotask first: the gesture's own button action (and any paint it
+  // causes) must land before we touch the AudioContext, whose construction /
+  // resume can briefly block on some platforms. The gesture still counts as the
+  // activation gesture — the browser attributes it to this task chain.
+  window.setTimeout(() => {
+    void (async () => {
+      try {
+        if (!await audio.unlock()) return;
+        if (!audio.isMusicPlaying()) await music.resyncPlayback();
+        if (audio.isMusicPlaying()) audioPlaybackRecovered = true;
+      } catch {
+        // Audio failure degrades to silence, never to a broken UI.
+      } finally {
+        audioActivationInFlight = false;
+      }
+    })();
+  }, 0);
 };
-document.addEventListener('pointerdown', retryMenuMusicAfterAutoplayBlock, { capture: true, once: true });
-document.addEventListener('keydown', retryMenuMusicAfterAutoplayBlock, { capture: true, once: true });
+document.addEventListener('pointerdown', recoverAudioAfterGesture, { capture: true });
+document.addEventListener('keydown', recoverAudioAfterGesture, { capture: true });
 
 window.addEventListener('pagehide', (event) => {
   if (!event.persisted) {
@@ -173,6 +213,19 @@ let rendererStarted = false;
 let activeRenderer: WorldRenderer | undefined;
 let activeSession: RemoteGameSession | undefined;
 let activeConnection: GameConnection | undefined;
+/** Pooled world-space combat visuals; fed by drainSessionEvents, drawn from onStats. */
+const combatEffects = new CombatEffectPool(320);
+let lastCombatCameraDistance = 3_000;
+// Launch lifecycle: a monotonically increasing token invalidates a superseded
+// attempt (Retry / Return to Command), a disposer list tears an aborted attempt
+// down cleanly, and `launchOutcome` bridges to the menu's `onLaunch` promise so
+// "Return to Command" restores the menu via its existing rejection path.
+let launchToken = 0;
+let currentLaunchCountryId = 0;
+const launchDisposers: Array<() => void> = [];
+let launchOutcome: { resolve: () => void; reject: (error: Error) => void } | null = null;
+let activeStopQuotes: (() => void) | null = null;
+let loaderHideTimer: number | undefined;
 let selectedArmyId: string | null = null;
 let awaitingMoveTarget = false;
 let targetingMode: 'move' | 'attack' | 'retreat' | 'split' | null = null;
@@ -195,50 +248,168 @@ mountMenu({
   audio,
   lobby,
   username: authenticated.account!.username,
+  profile: authenticated.profile,
   onLogout: () => { void logout().finally(() => window.location.replace('/login.html')); },
-  onLaunch: async (countryId: number) => {
-    if (rendererStarted) return;
+  onLaunch: (countryId: number) => new Promise<void>((resolve, reject) => {
+    if (rendererStarted) { resolve(); return; }
     rendererStarted = true;
-    try {
-      loading.hidden = false;
-      loadingStage.textContent = lobby.assignedCountryId === null ? 'Joining operation' : 'Restoring operation';
-      loadingValue.textContent = '0%';
-      loadingBar.style.width = '0%';
-      if (lobby.assignedCountryId === null) await joinGame(countryId);
-      // Audio is non-critical and media playback can remain pending while a
-      // browser restores a tab. It must never hold the renderer bootstrap.
-      void music.setState('opening').catch((error) => {
-        console.warn('Opening music could not be started.', error);
-      });
-
-    // The lobby is deliberately lightweight. The world canvas, loading scene,
-    // renderer module graph, WebGPU device and world assets are all deferred
-    // until the player actually commits to an operation.
-    if (!navigator.gpu) {
-      loading.hidden = true;
-      canvas.hidden = true;
-      unsupported.hidden = false;
-    } else {
-      canvas.hidden = false;
-      loading.hidden = false;
-      loadingStage.textContent = 'Loading renderer';
-      loadingValue.textContent = '0%';
-      loadingBar.style.width = '0%';
-      debugToggle.hidden = !debugEnabled;
-      // The legacy MAP OVERLAY fieldset stays in the DOM (main.ts reads its
-      // radios) but is superseded by the in-game map-mode toolbar.
-      mapModes.hidden = true;
-      uiStore.patch({ phase: 'loading' });
-      await start();
-    }
-    } catch (error) {
-      rendererStarted = false;
-      throw error;
-    }
-  },
+    currentLaunchCountryId = countryId;
+    launchOutcome = { resolve, reject };
+    // Audio must NEVER gate entering the game — a silent game beats a stuck one.
+    void music.setState('opening').catch(() => undefined);
+    void runLaunch(countryId);
+  }),
   // In the lobby this only persists; once the renderer exists it applies live.
   onGraphicsQuality: (level) => activeRenderer?.setQuality(level),
 });
+
+loadingRetry.addEventListener('click', () => {
+  loadingError.hidden = true;
+  loadingFoot.hidden = false;
+  void runLaunch(currentLaunchCountryId);
+});
+loadingReturn.addEventListener('click', () => {
+  void (async () => {
+    launchToken += 1;
+    await teardownPartialLaunch();
+    loadingError.hidden = true;
+    loadingFoot.hidden = false;
+    hideLoader();
+    canvas.hidden = true;
+    uiStore.patch({ phase: 'lobby' });
+    rendererStarted = false;
+    const outcome = launchOutcome;
+    launchOutcome = null;
+    // Rejecting the menu's onLaunch promise triggers its own menu-restore path.
+    outcome?.reject(new Error('Returned to command.'));
+  })();
+});
+
+/** Reject a promise if it has not settled within `ms`. */
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error(`${label} timed out after ${Math.round(ms / 1_000)}s.`)),
+      ms,
+    );
+    work.then(
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (error: unknown) => { window.clearTimeout(timer); reject(error instanceof Error ? error : new Error(String(error))); },
+    );
+  });
+}
+
+function setLoadingStage(stage: string, progress?: number): void {
+  loadingStage.textContent = stage;
+  if (progress !== undefined) {
+    const percentage = Math.max(0, Math.min(100, Math.round(progress * 100)));
+    loadingValue.textContent = `${percentage}%`;
+    loadingBar.style.width = `${percentage}%`;
+  }
+}
+
+function cancelLoaderHide(): void {
+  if (loaderHideTimer === undefined) return;
+  window.clearTimeout(loaderHideTimer);
+  loaderHideTimer = undefined;
+}
+
+function showLoader(): void {
+  cancelLoaderHide();
+  unsupported.hidden = true;
+  loading.classList.remove('is-done');
+  loadingError.hidden = true;
+  loadingFoot.hidden = false;
+  loading.hidden = false;
+  // The panel itself still starts closed (so `npm run dev` opens on the real
+  // player view), but in dev the toggle is visible so the visual lighting /
+  // time controls are one click away without needing the ?debug URL param.
+  debugToggle.hidden = !(debugEnabled || import.meta.env.DEV);
+  mapModes.hidden = true;
+}
+
+function hideLoader(): void {
+  cancelLoaderHide();
+  loading.classList.add('is-done');
+  loaderHideTimer = window.setTimeout(() => {
+    loaderHideTimer = undefined;
+    loading.hidden = true;
+  }, 500);
+}
+
+function showLaunchError(message: string): void {
+  cancelLoaderHide();
+  loading.classList.remove('is-done');
+  loading.hidden = false;
+  loadingFoot.hidden = true;
+  loadingErrorMessage.textContent = message || 'The operation could not be reached.';
+  loadingError.hidden = false;
+}
+
+/** Roll back everything a failed / abandoned launch attempt created. */
+async function teardownPartialLaunch(): Promise<void> {
+  for (const dispose of launchDisposers.splice(0)) {
+    try { dispose(); } catch (error) { console.warn('[launch] disposer failed', error); }
+  }
+  try { activeConnection?.close(); } catch (error) { console.warn('[launch] connection close failed', error); }
+  activeConnection = undefined;
+  try { activeRenderer?.dispose(); } catch (error) { console.warn('[launch] renderer dispose failed', error); }
+  activeRenderer = undefined;
+  activeSession = undefined;
+  activeStopQuotes?.();
+  activeStopQuotes = null;
+  void audio.setWindEnabled(false);
+  void audio.setOceanEnabled(false);
+  void audio.setRainEnabled(false);
+}
+
+/**
+ * Full launch lifecycle. Every awaited step is time-bounded and any failure —
+ * from joinGame through bootstrapGameSession — lands on the loader's error
+ * state (Retry / Return to Command) instead of an indefinite hang.
+ */
+async function runLaunch(countryId: number): Promise<void> {
+  const token = (launchToken += 1);
+  // Populate the Field Note and first stage BEFORE the loader is unhidden so it
+  // never appears for a frame with an empty quote / stale bar.
+  if (!activeStopQuotes) activeStopQuotes = startLoadingQuotes();
+  setLoadingStage('Connecting to command server', 0);
+  showLoader();
+  uiStore.patch({ phase: 'loading' });
+
+  try {
+    if (lobby.assignedCountryId === null) {
+      setLoadingStage('Registering for the operation', 0.02);
+      await withTimeout(joinGame(countryId), 15_000, 'Joining the campaign');
+      lobby.assignedCountryId = countryId;
+    }
+
+    // Renderer module graph, WebGPU device and world assets are all deferred
+    // until the player actually commits to an operation.
+    if (!navigator.gpu) {
+      hideLoader();
+      canvas.hidden = true;
+      unsupported.hidden = false;
+      // The unsupported screen is the terminal UI for this launch attempt, so
+      // settle the menu's launch promise instead of leaking it forever.
+      launchOutcome?.resolve();
+      launchOutcome = null;
+      return;
+    }
+
+    canvas.hidden = false;
+    await startGame(token);
+    if (token !== launchToken) return; // superseded by Retry / Return
+
+    launchOutcome?.resolve();
+    launchOutcome = null;
+  } catch (error) {
+    if (token !== launchToken) return; // superseded — ignore this attempt's failure
+    console.error('[launch] failed', error);
+    await teardownPartialLaunch();
+    showLaunchError(error instanceof Error ? error.message : String(error));
+  }
+}
 
 function startLoadingQuotes(): () => void {
   const order = LOADING_QUOTES.map((_, i) => i);
@@ -259,31 +430,52 @@ function startLoadingQuotes(): () => void {
   return () => window.clearInterval(timer);
 }
 
-async function start(): Promise<void> {
-  const stopQuotes = startLoadingQuotes();
-  const connection = await GameConnection.open();
+async function startGame(token: number): Promise<void> {
+  const connection = await withTimeout(
+    GameConnection.open((stage) => setLoadingStage(stage, 0.08)),
+    20_000,
+    'Connecting to command server',
+  );
+  if (token !== launchToken) { connection.close(); return; }
   activeConnection = connection;
   configureWorldAssetBase(connection.world.assetBaseUrl);
   const session = new RemoteGameSession(connection, (reason) => {
-    pushNotification('warning', 'Command failed', reason);
-    window.setTimeout(() => {
-      uiStore.patch({ notifications: uiStore.get().notifications.filter((entry) => entry.title !== 'Command failed') });
-    }, 4_000);
+    // Server rejected an order. Show a concise, specific headline derived from
+    // the reason (not a flat "Command failed") with the full reason beneath.
+    const { title, body } = describeOrderFailure(reason);
+    pushNotification('warning', title, body);
   });
   activeSession = session;
 
   // Keep the complete renderer/world module graph out of the lobby bundle.
   // This import is the first point at which world rendering code is loaded.
-  const { WorldRenderer } = await import('./renderer');
+  setLoadingStage('Loading renderer', 0.12);
+  const { WorldRenderer } = await withTimeout(import('./renderer'), 30_000, 'Loading the renderer');
+  if (token !== launchToken) return;
   const renderer = new WorldRenderer(canvas, countryLabels, loadQuality());
   activeRenderer = renderer;
-  window.addEventListener('pagehide', (event) => {
+
+  // Every DOM/debug listener below belongs to this renderer attempt. Retry or
+  // Return to Command aborts them in one shot so failed launches cannot retain
+  // an old renderer or stack duplicate handlers onto the next attempt.
+  const attemptEvents = new AbortController();
+  const attemptListener = { signal: attemptEvents.signal } as const;
+  launchDisposers.push(() => attemptEvents.abort());
+
+  const disposeRendererOnPagehide = (event: PageTransitionEvent): void => {
     if (!event.persisted) renderer.dispose();
-  });
+  };
+  window.addEventListener('pagehide', disposeRendererOnPagehide);
+  launchDisposers.push(() => window.removeEventListener('pagehide', disposeRendererOnPagehide));
   if (import.meta.env.DEV || debugEnabled) {
     // Invisible automation handle (QA capture / perf scripts). Not a player-
     // facing affordance.
-    (window as Window & { __ironfrontsRenderer?: WorldRenderer }).__ironfrontsRenderer = renderer;
+    (window as Window & {
+      __ironfrontsRenderer?: WorldRenderer;
+      __ironfrontsCombatEffects?: CombatEffectPool;
+    }).__ironfrontsRenderer = renderer;
+    (window as Window & { __ironfrontsCombatEffects?: CombatEffectPool })
+      .__ironfrontsCombatEffects = combatEffects;
   }
   // Hover deposits come from the fog-aware GameSession projection once it
   // exists; before that (and for water) show no deposit chips. The renderer's
@@ -292,6 +484,44 @@ async function start(): Promise<void> {
     updateTooltip(info, x, y, info && activeSession
       ? activeSession.describeProvince(info.id).resources
       : null);
+
+  // Attack-order cursor feedback. With an own army selected, the world cursor
+  // becomes the 0 A.D. attack cursor over a *fully identified* enemy stack, and
+  // the "no" cursor while aiming an attack at anything that can't be struck.
+  // Gating on `contact === 'visible'` keeps the cursor honest with the server's
+  // "a strike needs an identified target" rule — a contact-only blip gets no
+  // attack affordance, so hovering never confirms an unseen force is there.
+  const updateWorldCursor = (clientX: number, clientY: number): void => {
+    const session = activeSession;
+    // Rally-point placement is province-scoped, not army-scoped: 0 A.D. rally
+    // cursor while it is armed.
+    if (session && awaitingRallyTarget && selectedProvinceId !== null
+      && session.ownsProvince(selectedProvinceId)) {
+      canvas.style.cursor = 'url(/cursors/cursor-rally.png) 5 31, crosshair';
+      return;
+    }
+    if (!session || !selectedArmyId || !session.ownsArmy(selectedArmyId)) {
+      canvas.style.cursor = '';
+      return;
+    }
+    const hoveredId = renderer.pickArmyAt(clientX, clientY);
+    const hovered = hoveredId && hoveredId !== selectedArmyId ? session.army(hoveredId) : null;
+    const strikable = Boolean(hovered && !hovered.own && hovered.contact === 'visible');
+    if (strikable) {
+      canvas.style.cursor = 'url(/cursors/action-attack.png) 1 1, crosshair';
+    } else if (targetingMode === 'attack') {
+      canvas.style.cursor = 'url(/cursors/cursor-no.png) 13 14, not-allowed';
+    } else if (targetingMode === 'move' || targetingMode === 'split' || targetingMode === 'retreat' || awaitingMoveTarget) {
+      // Aiming a ground order — a plain precision cursor (0 A.D. has no bare
+      // "move" cursor clean enough to vendor).
+      canvas.style.cursor = 'crosshair';
+    } else {
+      canvas.style.cursor = '';
+    }
+  };
+  canvas.addEventListener('pointermove', (event) => {
+    updateWorldCursor(event.clientX, event.clientY);
+  }, attemptListener);
 
   // ---- Player HUD: typed state in, typed actions out -----------------
   const setMapModeUnified = (mode: MapMode): void => {
@@ -309,9 +539,7 @@ async function start(): Promise<void> {
       uiStore.patch({ quality: level, effectiveRenderScale: renderer.effectiveRenderScale });
     },
     navSelect: () => { /* No player-facing system is implemented yet. */ },
-    dismissNotification: (id) => uiStore.patch({
-      notifications: uiStore.get().notifications.filter((entry) => entry.id !== id),
-    }),
+    dismissNotification: (id) => removeNotification(id),
     togglePause: (open) => uiStore.patch({ paused: open }),
     toggleResourceOverlay: (on) => {
       renderer.setResourceOverlay(on);
@@ -321,14 +549,20 @@ async function start(): Promise<void> {
     openDebugInspector: () => {
       if (debugEnabled) window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F3', key: 'F3' }));
     },
+    focusWorld: (x, z) => renderer.focus(x, z, 900),
     armyCommand: (command) => handleArmyCommand(command),
     produceUnit: (provinceId, unitTypeId) => handleProduce(provinceId, unitTypeId),
     buildStructure: (provinceId, buildingId) => handleBuild(provinceId, buildingId),
     rallyPoint: (provinceId, action) => handleRally(provinceId, action),
   };
   const gameUi = mountGameUi(uiStore, gameUiActions);
-  window.addEventListener('pagehide', (event) => {
+  const destroyGameUiOnPagehide = (event: PageTransitionEvent): void => {
     if (!event.persisted) gameUi.destroy();
+  };
+  window.addEventListener('pagehide', destroyGameUiOnPagehide);
+  launchDisposers.push(() => {
+    window.removeEventListener('pagehide', destroyGameUiOnPagehide);
+    try { gameUi.destroy(); } catch (error) { console.warn('[launch] gameUi destroy failed', error); }
   });
 
   let oceanAudible = false;
@@ -341,6 +575,16 @@ async function start(): Promise<void> {
       oceanAudible = shouldHearOcean;
       void audio.setOceanEnabled(oceanAudible);
     }
+    // Repack the pooled combat effects for this frame (cheap: <=320*8 floats,
+    // reused buffer). Transients past the LOD range are dropped CPU-side; the
+    // renderer stops drawing everything past its own max distance.
+    lastCombatCameraDistance = stats.distance;
+    const packed = combatEffects.collect(
+      Date.now(),
+      { x: stats.camera[0], z: stats.camera[1] },
+      renderer.combatEffectMaxDistance,
+    );
+    renderer.setCombatEffects(packed.floats, packed.count);
     if (!diagnostics.hidden) updateDiagnostics(stats);
   };
   renderer.onDiplomacyChange = (state) => {
@@ -391,32 +635,32 @@ async function start(): Promise<void> {
   debugTime.addEventListener('change', () => {
     const hour = parseClock(debugTime.value);
     if (hour !== undefined) renderer.setTimeOfDay(hour);
-  });
+  }, attemptListener);
   for (const preset of debugTimePresets) {
-    preset.addEventListener('click', () => renderer.setTimeOfDay(Number(preset.dataset.debugTime)));
+    preset.addEventListener('click', () => renderer.setTimeOfDay(Number(preset.dataset.debugTime)), attemptListener);
   }
   const applyTimeMultiplier = () => {
     if (debugTimeMultiplier.value === '') return;
     const multiplier = renderer.setTimeMultiplier(Number(debugTimeMultiplier.value));
     debugTimeMultiplier.value = multiplier.toFixed(1);
   };
-  debugTimeMultiplier.addEventListener('change', applyTimeMultiplier);
-  debugTimeMultiplier.addEventListener('blur', applyTimeMultiplier);
+  debugTimeMultiplier.addEventListener('change', applyTimeMultiplier, attemptListener);
+  debugTimeMultiplier.addEventListener('blur', applyTimeMultiplier, attemptListener);
   debugRain.addEventListener('change', () => {
     renderer.setRainEnabled(debugRain.checked);
     void audio.setRainEnabled(debugRain.checked);
     uiStore.patch({ weather: { raining: debugRain.checked, label: debugRain.checked ? 'Rain' : 'Clear' } });
-  });
+  }, attemptListener);
   debugThunder.addEventListener('click', () => {
     void audio.playThunder();
-  });
+  }, attemptListener);
 
   for (const tab of debugTabs) {
     tab.addEventListener('click', () => {
       const selected = tab.dataset.debugTab;
       for (const candidate of debugTabs) candidate.setAttribute('aria-selected', String(candidate === tab));
       for (const panel of debugPanels) panel.hidden = panel.dataset.debugPanel !== selected;
-    });
+    }, attemptListener);
   }
 
   debugPlayerForm.addEventListener('submit', (event) => {
@@ -428,7 +672,7 @@ async function start(): Promise<void> {
     }
     debugPlayerInput.value = '';
     setDiplomacyStatus(`Country flag switched to ${country.name}. Diplomatic placeholders were cleared.`);
-  });
+  }, attemptListener);
 
   const bindRelationForm = (
     form: HTMLFormElement,
@@ -446,7 +690,7 @@ async function start(): Promise<void> {
       setDiplomacyStatus(relation === 'war'
         ? `${country.name} is now at war with you. Click its provinces to take them.`
         : `${country.name} is now allied with you.`);
-    });
+    }, attemptListener);
   };
   bindRelationForm(debugWarForm, debugWarInput, 'war');
   bindRelationForm(debugAlliedForm, debugAlliedInput, 'allied');
@@ -464,7 +708,7 @@ async function start(): Promise<void> {
     diagnostics.hidden = !diagnostics.hidden;
     debugToggle.setAttribute('aria-expanded', String(!diagnostics.hidden));
   };
-  debugToggle.addEventListener('click', toggleDiagnostics);
+  debugToggle.addEventListener('click', toggleDiagnostics, attemptListener);
   window.addEventListener('keydown', (event) => {
     if (event.code === 'F3') {
       if (!debugEnabled) return;
@@ -478,17 +722,17 @@ async function start(): Promise<void> {
     const count = debugView.options.length;
     debugView.selectedIndex = (debugView.selectedIndex + direction + count) % count;
     applyDebugView();
-  });
-  for (const input of mapModeInputs) input.addEventListener('change', applyMapMode);
+  }, attemptListener);
+  for (const input of mapModeInputs) input.addEventListener('change', applyMapMode, attemptListener);
   applyMapMode();
-  debugView.addEventListener('change', applyDebugView);
-  debugWireframe.addEventListener('change', () => renderer.setWireframe(debugWireframe.checked));
-  debugCountries.addEventListener('change', () => renderer.setCountryOverlayVisible(debugCountries.checked));
-  debugBorders.addEventListener('change', () => renderer.setBordersVisible(debugBorders.checked));
-  debugRoads.addEventListener('change', () => renderer.setRoadsVisible(debugRoads.checked));
-  debugHidden.addEventListener('change', () => renderer.setHiddenConnectionsVisible(debugHidden.checked));
-  debugWaterways.addEventListener('change', () => renderer.setWaterwaysVisible(debugWaterways.checked));
-  debugProps.addEventListener('change', () => renderer.setPropsVisible(debugProps.checked));
+  debugView.addEventListener('change', applyDebugView, attemptListener);
+  debugWireframe.addEventListener('change', () => renderer.setWireframe(debugWireframe.checked), attemptListener);
+  debugCountries.addEventListener('change', () => renderer.setCountryOverlayVisible(debugCountries.checked), attemptListener);
+  debugBorders.addEventListener('change', () => renderer.setBordersVisible(debugBorders.checked), attemptListener);
+  debugRoads.addEventListener('change', () => renderer.setRoadsVisible(debugRoads.checked), attemptListener);
+  debugHidden.addEventListener('change', () => renderer.setHiddenConnectionsVisible(debugHidden.checked), attemptListener);
+  debugWaterways.addEventListener('change', () => renderer.setWaterwaysVisible(debugWaterways.checked), attemptListener);
+  debugProps.addEventListener('change', () => renderer.setPropsVisible(debugProps.checked), attemptListener);
   debugConnections.addEventListener('change', async () => {
     debugConnections.disabled = true;
     try {
@@ -496,7 +740,7 @@ async function start(): Promise<void> {
     } finally {
       debugConnections.disabled = false;
     }
-  });
+  }, attemptListener);
   debugRivers.addEventListener('change', async () => {
     debugRivers.disabled = true;
     try {
@@ -504,64 +748,55 @@ async function start(): Promise<void> {
     } finally {
       debugRivers.disabled = false;
     }
+  }, attemptListener);
+  // Any failure from here on propagates to runLaunch(), which tears the partial
+  // attempt down and shows the loader's Retry / Return-to-Command error state.
+  await withTimeout(
+    renderer.initialize((stage, progress) => setLoadingStage(stage, 0.12 + progress * 0.8)),
+    90_000,
+    'Preparing the renderer',
+  );
+  if (token !== launchToken) return;
+  debugCountryNames.replaceChildren(...renderer.getCountries()
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((country) => {
+      const option = document.createElement('option');
+      option.value = country.name;
+      return option;
+    }));
+  applyDebugView();
+  void audio.setWindEnabled(true);
+  setLoadingStage('Deploying forces', 0.95);
+  renderer.start();
+
+  // ---- Authoritative game session (Phase A wiring) -----------------
+  // The renderer is now a data source + presentation cache; GameSession owns
+  // gameplay state. Build WorldData from the loaded package and start the
+  // fixed-step simulation.
+  await withTimeout(bootstrapGameSession(renderer, session), 30_000, 'Deploying forces');
+  if (token !== launchToken) return;
+
+  setLoadingStage('Entering operation', 1);
+  activeStopQuotes?.();
+  activeStopQuotes = null;
+  hideLoader();
+
+  // Hand the HUD its opening state from real renderer/game values.
+  const clock = session.readClock();
+  uiStore.patch({
+    phase: 'in-game',
+    clock,
+    quality: renderer.graphicsQuality,
+    effectiveRenderScale: renderer.effectiveRenderScale,
+    weather: { raining: renderer.isRainEnabled(), label: renderer.isRainEnabled() ? 'Rain' : 'Clear' },
   });
-  try {
-    await renderer.initialize((stage, progress) => {
-      const percentage = Math.round(progress * 100);
-      loadingStage.textContent = stage;
-      loadingValue.textContent = `${percentage}%`;
-      loadingBar.style.width = `${percentage}%`;
-    });
-    debugCountryNames.replaceChildren(...renderer.getCountries()
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((country) => {
-        const option = document.createElement('option');
-        option.value = country.name;
-        return option;
-      }));
-    applyDebugView();
-    void audio.setWindEnabled(true);
-    loading.classList.add('is-done');
-    stopQuotes();
-    window.setTimeout(() => { loading.hidden = true; }, 500);
-    renderer.start();
-
-    // ---- Authoritative game session (Phase A wiring) -----------------
-    // The renderer is now a data source + presentation cache; GameSession owns
-    // gameplay state. Build WorldData from the loaded package and start the
-    // fixed-step simulation.
-    try {
-      await bootstrapGameSession(renderer, session);
-    } catch (sessionError) {
-      console.error('GameSession bootstrap failed; renderer stays up.', sessionError);
-    }
-
-    // Hand the HUD its opening state from real renderer/game values.
-    const clock = session.readClock();
-    uiStore.patch({
-      phase: 'in-game',
-      clock,
-      quality: renderer.graphicsQuality,
-      effectiveRenderScale: renderer.effectiveRenderScale,
-      weather: { raining: renderer.isRainEnabled(), label: renderer.isRainEnabled() ? 'Rain' : 'Clear' },
-    });
-    if (debugEnabled) {
-      // Dev-only fixtures so screenshots / component tests have content. Never
-      // shown in production gameplay.
-      uiStore.patch({ notifications: DEMO_NOTIFICATIONS, selectedArmy: DEMO_ARMY });
-    }
-  } catch (error) {
-    stopQuotes();
-    void audio.setWindEnabled(false);
-    void audio.setOceanEnabled(false);
-    console.error(error);
-    loading.hidden = true;
-    unsupported.hidden = false;
-    const title = unsupported.querySelector('h1');
-    const message = unsupported.querySelector('p:last-child');
-    if (title) title.textContent = 'The world could not be rendered.';
-    if (message) message.textContent = error instanceof Error ? error.message : String(error);
+  if (debugEnabled) {
+    // Dev-only fixtures so screenshots have content. Routed through the normal
+    // lifecycle so they auto-expire like any real toast — they used to be
+    // patched in raw and sat on screen forever.
+    for (const demo of DEMO_NOTIFICATIONS) pushNotification(demo.kind, demo.title, demo.body);
+    uiStore.patch({ selectedArmy: DEMO_ARMY });
   }
 }
 
@@ -569,6 +804,31 @@ function updateTimeControls(state: TimeOfDayState): void {
   debugTimeState.textContent = `${state.stage} · ${state.clock}`;
   if (document.activeElement !== debugTime) debugTime.value = state.clock;
   if (document.activeElement !== debugTimeMultiplier) debugTimeMultiplier.value = state.multiplier.toFixed(1);
+}
+
+const simSpeedGroup = debugSimSpeedButtons[0]?.closest<HTMLElement>('.sim-speed-controls');
+/**
+ * Dev-only simulation-speed control: server-authoritative, shared by every
+ * connected player. Hidden (not just disabled) against a production server so
+ * it never offers a lever that would silently do nothing. Uses `activeSession`
+ * rather than a closed-over session so it can be polled from bootstrapGameSession's
+ * HUD timer, which runs in a different function scope than these buttons.
+ */
+function syncSimSpeedUi(): void {
+  const session = activeSession;
+  if (simSpeedGroup) simSpeedGroup.hidden = !session || !session.devSimSpeedEnabled;
+  if (!session) return;
+  debugSimSpeedState.textContent = session.devSimSpeed === 0 ? 'Paused' : `${session.devSimSpeed}×`;
+  for (const button of debugSimSpeedButtons) {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.simSpeed) === session.devSimSpeed));
+  }
+}
+for (const button of debugSimSpeedButtons) {
+  // Module-level, one-time wiring (unlike the per-launch listeners above,
+  // these static buttons and activeSession outlive any single game attempt).
+  button.addEventListener('click', () => {
+    activeSession?.setDevSimSpeed(Number(button.dataset.simSpeed));
+  });
 }
 
 async function bootstrapGameSession(
@@ -598,11 +858,15 @@ async function bootstrapGameSession(
   })));
   renderer.setPlayerCountryByName(player.name);
   const { x, z, distance } = session.state.startCamera;
-  renderer.focus(x, z, distance);
+  // Deterministic near-top-down view centred on the player's homeland; no prior
+  // orbit orientation carries over. The player can orbit away afterwards.
+  renderer.focusPlayerStart(x, z, distance);
 
-  // Map-tap -> army selection / move order. Consumes the click so
-  // it does not also select a province.
+  // Left-tap -> army selection / armed-order placement (does not also select a
+  // province if it was consumed). Right-click -> direct move/attack order for
+  // the selected army, the primary fast interaction.
   renderer.onMapClick = (clientX, clientY) => handleMapClick(renderer, session, clientX, clientY);
+  renderer.onMapCommand = (clientX, clientY) => handleMapCommand(renderer, session, clientX, clientY);
   session.addEventListener('war-confirmation', (event) => {
     const detail = (event as CustomEvent<{
       countryIds: number[]; respond: (confirmed: boolean) => void;
@@ -648,29 +912,43 @@ async function bootstrapGameSession(
     uiStore.patch({ resources: playerResourceLines(session) });
     syncArmyMarkers(session, renderer);
     syncResourceMarkers(session, renderer);
+    syncCombatMarkers(session);
     refreshSelectedArmy(session);
     refreshSelectedProvince(session); // keep production / construction % live
     drainSessionEvents(session);
+    syncSimSpeedUi();
   }, 400);
   const onKey = (event: KeyboardEvent): void => {
     if (event.repeat || !selectedArmyId) return;
     if (event.key === 'm' || event.key === 'M') {
       targetingMode = 'move'; awaitingMoveTarget = true; refreshSelectedArmy(session);
+    } else if (event.key === 'a' || event.key === 'A') {
+      handleArmyCommand('attack');
     } else if (event.key === 's' || event.key === 'S') {
       session.orderStop(selectedArmyId); targetingMode = null; awaitingMoveTarget = false; refreshSelectedArmy(session);
     }
+    else if (event.key === 'r' || event.key === 'R') { handleArmyCommand('retreat'); }
+    else if (event.key === 'x' || event.key === 'X') { handleArmyCommand('split'); }
     else if (event.key === 'e' || event.key === 'E') { handleArmyCommand('extract'); }
     else if (event.key === 'Escape') { deselectArmy(); }
   };
   window.addEventListener('keydown', onKey);
-  window.addEventListener('pagehide', (event) => {
-    if (!event.persisted) {
-      window.clearInterval(hudTimer);
-      window.clearInterval(civilClockTimer);
-      window.removeEventListener('keydown', onKey);
-      if (activeSession === session) activeSession = undefined;
-      activeConnection?.close();
-    }
+  const teardownSession = (): void => {
+    window.clearInterval(hudTimer);
+    window.clearInterval(civilClockTimer);
+    window.removeEventListener('keydown', onKey);
+    clearAllNotificationTimers();
+    combatEffects.clear();
+    if (activeSession === session) activeSession = undefined;
+  };
+  const teardownSessionOnPagehide = (event: PageTransitionEvent): void => {
+    if (!event.persisted) { teardownSession(); activeConnection?.close(); }
+  };
+  window.addEventListener('pagehide', teardownSessionOnPagehide);
+  // Also reachable from Retry / Return to Command before the game is entered.
+  launchDisposers.push(() => {
+    window.removeEventListener('pagehide', teardownSessionOnPagehide);
+    teardownSession();
   });
 
   console.info(
@@ -681,6 +959,8 @@ async function bootstrapGameSession(
 const armyMarkerScratch = new Float32Array(16 * 1_024);
 const armyModelScratch = new Float32Array(12 * 4_096);
 const resourceMarkerScratch = new Float32Array(4 * 4_096);
+/** LineRecord (8 f32) per own-army route segment — see renderer.setOrderRoutes. */
+const routeScratch = new Float32Array(8 * 4_096);
 const RESOURCE_KIND_INDEX: Record<'stone' | 'metal' | 'oil', number> = { stone: 0, metal: 1, oil: 2 };
 
 /** Push the deposit set the PLAYER may see (own-controlled + anything inside
@@ -713,6 +993,16 @@ function packRgb(hex: string): number {
   return value & 0xffffff;
 }
 
+/** Deterministic 0..1 from a string — used for stable per-unit formation jitter. */
+function hashUnit(key: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 100000) / 100000;
+}
+
 /**
  * Rebuild the renderer's army-stack marker buffer from authoritative GameState,
  * fog-gated: own stacks always shown; foreign stacks only when in
@@ -720,6 +1010,57 @@ function packRgb(hex: string): number {
  */
 const armyPickScratch: Array<{ id: string; x: number; z: number }> = [];
 const previousArmyModelPositions = new Map<string, { x: number; z: number }>();
+/** Last rendered facing per army, so the column turns a road corner over a
+ *  second or so instead of snapping when the server shifts the leading node. */
+const previousArmyHeading = new Map<string, number>();
+
+/** Shortest-arc step from `from` toward `to` (radians), covering `frac` of the gap. */
+function dampAngle(from: number, to: number, frac: number): number {
+  let delta = to - from;
+  delta -= Math.PI * 2 * Math.round(delta / (Math.PI * 2));
+  return from + delta * frac;
+}
+
+/**
+ * Facing for a marching column: a point a short way ahead along the actual road
+ * polyline (not the far destination), so the heading already eases toward the
+ * next leg before the army reaches a bend. Falls back to the straight-line
+ * bearing to the order target. `worldW` handles the x-seam.
+ */
+function routeLookaheadHeading(
+  route: ReadonlyArray<{ x: number; z: number }> | undefined,
+  order: { x: number; z: number } | null | undefined,
+  fromX: number, fromZ: number, worldW: number,
+): number | null {
+  const unwrap = (dx: number): number => {
+    if (!worldW) return dx;
+    if (dx > worldW / 2) return dx - worldW;
+    if (dx < -worldW / 2) return dx + worldW;
+    return dx;
+  };
+  if (route && route.length >= 2) {
+    const LOOKAHEAD = 16;
+    let travelled = 0;
+    let px = route[0].x;
+    let pz = route[0].z;
+    for (let i = 1; i < route.length; i += 1) {
+      const dx = unwrap(route[i].x - px);
+      const dz = route[i].z - pz;
+      const segLen = Math.hypot(dx, dz) || 1;
+      if (travelled + segLen >= LOOKAHEAD || i === route.length - 1) {
+        const need = Math.min(1, (LOOKAHEAD - travelled) / segLen);
+        const aimX = px + dx * need;
+        const aimZ = pz + dz * need;
+        return Math.atan2(unwrap(aimX - fromX), -(aimZ - fromZ));
+      }
+      travelled += segLen;
+      px += dx;
+      pz += dz;
+    }
+  }
+  if (order) return Math.atan2(unwrap(order.x - fromX), -(order.z - fromZ));
+  return null;
+}
 
 function syncArmyMarkers(
   session: RemoteGameSession, renderer: WorldRenderer,
@@ -728,11 +1069,58 @@ function syncArmyMarkers(
   let count = 0;
   let modelCursor = 0;
   let modelCount = 0;
+  let routeCursor = 0;
+  let routeCount = 0;
   const activeModelKeys = new Set<string>();
   armyPickScratch.length = 0;
   for (const army of Object.values(session.state.armies)) {
     if (count >= 1_024) break;
     const identified = army.contact === 'visible';
+
+    // Authoritative route polyline for the SELECTED own army only (move = cream,
+    // attack = red, retreating = amber). Other armies' routes stay hidden so the
+    // map isn't a web of lines; a deselect clears this on the next sync.
+    if (army.own && army.id === selectedArmyId && army.moveRoute && army.moveRoute.length >= 2) {
+      const colorFlag = army.moveIntent === 'attack' ? 1 : 0;
+      const retreatFlag = army.status === 'retreating' ? 1 : 0;
+      const emitSegment = (ax: number, az: number, bx: number, bz: number, arrow: number): void => {
+        if (routeCount >= 4_096) return;
+        routeScratch[routeCursor] = ax;
+        routeScratch[routeCursor + 1] = az;
+        routeScratch[routeCursor + 2] = bx;
+        routeScratch[routeCursor + 3] = bz;
+        routeScratch[routeCursor + 4] = colorFlag;
+        routeScratch[routeCursor + 5] = 0;
+        routeScratch[routeCursor + 6] = retreatFlag;
+        routeScratch[routeCursor + 7] = arrow;
+        routeCursor += 8;
+        routeCount += 1;
+      };
+      const route = army.moveRoute;
+      for (let i = 0; i + 1 < route.length; i += 1) {
+        emitSegment(route[i].x, route[i].z, route[i + 1].x, route[i + 1].z, 0);
+      }
+      // Chevron at the destination, oriented by the final leg tangent, in the
+      // route's own colour. Kept small so it never buries the end point.
+      const tip = route[route.length - 1];
+      const prev = route[route.length - 2];
+      const worldW = renderer.manifest?.world.width ?? 0;
+      let tx = tip.x - prev.x;
+      if (worldW) {
+        if (tx > worldW / 2) tx -= worldW;
+        else if (tx < -worldW / 2) tx += worldW;
+      }
+      const tz = tip.z - prev.z;
+      const tlen = Math.hypot(tx, tz) || 1;
+      const ux = tx / tlen;
+      const uz = tz / tlen;
+      const WING = 34;
+      const COS = Math.cos(2.5); // ~143deg: wings sweep back from the tip
+      const SIN = Math.sin(2.5);
+      emitSegment(tip.x + WING * (ux * COS - uz * SIN), tip.z + WING * (ux * SIN + uz * COS), tip.x, tip.z, 1);
+      emitSegment(tip.x + WING * (ux * COS + uz * SIN), tip.z + WING * (-ux * SIN + uz * COS), tip.x, tip.z, 1);
+    }
+
     const formation = identified ? buildArmyFormation(army.composition?.groups ?? []) : [];
     const compositionRows = identified ? buildArmyCompositionRows(army.composition?.groups ?? []) : [];
     armyMarkerScratch[cursor] = army.x;
@@ -784,17 +1172,49 @@ function syncArmyMarkers(
 
     if (identified && formation.length) {
       const target = army.moveOrder;
-      const heading = target ? Math.atan2(target.x - army.x, -(target.z - army.z)) : 0;
+      const marching = Boolean(target);
+      // Head along the actual first leg of the authoritative road route (own
+      // armies only) so the column sits on the road even where it bends;
+      // fall back to a straight line at the destination.
+      const route = army.moveRoute;
+      const worldW = renderer.manifest?.world.width ?? 0;
+      const previousHeading = previousArmyHeading.get(army.id);
+      // A stopped army keeps its last facing; a marching one aims a little way
+      // along the road and eases toward it, so corners are a turn, not a snap.
+      const desiredHeading = routeLookaheadHeading(route, target, army.x, army.z, worldW)
+        ?? previousHeading ?? 0;
+      const heading = previousHeading === undefined
+        ? desiredHeading
+        : dampAngle(previousHeading, desiredHeading, marching ? 0.4 : 0.25);
+      previousArmyHeading.set(army.id, heading);
       const forwardX = Math.sin(heading);
       const forwardZ = -Math.cos(heading);
       const rightX = Math.cos(heading);
       const rightZ = Math.sin(heading);
-      const slots: ReadonlyArray<readonly [number, number]> = [
-        [-11, -9], [11, -9], [-11, 9], [11, 9],
+      // Two layouts, 0 A.D.-style: a tight box at rest, and a narrow column
+      // strung along the heading while marching so the stack hugs the road
+      // instead of sprawling across it. A small deterministic per-unit jitter
+      // (0 A.D. calls it "sloppiness") keeps it from reading as a rigid grid.
+      // Tight so the stack reads as one force sitting on the road, not a mob
+      // sprawled across it. Marching = a near-single-file column along the
+      // heading with barely any lateral spread; resting = a small loose clump.
+      const restSlots: ReadonlyArray<readonly [number, number]> = [
+        [-3, -2.6], [3, -1.8], [-2.4, 3], [2.4, 2.8],
       ];
+      const marchSlots: ReadonlyArray<readonly [number, number]> = [
+        [0, 5.5], [-1.4, 1], [1.4, -2.5], [-0.5, -6],
+      ];
+      const slots = marching ? marchSlots : restSlots;
+      const jitterR = marching ? 0.9 : 1.9;
+      const jitterF = marching ? 2.8 : 2.2;
+      const armyJitter = hashUnit(army.id);
       for (let index = 0; index < formation.length && modelCount < 4_096; index += 1) {
         const group = formation[index];
-        const [right, forward] = slots[index];
+        const [slotR, slotF] = slots[index];
+        const jr = (hashUnit(`${army.id}:${index}:r`) - 0.5) * jitterR;
+        const jf = (hashUnit(`${army.id}:${index}:f`) - 0.5) * jitterF + (armyJitter - 0.5) * 1.5;
+        const right = slotR + jr;
+        const forward = slotF + jf;
         let x = army.x + rightX * right + forwardX * forward;
         if (renderer.manifest?.world.width) x = ((x % renderer.manifest.world.width) + renderer.manifest.world.width) % renderer.manifest.world.width;
         const z = army.z + rightZ * right + forwardZ * forward;
@@ -816,7 +1236,10 @@ function syncArmyMarkers(
         armyModelScratch[modelCursor + 8] = previousX;
         armyModelScratch[modelCursor + 9] = previous.z;
         armyModelScratch[modelCursor + 10] = 0;
-        armyModelScratch[modelCursor + 11] = 0;
+        // Facing before this update — the shader eases from it to slot +7 over
+        // the same window it uses to slide the model, so the turn is smooth
+        // between the 2.5 Hz marker syncs.
+        armyModelScratch[modelCursor + 11] = previousHeading ?? heading;
         previousArmyModelPositions.set(modelKey, { x, z });
         modelCursor += 12;
         modelCount += 1;
@@ -826,7 +1249,55 @@ function syncArmyMarkers(
   for (const key of previousArmyModelPositions.keys()) {
     if (!activeModelKeys.has(key)) previousArmyModelPositions.delete(key);
   }
+  const activeArmyIds = new Set<string>();
+  for (const key of activeModelKeys) activeArmyIds.add(key.slice(0, key.lastIndexOf(':')));
+  for (const id of previousArmyHeading.keys()) {
+    if (!activeArmyIds.has(id)) previousArmyHeading.delete(id);
+  }
+  // Rally route for the selected production city only: city node -> rally point
+  // along the real road network (server-derived), plus a chevron at the rally
+  // end. Hidden the moment the city is deselected.
+  if (selectedProvinceId !== null && session.ownsProvince(selectedProvinceId)) {
+    const rally = session.rallyPoint(selectedProvinceId);
+    const rroute = rally?.route;
+    if (rroute && rroute.length >= 2) {
+      const worldW = renderer.manifest?.world.width ?? 0;
+      const emitRally = (ax: number, az: number, bx: number, bz: number, arrow: number): void => {
+        if (routeCount >= 4_096) return;
+        routeScratch[routeCursor] = ax;
+        routeScratch[routeCursor + 1] = az;
+        routeScratch[routeCursor + 2] = bx;
+        routeScratch[routeCursor + 3] = bz;
+        routeScratch[routeCursor + 4] = 2; // rally colour flag
+        routeScratch[routeCursor + 5] = 0;
+        routeScratch[routeCursor + 6] = 0;
+        routeScratch[routeCursor + 7] = arrow;
+        routeCursor += 8;
+        routeCount += 1;
+      };
+      for (let i = 0; i + 1 < rroute.length; i += 1) {
+        emitRally(rroute[i].x, rroute[i].z, rroute[i + 1].x, rroute[i + 1].z, 0);
+      }
+      const tip = rroute[rroute.length - 1];
+      const prev = rroute[rroute.length - 2];
+      let tdx = tip.x - prev.x;
+      if (worldW) {
+        if (tdx > worldW / 2) tdx -= worldW;
+        else if (tdx < -worldW / 2) tdx += worldW;
+      }
+      const tdz = tip.z - prev.z;
+      const tl = Math.hypot(tdx, tdz) || 1;
+      const rx = tdx / tl;
+      const rz = tdz / tl;
+      const W = 30;
+      const C = Math.cos(2.5);
+      const S = Math.sin(2.5);
+      emitRally(tip.x + W * (rx * C - rz * S), tip.z + W * (rx * S + rz * C), tip.x, tip.z, 1);
+      emitRally(tip.x + W * (rx * C + rz * S), tip.z + W * (-rx * S + rz * C), tip.x, tip.z, 1);
+    }
+  }
   renderer.setArmyMarkers(armyMarkerScratch, count, armyPickScratch, armyModelScratch, modelCount);
+  renderer.setOrderRoutes(routeScratch, routeCount);
 }
 
 function showGameConfirmation(title: string, message: string): Promise<boolean> {
@@ -924,6 +1395,24 @@ function chooseSplitGroups(session: RemoteGameSession, armyId: string): Promise<
 
 // ---- army selection + orders --------------------------
 
+/** A one-shot red reticle that snaps onto the click point and fades. Pure DOM,
+ *  no renderer pipeline — the immediate "acknowledged" cue for an attack order. */
+let attackFlashEl: HTMLDivElement | null = null;
+function flashAttackTarget(clientX: number, clientY: number): void {
+  if (!attackFlashEl) {
+    attackFlashEl = document.createElement('div');
+    attackFlashEl.className = 'ifg-attack-flash';
+    attackFlashEl.setAttribute('aria-hidden', 'true');
+    document.body.append(attackFlashEl);
+  }
+  const el = attackFlashEl;
+  el.style.left = `${clientX}px`;
+  el.style.top = `${clientY}px`;
+  el.classList.remove('is-firing');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('is-firing');
+}
+
 function handleMapClick(
   renderer: WorldRenderer, session: RemoteGameSession, clientX: number, clientY: number,
 ): boolean {
@@ -935,7 +1424,10 @@ function handleMapClick(
       const result = targetingMode === 'split' && pendingSplitGroups
         ? session.orderSplit(selectedArmyId, pendingSplitGroups, ground[0], ground[1])
         : session.orderMove(selectedArmyId, ground[0], ground[1], 'move');
-      if (!result.ok) pushNotification('warning', targetingMode === 'split' ? 'Split' : 'Move order', result.reason ?? 'No route.');
+      if (!result.ok) {
+        const { title, body } = describeOrderFailure(result.reason ?? 'No route.');
+        pushNotification('warning', targetingMode === 'split' ? 'Split failed' : title, body);
+      }
       awaitingMoveTarget = false;
       targetingMode = null;
       pendingSplitGroups = null;
@@ -946,16 +1438,43 @@ function handleMapClick(
   }
   if (targetingMode === 'attack' && selectedArmyId && session.ownsArmy(selectedArmyId)) {
     const targetArmyId = renderer.pickArmyAt(clientX, clientY);
-    const result = targetArmyId && targetArmyId !== selectedArmyId
-      ? session.orderAttackArmy(selectedArmyId, targetArmyId)
+    const pickedTarget = targetArmyId && targetArmyId !== selectedArmyId ? session.army(targetArmyId) : null;
+    if (pickedTarget && !pickedTarget.own && pickedTarget.contact !== 'visible') {
+      pushNotification('warning', 'Target not identified',
+        'Only a force in direct view can be attacked. Move a unit into contact first.');
+      targetingMode = null;
+      refreshSelectedArmy(session);
+      return true;
+    }
+    // Fired once the server accepts the order — which is *after* any "Declare
+    // war?" confirmation but still before combat opens. Do not run it
+    // optimistically: a cancelled war declaration must not leave the player
+    // told their attack was "issued". Reticle on the target, an order cue and
+    // a toast; the optimistic status mutation already reads "advancing".
+    const acknowledgeAttack = (): void => {
+      flashAttackTarget(clientX, clientY);
+      void audio.playUiCue('confirm');
+      pushNotification('information', 'Attack order issued',
+        'Your force is advancing to engage.');
+    };
+    const result = targetArmyId && targetArmyId !== selectedArmyId && pickedTarget?.contact === 'visible'
+      ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
       : (() => {
         const provinceId = renderer.provinceIdAt(clientX, clientY);
-        return provinceId >= 0
-          ? session.orderAttackProvince(selectedArmyId!, provinceId)
-          : { ok: false as const, reason: 'Select an army or province center.' };
+        if (provinceId < 0) {
+          return { ok: false as const, reason: 'Aim at an enemy army or a province centre to attack.' };
+        }
+        if (session.ownsProvince(provinceId)) {
+          return { ok: false as const, reason: "That is your own territory — you can't attack it." };
+        }
+        return session.orderAttackProvince(selectedArmyId!, provinceId, acknowledgeAttack);
       })();
-    if (!result.ok) pushNotification('warning', 'Attack order', result.reason ?? 'Invalid target.');
+    if (!result.ok) {
+      const { title, body } = describeOrderFailure(result.reason ?? 'Invalid target.');
+      pushNotification('warning', title, body);
+    }
     targetingMode = null;
+    syncArmyMarkers(session, renderer);
     refreshSelectedArmy(session);
     return true;
   }
@@ -994,6 +1513,80 @@ function handleMapClick(
   // 3. Nothing — let province selection proceed, and drop any army selection.
   if (selectedArmyId) deselectArmy();
   return false;
+}
+
+/**
+ * Turn a raw server/engine rejection reason into a concise headline + detail so
+ * the player learns *why* an order failed instead of seeing "Command failed".
+ */
+function describeOrderFailure(reason: string): { title: string; body?: string } {
+  const r = reason.toLowerCase();
+  if (r.includes('not your army')) return { title: 'Not your army', body: 'You can only order armies you command.' };
+  if (r.includes('not your province')) return { title: 'Not your province', body: reason };
+  if (r.includes('own force') || r.includes('own territory') || r.includes('already hold that province')) {
+    return { title: 'Invalid target', body: 'You cannot attack your own forces or territory.' };
+  }
+  if (r.includes('close combat') || r.includes('is engaged')) return { title: 'Army is fighting', body: 'It cannot take new orders until the battle ends.' };
+  if (r.includes('retreating')) return { title: 'Army is retreating', body: 'Wait for it to disengage before giving new orders.' };
+  if (r.includes('war declaration')) return { title: 'War not declared', body: 'That route crosses a country you are not at war with.' };
+  if (r.includes('separate landmass')) return { title: 'Unreachable', body: reason };
+  if (r.includes('off the road network') || r.includes('not on land')) return { title: 'No path there', body: reason };
+  if (r.includes('no legal route') || r.includes('no land route')) return { title: 'No route', body: reason };
+  if (r.includes('already there')) return { title: 'Already there', body: 'The army is already at that location.' };
+  if (r.includes('retreat direction')) return { title: 'Bad retreat', body: reason };
+  if (r.includes('not in close combat')) return { title: 'Not in combat', body: 'Only an engaged army can be ordered to retreat.' };
+  return { title: 'Order rejected', body: reason };
+}
+
+/**
+ * Right-click order for the selected army: attack a visible hostile army under
+ * the cursor, otherwise move to the ground point. War confirmation and routing
+ * rules are the same ones the armed Move/Attack buttons use — this is just a
+ * faster way to reach them.
+ */
+function handleMapCommand(
+  renderer: WorldRenderer, session: RemoteGameSession, clientX: number, clientY: number,
+): boolean {
+  if (!selectedArmyId || !session.ownsArmy(selectedArmyId)) return false;
+  // A direct order supersedes any armed targeting mode.
+  targetingMode = null;
+  awaitingMoveTarget = false;
+  pendingSplitGroups = null;
+
+  const orderFeedback = (reason: string): void => {
+    const { title, body } = describeOrderFailure(reason);
+    pushNotification('warning', title, body);
+  };
+
+  const targetArmyId = renderer.pickArmyAt(clientX, clientY);
+  if (targetArmyId && targetArmyId !== selectedArmyId) {
+    const target = session.army(targetArmyId);
+    if (target && !target.own && target.contact === 'visible') {
+      const result = session.orderAttackArmy(selectedArmyId, targetArmyId);
+      if (!result.ok) orderFeedback(result.reason ?? 'Invalid target.');
+      refreshSelectedArmy(session);
+      if (activeRenderer) syncArmyMarkers(session, activeRenderer);
+      return true;
+    }
+    if (target && !target.own) {
+      // An unidentified contact: don't strike it (that would confirm its exact
+      // position) and don't silently march onto it either.
+      pushNotification('warning', 'Target not identified',
+        'Only a force in direct view can be attacked. Move a unit into contact first.');
+      return true;
+    }
+  }
+
+  const ground = renderer.groundPointAt(clientX, clientY);
+  if (!ground) {
+    pushNotification('warning', 'No path there', 'Right-click on your own territory or a discovered area to move.');
+    return true;
+  }
+  const result = session.orderMove(selectedArmyId, ground[0], ground[1], 'move');
+  if (!result.ok) orderFeedback(result.reason ?? 'No route.');
+  refreshSelectedArmy(session);
+  if (activeRenderer) syncArmyMarkers(session, activeRenderer);
+  return true;
 }
 
 function selectArmy(session: RemoteGameSession, armyId: string): void {
@@ -1144,6 +1737,11 @@ function projectSelectedProvince(
     resources: summary.resources,
     isOwn: summary.isOwn,
     coastal: false,
+    buildings: summary.isOwn
+      ? ((session.state.provinceBuildings[provinceId] as {
+          barracks: number; tankPlant: number; ordnance: number;
+        } | undefined) ?? { barracks: 0, tankPlant: 0, ordnance: 0 })
+      : null,
     deposits: summary.resources
       ? { controlled: summary.controlled, extracting: summary.extracting }
       : null,
@@ -1152,11 +1750,12 @@ function projectSelectedProvince(
           id, name: gameUnitLabel(id), costLabel: unitCostLabel(id),
         }))
       : [],
-    // Only the head order is being worked; tag it with its % so the player can
-    // see how close the next unit / building is.
+    // Only the head order is being worked; it carries live progress/eta.
     queue: summary.isOwn
-      ? (session.state.productionQueues[provinceId] as Array<{ unitTypeId: string; progressHours: number; totalHours: number }> ?? []).map((o, i) =>
-          i === 0 ? `${gameUnitLabel(o.unitTypeId)} · ${orderPercent(o)}%` : gameUnitLabel(o.unitTypeId))
+      ? (session.state.productionQueues[provinceId] as Array<{ unitTypeId: string; progressHours: number; totalHours: number }> ?? []).map((o, i) => ({
+          id: o.unitTypeId, label: gameUnitLabel(o.unitTypeId), active: i === 0,
+          progress: i === 0 ? orderPercent(o) / 100 : 0, etaSeconds: i === 0 ? orderEtaSeconds(o) : 0,
+        }))
       : [],
     buildable: summary.isOwn
       ? session.buildable(provinceId).map(({ id, affordable }) => ({
@@ -1164,8 +1763,10 @@ function projectSelectedProvince(
         }))
       : [],
     construction: summary.isOwn
-      ? (session.state.constructionQueues[provinceId] as Array<{ buildingId: BuildingId; progressHours: number; totalHours: number }> ?? []).map((o, i) =>
-          i === 0 ? `${buildingLabel(o.buildingId)} · ${orderPercent(o)}%` : buildingLabel(o.buildingId))
+      ? (session.state.constructionQueues[provinceId] as Array<{ buildingId: BuildingId; progressHours: number; totalHours: number }> ?? []).map((o, i) => ({
+          id: o.buildingId, label: buildingLabel(o.buildingId), active: i === 0,
+          progress: i === 0 ? orderPercent(o) / 100 : 0, etaSeconds: i === 0 ? orderEtaSeconds(o) : 0,
+        }))
       : [],
     rally: summary.isOwn ? session.rallyPoint(provinceId) : null,
     awaitingRallyTarget: summary.isOwn && awaitingRallyTarget && selectedProvinceId === provinceId,
@@ -1178,6 +1779,40 @@ function refreshSelectedProvince(session: RemoteGameSession): void {
   if (selectedProvinceId === null) return;
   if (uiStore.get().selectedProvince?.id !== selectedProvinceId) return;
   uiStore.patch({ selectedProvince: projectSelectedProvince(session, selectedProvinceId) });
+}
+
+/** Global spacing so several battles opening at once cannot stack the alert
+ *  cue into a wall of noise (the server already fires 'engaged' once per
+ *  battle, so this is the only extra guard needed). */
+let lastCombatAlertAt = 0;
+function maybePlayCombatAlert(): void {
+  const now = Date.now();
+  if (now - lastCombatAlertAt < 3_000) return;
+  lastCombatAlertAt = now;
+  void audio.playCombatAlert();
+}
+
+/**
+ * Reconcile one persistent battle marker per engaged cluster (armies grouped to
+ * a ~70u grid so two stacks trading fire share a marker). The marker's compass
+ * direction points at the nearest engaged enemy stack.
+ */
+function syncCombatMarkers(session: RemoteGameSession): void {
+  const engaged = Object.values(session.state.armies).filter((a) => a.status === 'engaged');
+  const seen = new Map<string, { id: string; x: number; z: number; intensity: number; dir: number }>();
+  for (const a of engaged) {
+    const key = `${Math.round(a.x / 70)}:${Math.round(a.z / 70)}`;
+    if (seen.has(key)) continue;
+    let dir = Number.NaN;
+    let best = Number.POSITIVE_INFINITY;
+    for (const other of engaged) {
+      if (other === a || other.ownerCountryId === a.ownerCountryId) continue;
+      const d = (other.x - a.x) ** 2 + (other.z - a.z) ** 2;
+      if (d < best) { best = d; dir = Math.atan2(other.z - a.z, other.x - a.x); }
+    }
+    seen.set(key, { id: key, x: a.x, z: a.z, intensity: 1, dir });
+  }
+  combatEffects.syncBattles([...seen.values()]);
 }
 
 function drainSessionEvents(session: RemoteGameSession): void {
@@ -1194,14 +1829,61 @@ function drainSessionEvents(session: RemoteGameSession): void {
       'The site is operational.');
     if (selectedProvinceId === done.provinceId) refreshSelectedProvince(session);
   }
+  // A world spot for a fight between two countries: the first engaged stack we
+  // can see that belongs to either side. null when neither is visible.
+  const battleSpotFor = (a: number, b: number): { x: number; z: number } | null => {
+    for (const army of Object.values(session.state.armies)) {
+      if (army.status !== 'engaged') continue;
+      if (army.ownerCountryId === a || army.ownerCountryId === b) return { x: army.x, z: army.z };
+    }
+    return null;
+  };
+  const fxDensity = effectDensityForDistance(lastCombatCameraDistance);
   for (const ev of session.pendingCombat.splice(0)) {
     // Only fights the player is in are player news. 'engaged' is gated to the
     // moment contact is made, so it fires once per battle, not every tick.
     if (ev.attacker !== player && ev.defender !== player) continue;
     const mine = ev.defender === player;
+    // World-space visuals for the same event, near-camera only (LOD gated).
+    if (fxDensity > 0) {
+      const atkSpot = battleSpotFor(ev.attacker, ev.attacker);
+      const defSpot = battleSpotFor(ev.defender, ev.defender) ?? battleSpotFor(ev.attacker, ev.defender);
+      const spot = defSpot ?? atkSpot;
+      const dir = atkSpot && defSpot
+        ? Math.atan2(defSpot.z - atkSpot.z, defSpot.x - atkSpot.x)
+        : Number.NaN;
+      if (spot) {
+        if (ev.kind === 'engaged') {
+          combatEffects.spawnVolley('generic', spot.x, spot.z, Number.isFinite(dir) ? dir : 0);
+          if (mine) combatEffects.spawn(EFFECT_KIND.targetFlash, spot.x, spot.z, { scale: 1.1 });
+        } else if (ev.kind === 'volley') {
+          combatEffects.spawnVolley('infantry', spot.x, spot.z, Number.isFinite(dir) ? dir : 0);
+        } else if (ev.kind === 'bombardment') {
+          if (atkSpot) {
+            combatEffects.spawnVolley('artillery', atkSpot.x, atkSpot.z, Number.isFinite(dir) ? dir : 0);
+          }
+          const impactAt = defSpot ?? spot;
+          window.setTimeout(() => {
+            combatEffects.spawn(EFFECT_KIND.explosion, impactAt.x, impactAt.z, { scale: 1.3 });
+            combatEffects.spawn(EFFECT_KIND.smoke, impactAt.x, impactAt.z, { scale: 1.2, lifetimeMs: 2_400 });
+          }, 520);
+        } else if (ev.kind === 'destroyed') {
+          combatEffects.spawn(EFFECT_KIND.explosion, spot.x, spot.z, { scale: 1.5 });
+          combatEffects.spawn(EFFECT_KIND.smoke, spot.x, spot.z, { scale: 1.6, lifetimeMs: 2_800 });
+        }
+      }
+    }
     if (ev.kind === 'engaged') {
-      pushNotification('combat', mine ? 'Under attack' : 'Contact',
-        mine ? 'Enemy forces have engaged your line.' : 'Your forces have made contact.');
+      // Locate the fight on one of the player's engaged stacks so the toast can
+      // jump the camera there. 'engaged' fires once per battle server-side, so
+      // the only client-side guard needed is a global alert-sound cooldown.
+      const spot = mine
+        ? Object.values(session.state.armies).find((a) => a.own && a.status === 'engaged')
+        : undefined;
+      pushNotification('combat', mine ? 'Force under attack' : 'Contact',
+        mine ? 'Enemy forces have engaged your line.' : 'Your forces have made contact.',
+        spot ? { focus: { x: spot.x, z: spot.z } } : {});
+      if (mine) maybePlayCombatAlert();
     } else if (ev.kind === 'retreat') {
       pushNotification('combat', mine ? 'Forces withdrawing' : 'Enemy in retreat',
         mine ? 'A battered stack is pulling back to friendly ground.'
@@ -1239,12 +1921,57 @@ function drainSessionEvents(session: RemoteGameSession): void {
   }
 }
 
-function pushNotification(kind: GameNotification['kind'], title: string, body?: string): void {
-  const notifications = [...uiStore.get().notifications, {
-    id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    kind, title, body, at: Date.now(),
-  }].slice(-4);
+/** "Now Playing" chip. Driven only by MusicDirector.onTrackChange, which fires
+ *  after playback actually succeeds — so a blocked autoplay never shows a title. */
+const nowPlayingEl = document.getElementById('now-playing');
+const nowPlayingTitleEl = document.getElementById('now-playing-title');
+let nowPlayingHideTimer: number | undefined;
+function updateNowPlaying(title: string | null): void {
+  if (!nowPlayingEl || !nowPlayingTitleEl) return;
+  if (nowPlayingHideTimer !== undefined) { window.clearTimeout(nowPlayingHideTimer); nowPlayingHideTimer = undefined; }
+  if (!title) { nowPlayingEl.hidden = true; return; }
+  nowPlayingTitleEl.textContent = title;
+  nowPlayingEl.hidden = false;
+  nowPlayingEl.classList.add('is-changing');
+  window.setTimeout(() => nowPlayingEl.classList.remove('is-changing'), 2_600);
+}
+
+/** id -> auto-dismiss timer handle. Cleared on manual dismiss and on teardown. */
+const notificationTimers = new Map<string, number>();
+
+function clearNotificationTimer(id: string): void {
+  const timer = notificationTimers.get(id);
+  if (timer !== undefined) { window.clearTimeout(timer); notificationTimers.delete(id); }
+}
+
+/** Remove one notification by id (not by title) and clear its timer. */
+function removeNotification(id: string): void {
+  clearNotificationTimer(id);
+  const next = uiStore.get().notifications.filter((entry) => entry.id !== id);
+  if (next.length !== uiStore.get().notifications.length) uiStore.patch({ notifications: next });
+}
+
+function clearAllNotificationTimers(): void {
+  for (const timer of notificationTimers.values()) window.clearTimeout(timer);
+  notificationTimers.clear();
+}
+
+function pushNotification(
+  kind: GameNotification['kind'], title: string, body?: string,
+  options: { sticky?: boolean; focus?: { x: number; z: number } } = {},
+): void {
+  const id = `n-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const sticky = isSticky(kind, options.sticky);
+  const previous = uiStore.get().notifications;
+  const notifications = [...previous, { id, kind, title, body, at: Date.now(), sticky, focus: options.focus }].slice(-4);
+  // Anything the last-4 cap just dropped no longer needs its auto-dismiss timer.
+  const kept = new Set(notifications.map((entry) => entry.id));
+  for (const entry of previous) if (!kept.has(entry.id)) clearNotificationTimer(entry.id);
   uiStore.patch({ notifications });
+  const delay = autoDismissDelay(kind, options.sticky);
+  if (delay !== null) {
+    notificationTimers.set(id, window.setTimeout(() => removeNotification(id), delay));
+  }
 }
 
 /**
@@ -1257,6 +1984,9 @@ function playerResourceLines(session: RemoteGameSession): ResourceLine[] {
   const country = session.ownCountry;
   const s = country.stockpile;
   const inc = country.income;
+  // Live extraction rate per game hour for stone/metal/oil (0 when nothing is
+  // being extracted). Server-projected; `?? 0` covers an older projection.
+  const ext = (country.extraction ?? {}) as Partial<Record<'stone' | 'metal' | 'oil', number>>;
   const line = (
     id: ResourceLine['id'], label: string, value: number, delta?: number,
   ): ResourceLine => ({
@@ -1267,10 +1997,10 @@ function playerResourceLines(session: RemoteGameSession): ResourceLine[] {
     line('money', 'Funds', s.funds, inc.funds),
     line('manpower', 'Manpower', s.manpower, inc.manpower),
     line('food', 'Food', s.food, inc.food),
-    // stone/metal/oil have no passive rate — physical extraction only.
-    line('stone', 'Stone', s.stone),
-    line('metal', 'Metal', s.metal),
-    line('oil', 'Oil', s.oil),
+    // stone/metal/oil have no passive income — the rate is current extraction.
+    line('stone', 'Stone', s.stone, ext.stone ?? 0),
+    line('metal', 'Metal', s.metal, ext.metal ?? 0),
+    line('oil', 'Oil', s.oil, ext.oil ?? 0),
   ];
 }
 
@@ -1356,6 +2086,18 @@ function updateDiagnostics(stats: FrameStats): void {
     activeRenderer
       ? `graphics  ${activeRenderer.graphicsQuality} @ ${activeRenderer.effectiveRenderScale.toFixed(2)}x  ${canvas.width}x${canvas.height}`
       : 'graphics  —',
+    activeRenderer
+      ? (() => {
+        const q = activeRenderer.qualityReadout;
+        return `preset    prop ${q.propDistanceScale.toFixed(2)}x  lod ${q.terrainLodScale.toFixed(2)}x  detail ${q.detailFactor.toFixed(2)}  furniture ${q.furniture ? 'on' : 'off'}`;
+      })()
+      : 'preset    —',
+    activeRenderer
+      ? (() => {
+        const q = activeRenderer.qualityReadout;
+        return `budgets   trees ${q.treeBudget.toLocaleString()}  bldg ${q.buildingBudget.toLocaleString()}  3D army <${q.armyModelRange}u (${q.armyModelCount} now)`;
+      })()
+      : 'budgets   —',
     `trees     ${stats.trees.toLocaleString()}`,
     `buildings ${stats.buildings.toLocaleString()}`,
     `roads     ${stats.emittedRoads.toLocaleString()} + ${stats.hiddenRoads} dotted`,

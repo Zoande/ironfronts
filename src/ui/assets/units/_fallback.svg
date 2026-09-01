@@ -1,0 +1,15 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Unit">
+  <defs>
+    <linearGradient id="u-fb-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20261b"/>
+      <stop offset="0.62" stop-color="#12150e"/>
+      <stop offset="1" stop-color="#0b0d08"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#u-fb-bg)"/>
+  <path d="M0 70h100v30H0z" fill="#0e100c" opacity="0.55"/>
+  <ellipse cx="50" cy="86" rx="30" ry="6" fill="#000" opacity="0.32"/>
+  <rect x="30" y="34" width="40" height="40" rx="3" fill="#5b5f4a" stroke="#83876a" stroke-width="2"/>
+  <path d="M30 34 L70 74 M70 34 L30 74" stroke="#2f3327" stroke-width="3"/>
+  <circle cx="50" cy="54" r="7" fill="#2a2e24"/>
+</svg>

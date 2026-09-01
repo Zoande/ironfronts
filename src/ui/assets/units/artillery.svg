@@ -1,0 +1,32 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Artillery">
+  <defs>
+    <linearGradient id="u-art-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20261b"/>
+      <stop offset="0.62" stop-color="#12150e"/>
+      <stop offset="1" stop-color="#0b0d08"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#u-art-bg)"/>
+  <path d="M0 70h100v30H0z" fill="#0e100c" opacity="0.55"/>
+  <ellipse cx="52" cy="83" rx="40" ry="7" fill="#000" opacity="0.4"/>
+  <!-- muzzle flash hint -->
+  <path d="M84 30 l12 -6 l-9 9 l11 1 l-13 4 l4 10 l-9 -8 l-4 7 l-1 -11z" fill="#c9603f" opacity="0.55"/>
+  <!-- trail legs -->
+  <path d="M18 80 L52 58" stroke="#3c4033" stroke-width="5" stroke-linecap="round"/>
+  <path d="M30 84 L54 58" stroke="#4a4e3d" stroke-width="5" stroke-linecap="round"/>
+  <path d="M15 80 h8 v4 h-9z M27 84 h8 v4 h-9z" fill="#20241b"/>
+  <!-- wheels -->
+  <circle cx="46" cy="74" r="12" fill="#1b1a15"/>
+  <circle cx="46" cy="74" r="5" fill="#484a40"/>
+  <g stroke="#33352c" stroke-width="2"><path d="M46 62v24M34 74h24M39 67l14 14M53 67l-14 14"/></g>
+  <!-- carriage + gun shield -->
+  <path d="M40 56 q10 -8 22 -2 l2 12 q-14 5 -28 0z" fill="#6a6e55"/>
+  <path d="M40 56 q10 -8 22 -2 l1 5 q-12 -5 -23 0z" fill="#82866a"/>
+  <path d="M44 50 h6 v10 h-6z" fill="#565a43"/>
+  <!-- breech + long raised barrel -->
+  <rect x="52" y="44" width="12" height="10" rx="2" fill="#4a4e3a"/>
+  <path d="M58 50 L92 30 l2 4 L60 55z" fill="#26251d"/>
+  <path d="M90 31 l6 -3.4 l2 3.6 l-6 3.6z" fill="#141310"/>
+  <!-- recoil cylinder -->
+  <path d="M56 52 L84 36" stroke="#33352a" stroke-width="3" stroke-linecap="round"/>
+</svg>

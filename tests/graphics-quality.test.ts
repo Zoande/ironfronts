@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { capVisibleInstances, type PropVisibility } from '../src/chunk-visibility';
 import type { Mesh } from '../src/scene-meshes';
@@ -64,6 +65,32 @@ describe('graphics quality presets', () => {
     expect(isQualityLevel('ultra')).toBe(true);
     expect(isQualityLevel('LOW')).toBe(false);
     expect(isQualityLevel(2)).toBe(false);
+  });
+
+  it('makes every adjacent preset materially different on several real knobs', () => {
+    const knobs = (l: typeof QUALITY_LEVELS[number]) => {
+      const p = QUALITY_PRESETS[l];
+      return [p.renderScale, p.propDistanceScale, p.treeInstanceBudget,
+        p.buildingInstanceBudget, p.terrainLodScale, p.detailFactor];
+    };
+    for (let i = 1; i < QUALITY_LEVELS.length; i += 1) {
+      const a = knobs(QUALITY_LEVELS[i - 1]);
+      const b = knobs(QUALITY_LEVELS[i]);
+      const changed = a.filter((v, k) => v !== b[k]).length;
+      expect(changed, `${QUALITY_LEVELS[i - 1]} -> ${QUALITY_LEVELS[i]}`).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it('exposes the resolved preset knobs + gated counts through the renderer readout', () => {
+    const renderer = readFileSync(new URL('../src/renderer.ts', import.meta.url), 'utf8');
+    expect(renderer).toContain('get qualityReadout()');
+    expect(renderer).toContain('armyModelRange');
+    // the 3D-army LOD swap distance is preset-scaled, not a bare constant
+    expect(renderer).toContain('this.camera.distance < this.armyModelDrawDistance');
+    expect(renderer).toContain('ARMY_MODEL_RANGE_BASE * this.qualityPreset.propDistanceScale');
+    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    expect(main).toContain('activeRenderer.qualityReadout');
+    expect(main).toMatch(/preset\s+prop .*lod .*detail .*furniture/);
   });
 });
 

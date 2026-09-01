@@ -63,6 +63,22 @@ describe('fog of war visibility', () => {
     expect(computeArmyVisibility(s, world, 1).get('e')).toBe('visible');
   });
 
+  it('does not leak an enemy stack sitting in its own land with no friendly eyes nearby', () => {
+    // Greek province centre used to cast a 130u contact ring that crossed the
+    // border; an enemy stack deep in country B must now be hidden.
+    const s = state(true, [army('p', 1, 0, 0), army('e', 2, 3_000, 0)]);
+    s.provinceOwners = { 7: 1 };
+    const bordered: WorldData = { ...world, provinceAt: (x) => (x > 2_500 ? 9 : 7) };
+    expect(computeArmyVisibility(s, bordered, 1).get('e')).toBe('hidden');
+  });
+
+  it('reveals a foreign stack that walks onto ground the viewer owns', () => {
+    const s = state(true, [army('p', 1, 0, 0), army('e', 2, 3_000, 0)]);
+    s.provinceOwners = { 9: 1 };
+    const owned: WorldData = { ...world, provinceAt: () => 9 };
+    expect(computeArmyVisibility(s, owned, 1).get('e')).toBe('contact');
+  });
+
   it('foreignDetailVisible: own always, others only without fog', () => {
     expect(foreignDetailVisible(state(true, []), 1, 1)).toBe(true);
     expect(foreignDetailVisible(state(true, []), 1, 2)).toBe(false);

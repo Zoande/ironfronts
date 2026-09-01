@@ -14,7 +14,9 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: stri
 }
 
 export function buildNotification(
-  notification: GameNotification, dismissNotification: (id: string) => void,
+  notification: GameNotification,
+  dismissNotification: (id: string) => void,
+  focusWorld?: (x: number, z: number) => void,
 ): HTMLElement {
   const item = element('article', 'ifg-notify__item');
   item.dataset.kind = notification.kind;
@@ -25,7 +27,20 @@ export function buildNotification(
   dismiss.type = 'button';
   dismiss.setAttribute('aria-label', 'Dismiss');
   dismiss.append(createIcon('close'));
-  dismiss.addEventListener('click', () => dismissNotification(notification.id));
-  item.append(createIcon(NOTE_ICON[notification.kind], 'ifg-notify__icon'), body, dismiss);
+  dismiss.addEventListener('click', (event) => { event.stopPropagation(); dismissNotification(notification.id); });
+  const kindIcon = notification.kind === 'combat' && notification.focus ? 'note-attacked' : NOTE_ICON[notification.kind];
+  item.append(createIcon(kindIcon, 'ifg-notify__icon'), body, dismiss);
+  // A located event (an attack on your line) re-centres the camera on click.
+  if (notification.focus && focusWorld) {
+    const { x, z } = notification.focus;
+    item.classList.add('is-locatable');
+    item.setAttribute('role', 'button');
+    item.tabIndex = 0;
+    item.title = 'Jump to this battle';
+    item.addEventListener('click', () => focusWorld(x, z));
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); focusWorld(x, z); }
+    });
+  }
   return item;
 }

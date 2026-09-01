@@ -177,7 +177,9 @@ export class StrategyCamera {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
-    if (event.button !== 0 && event.button !== 2) return;
+    // 0 = left (pan), 1 = middle (orbit). Right (2) is left for the game's
+    // order system; touch is handled separately below.
+    if (event.pointerType !== 'touch' && event.button !== 0 && event.button !== 1) return;
     if (event.pointerType === 'touch') {
       event.preventDefault();
       this.activeTouches.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -191,7 +193,10 @@ export class StrategyCamera {
       }
       return;
     }
-    this.dragMode = event.button === 2 ? 'orbit' : 'pan';
+    // Left = pan, middle = orbit. Right-click is reserved for issuing army
+    // orders (see main.ts) and must never move the camera.
+    event.preventDefault();
+    this.dragMode = event.button === 1 ? 'orbit' : 'pan';
     this.lastPointer = [event.clientX, event.clientY];
     this.canvas?.setPointerCapture?.(event.pointerId);
   };
@@ -235,7 +240,9 @@ export class StrategyCamera {
     this.lastPointer = [event.clientX, event.clientY];
     if (this.dragMode === 'orbit') {
       this.yaw -= dx * 0.0045;
-      this.pitch = clamp(this.pitch + dy * 0.0035, 0.43, 1.23);
+      // Upper bound raised so the player can orbit up to the near-top-down
+      // strategic start view (~1.45 rad ≈ 83°); a true 90° degenerates picking.
+      this.pitch = clamp(this.pitch + dy * 0.0035, 0.43, 1.45);
     } else {
       const scale = this.distance * 0.00145;
       // Grab-and-drag: dragging down pulls the map down, so pan forward (+dy).

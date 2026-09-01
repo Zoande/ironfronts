@@ -98,16 +98,26 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let partIndex = vertexIndex / 36u;
   let cube = cubePoint(vertexIndex % 36u);
   let part = modelPart(kind, partIndex);
-  let heading = model.b.w;
+  // Same 0.42s window used to slide the model between marker syncs also eases
+  // the facing, along the shortest arc, from the pre-sync heading (c.w) to the
+  // new one (b.w) — a road corner reads as a turn, not a snap.
+  let motion = smoothstep(0.0, 1.0, (uniforms.sunTime.w - model.c.z) / 0.42);
+  var headingDelta = model.b.w - model.c.w;
+  headingDelta = headingDelta - 6.2831853 * round(headingDelta / 6.2831853);
+  let heading = model.c.w + headingDelta * motion;
   let cosine = cos(heading);
   let sine = sin(heading);
-  let scale = 4.4;
+  // Map-scale strategic units: kept deliberately small so roads, towns and the
+  // movement path still read at strategic zoom. Selection/pick hitbox is on the
+  // flat marker, not the model, so this does not hurt selectability. Trimmed
+  // again this pass (1.95 -> 1.7) to sit closer to the road ribbon width.
+  let scale = 1.7;
   let local = (part.center + cube.position * part.halfSize) * scale;
   let rotated = vec3f(local.x * cosine - local.z * sine, local.y, local.x * sine + local.z * cosine);
-  let motion = smoothstep(0.0, 1.0, (uniforms.sunTime.w - model.c.z) / 0.42);
   let centerXZ = mix(model.c.xy, model.a.xy, motion) + vec2f(copyOffset, 0.0);
   let ground = heightAt(centerXZ / uniforms.map.xy);
-  let worldPosition = vec3f(centerXZ.x + rotated.x, ground + rotated.y + 0.6, centerXZ.y + rotated.z);
+  // Ground lift tracks model scale so shrinking the unit doesn't leave it hovering.
+  let worldPosition = vec3f(centerXZ.x + rotated.x, ground + rotated.y + scale * 0.2, centerXZ.y + rotated.z);
   let normal = normalize(vec3f(cube.normal.x * cosine - cube.normal.z * sine, cube.normal.y, cube.normal.x * sine + cube.normal.z * cosine));
   var output: ModelOut;
   output.position = uniforms.viewProjection * vec4f(worldPosition, 1.0);

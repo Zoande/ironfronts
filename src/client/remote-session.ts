@@ -8,7 +8,12 @@ type OptimisticMutation = (state: PlayerProjection) => void;
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance';
 
 interface Stockpile { funds: number; manpower: number; food: number; stone: number; metal: number; oil: number }
-interface OwnCountry { id: number; name: string; color: string; controller: string; stockpile: Stockpile; income: Stockpile; industryCapacity: number }
+interface OwnCountry {
+  id: number; name: string; color: string; controller: string;
+  stockpile: Stockpile; income: Stockpile; industryCapacity: number;
+  /** Live per-game-hour extraction rate by kind (stone/metal/oil); 0 when idle. */
+  extraction?: { stone: number; metal: number; oil: number };
+}
 interface QueueOrder { id: string; unitTypeId: string; buildingId?: BuildingId; progressHours: number; totalHours: number }
 
 export class RemoteGameSession extends EventTarget {
@@ -69,6 +74,11 @@ export class RemoteGameSession extends EventTarget {
   get ownCountry(): OwnCountry { return this.state.ownCountry as unknown as OwnCountry; }
   readClock(): GameClockReading { return this.connection.readClock(); }
 
+  /** Dev/test only. See GameConnection.setDevSimSpeed. */
+  get devSimSpeed(): number { return this.connection.devSimSpeed; }
+  get devSimSpeedEnabled(): boolean { return this.connection.devSimSpeedEnabled; }
+  setDevSimSpeed(multiplier: number): void { this.connection.setDevSimSpeed(multiplier); }
+
   unit(typeId: string): Record<string, unknown> | undefined {
     return this.catalogs.units.find((unit) => unit.id === typeId);
   }
@@ -82,11 +92,16 @@ export class RemoteGameSession extends EventTarget {
     this.dispatchEvent(new Event('change'));
   }
 
-  private send(command: CommandPayload, mutation: OptimisticMutation): { ok: true } {
+  private send(
+    command: CommandPayload, mutation: OptimisticMutation, onAccepted?: () => void,
+  ): { ok: true } {
     let id = '';
     id = this.connection.command(command, (ok, reason, requiredWarCountryIds) => {
       if (ok) {
         this.acknowledged.add(id);
+        // Server has accepted the order (after any war confirmation) but combat
+        // has not started — the right moment to acknowledge the click.
+        onAccepted?.();
       } else if (requiredWarCountryIds?.length) {
         this.optimistic.delete(id);
         this.rebuild();
@@ -98,7 +113,7 @@ export class RemoteGameSession extends EventTarget {
           const confirmedCommand = {
             ...command, confirmedWarCountryIds: [...requiredWarCountryIds],
           } as CommandPayload;
-          this.send(confirmedCommand, mutation);
+          this.send(confirmedCommand, mutation, onAccepted);
         };
         this.dispatchEvent(new CustomEvent('war-confirmation', {
           detail: { countryIds: [...requiredWarCountryIds], respond },
@@ -125,13 +140,19 @@ export class RemoteGameSession extends EventTarget {
       if (army) { army.moveOrder = { x, z }; army.status = 'moving'; }
     });
   }
-  orderAttackProvince(armyId: string, provinceId: number) {
+  orderAttackProvince(armyId: string, provinceId: number, onAccepted?: () => void) {
     if (!this.ownsArmy(armyId)) return { ok: false, reason: 'Not your army.' } as const;
-    return this.send({ type: 'attackArmy', armyId, target: { kind: 'province', provinceId } }, () => undefined);
+    return this.send({ type: 'attackArmy', armyId, target: { kind: 'province', provinceId } }, (state) => {
+      const army = state.armies[armyId];
+      if (army) { army.status = 'moving'; army.moveIntent = 'attack'; }
+    }, onAccepted);
   }
-  orderAttackArmy(armyId: string, targetArmyId: string) {
+  orderAttackArmy(armyId: string, targetArmyId: string, onAccepted?: () => void) {
     if (!this.ownsArmy(armyId)) return { ok: false, reason: 'Not your army.' } as const;
-    return this.send({ type: 'attackArmy', armyId, target: { kind: 'army', armyId: targetArmyId } }, () => undefined);
+    return this.send({ type: 'attackArmy', armyId, target: { kind: 'army', armyId: targetArmyId } }, (state) => {
+      const army = state.armies[armyId];
+      if (army) { army.status = 'moving'; army.moveIntent = 'attack'; }
+    }, onAccepted);
   }
   orderRetreat(armyId: string, firstNodeId: number) {
     if (!this.ownsArmy(armyId)) return { ok: false, reason: 'Not your army.' } as const;
@@ -183,7 +204,9 @@ export class RemoteGameSession extends EventTarget {
   clearRally(provinceId: number) {
     return this.send({ type: 'setRally', provinceId, target: null }, (state) => { delete state.rallyPoints[provinceId]; });
   }
-  rallyPoint(provinceId: number): { x: number; z: number } | null { return this.state.rallyPoints[provinceId] ?? null; }
+  rallyPoint(provinceId: number): { x: number; z: number; route?: Array<{ x: number; z: number }> } | null {
+    return this.state.rallyPoints[provinceId] ?? null;
+  }
 
   private deduct(state: PlayerProjection, cost: unknown): void {
     if (!state.ownCountry || !cost || typeof cost !== 'object') return;

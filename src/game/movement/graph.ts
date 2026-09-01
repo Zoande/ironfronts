@@ -2,11 +2,20 @@
  * Land movement graph (guardrail 2).
  *
  * Built at runtime from the already-loaded `connections.f32` buffer — no
- * build-pipeline change. Stride-8 records are `[x1, y1, x2, y2, medium, 0,0,0]`
+ * build-pipeline change. Stride-8 records are `[x1, y1, x2, y2, medium, suppressed, 0, 0]`
  * where `medium === 1` means a LAND edge. Sea / ferry edges (`medium === 0`) are
  * excluded: a land army must never cross water just because the raw graph is
  * connected. Hidden / dotted connections live in a separate buffer and are not
  * present here at all.
+ *
+ * `suppressed === 1` marks a land edge whose corridor leaves the coastline
+ * (`scripts/infrastructure/segment-audit.mjs`). Both its endpoints are still
+ * registered as nodes — node ids and `nodeCount` are identical to an unaudited
+ * build, so a live save's `army.graphNodeId` / `MoveOrder.path` stay valid —
+ * but the edge is never linked, so pathfinding cannot route a land army across
+ * it. A node reachable only by suppressed edges simply becomes its own
+ * component (an unreachable islet), which pathfinding already reports as a
+ * separate landmass.
  *
  * Endpoints are quantised to a grid cell to merge shared vertices (the source
  * `connection_segments.json` has real node ids, but the packed buffer drops
@@ -23,6 +32,7 @@ export const GRAPH_CELL = 20;
 
 const CONNECTION_STRIDE = 8;
 const MEDIUM_LAND = 1;
+const EDGE_SUPPRESSED = 1;
 
 export interface LandGraph {
   /** node id -> world X (wrapped into [0,width)). */
@@ -85,9 +95,12 @@ export function buildLandGraph(
 
   for (let offset = 0; offset + CONNECTION_STRIDE <= connections.length; offset += CONNECTION_STRIDE) {
     if (connections[offset + 4] !== MEDIUM_LAND) continue;
+    // Register both endpoints regardless of suppression so node ids stay
+    // stable across an audited rebuild; only the linking is skipped.
     const a = getNode(connections[offset], connections[offset + 1]);
     const b = getNode(connections[offset + 2], connections[offset + 3]);
     if (a === b) continue;
+    if (connections[offset + 5] === EDGE_SUPPRESSED) continue;
     const cost = wrappedDistance(xs[a], zs[a], xs[b], zs[b], width) || GRAPH_CELL;
     linkOnce(a, b, cost);
     linkOnce(b, a, cost);

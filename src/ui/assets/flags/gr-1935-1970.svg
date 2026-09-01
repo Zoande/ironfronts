@@ -1,0 +1,10 @@
+<!-- Source: https://commons.wikimedia.org/wiki/File:Flag_of_Greece_(1822-1978).svg
+     Public domain (PD-old): Kingdom of Greece land flag (blue field, white cross)
+     in use 1935-1970. Vendored for Ironfronts; redrawn with an explicit viewBox
+     and closed paths so it scales cleanly at chit sizes. Ratio 3:2; centred
+     white cross with arms 1/5 of the hoist (same geometry as the file first
+     vendored, just made resolution-independent). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" width="900" height="600">
+  <rect width="900" height="600" fill="#0d5eaf"/>
+  <path fill="#fff" d="M390 0h120v600H390z M0 240h900v120H0z"/>
+</svg>

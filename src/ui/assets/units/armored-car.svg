@@ -1,0 +1,41 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Armored Car">
+  <defs>
+    <linearGradient id="u-ac-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#20261b"/>
+      <stop offset="0.62" stop-color="#12150e"/>
+      <stop offset="1" stop-color="#0b0d08"/>
+    </linearGradient>
+    <linearGradient id="u-ac-hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#818566"/>
+      <stop offset="1" stop-color="#4c5040"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#u-ac-bg)"/>
+  <path d="M0 70h100v30H0z" fill="#0e100c" opacity="0.55"/>
+  <ellipse cx="50" cy="82" rx="38" ry="7" fill="#000" opacity="0.38"/>
+  <!-- wheels -->
+  <g>
+    <circle cx="27" cy="76" r="10" fill="#1c1b16"/>
+    <circle cx="27" cy="76" r="4.4" fill="#4b4d43"/>
+    <circle cx="52" cy="77" r="10" fill="#1c1b16"/>
+    <circle cx="52" cy="77" r="4.4" fill="#4b4d43"/>
+    <circle cx="75" cy="76" r="10" fill="#1c1b16"/>
+    <circle cx="75" cy="76" r="4.4" fill="#4b4d43"/>
+  </g>
+  <!-- lower hull -->
+  <path d="M14 72 l6 -10 h62 l6 10 q-40 8 -80 0z" fill="#3c4033"/>
+  <!-- body -->
+  <path d="M16 62 l10 -16 h44 l14 16z" fill="url(#u-ac-hull)"/>
+  <path d="M16 62 l10 -16 h6 l-6 16z" fill="#8f9374" opacity="0.8"/>
+  <!-- sloped turret -->
+  <path d="M34 46 l6 -12 h20 l8 12z" fill="#6c7057"/>
+  <path d="M34 46 l6 -12 h6 l-4 12z" fill="#868a6c"/>
+  <!-- gun -->
+  <path d="M60 40 l24 -3 v3.6 l-24 3z" fill="#26251d"/>
+  <path d="M82 37 l6 -0.6 v4 l-6 0.6z" fill="#151410"/>
+  <!-- hatch + vision slit -->
+  <rect x="42" y="49" width="12" height="5" rx="1" fill="#2b2a21"/>
+  <path d="M22 52 h9 v3 h-9z" fill="#232219"/>
+  <!-- fender highlight -->
+  <path d="M14 72 q40 8 80 0" fill="none" stroke="#20241b" stroke-width="2"/>
+</svg>

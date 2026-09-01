@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { create, globals } from 'webgpu';
 import {
-  armyMarkerShader, armyModelShader, cityLightShader, countryLabelShader, infrastructureShader, lineShader, mapMarkerShader, polarCapShader, propShader,
+  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, infrastructureShader, lineShader, mapMarkerShader, polarCapShader, propShader,
   rainShader, terrainShader, waterShader, waterwayShader,
 } from '../src/shaders';
 
@@ -17,6 +17,34 @@ describe('WGSL programs', () => {
     expect(armyMarkerShader).toContain('smoothstep(4400.0, 5000.0, zoom)');
   });
 
+  it('keeps strategic troop models small relative to roads and towns', () => {
+    const scale = Number(/let scale = ([\d.]+);/.exec(armyModelShader)?.[1]);
+    expect(scale).toBeGreaterThan(0);
+    expect(scale).toBeLessThanOrEqual(2.1);
+  });
+
+  it('pulls towns and forests down to a strategic map scale', () => {
+    const footprint = Number(/BUILDING_FOOTPRINT_SCALE = ([\d.]+)/.exec(propShader)?.[1]);
+    const tree = Number(/TREE_MAP_SCALE = ([\d.]+)/.exec(propShader)?.[1]);
+    expect(footprint).toBeGreaterThan(0);
+    expect(footprint).toBeLessThanOrEqual(0.45);
+    expect(tree).toBeLessThanOrEqual(0.75);
+    // landmark buildings keep more of their bulk so a capital still reads
+    expect(propShader).toContain('archetype == 4u');
+  });
+
+  it('draws order routes as a terrain-draped line mode with move / attack / rally / retreat colours and an end chevron', () => {
+    expect(lineShader).toContain('lineParams.mode == 3u');
+    // draped along terrain, not floating at a fixed height
+    expect(lineShader).toMatch(/mode == 3u\)?\s*\{[\s\S]*heightAt\(uv0\) \+ 2\.1/);
+    // move (default) vs attack vs rally, plus a retreat override branch
+    expect(lineShader).toContain('if (line.b.x > 1.5)');
+    expect(lineShader).toMatch(/line\.b\.x > 0\.5/);
+    expect(lineShader).toContain('if (line.b.z > 0.5)');
+    // destination chevron segments are drawn bolder
+    expect(lineShader).toContain('if (line.b.w > 0.5)');
+  });
+
   it('limits beach material to the actual shoreline mask', () => {
     expect(terrainShader).toContain('let bankField = bankFieldAt(input.mapUv)');
     expect(terrainShader).toContain('let shoreline = bankField.g');
@@ -24,11 +52,20 @@ describe('WGSL programs', () => {
     expect(terrainShader).not.toContain('if (elevation < 12.0)');
   });
 
+  it('hands the landAt == 0.5 coast contour to exactly one of the terrain / water passes', () => {
+    // Terrain discards at landAt <= 0.5; water must discard strictly above
+    // 0.5 (not >=) so the interpolated 0.5 contour is drawn by the water
+    // pass instead of being discarded by both — the hairline-gap half of the
+    // Ultra blocky-black-coast artefact.
+    expect(terrainShader).toContain('bankField.r <= 0.5');
+    expect(waterShader).toContain('if (landAt(input.mapUv) > 0.5)');
+    expect(waterShader).not.toMatch(/landAt\(input\.mapUv\) >= 0\.5/);
+  });
+
   it('clips only the guarded river core while explicit water covers the wider contour', () => {
     const terrainFragment = terrainShader.slice(terrainShader.indexOf('@fragment\nfn terrainFragment'));
     expect(terrainFragment).toContain('riverField.r > 0.60 || riverField.g > 0.60');
     expect(waterShader).toContain('riverField.r > 0.45 || riverField.g > 0.45');
-    expect(waterShader).toContain('if (landAt(input.mapUv) >= 0.5)');
     expect(terrainShader).toContain('bankField.g');
     expect(terrainShader).toContain('shoreline * 0.72');
     expect(waterShader).toContain('oceanSurfaceColor(input.worldPosition');
@@ -183,6 +220,7 @@ describe('WGSL programs', () => {
     ['army markers', armyMarkerShader,
       ['armyMarkerVertex', 'armyCompositionVertex'], ['armyCompositionFragment', 'armyMarkerFragment']],
     ['army models', armyModelShader, ['armyModelVertex', 'armyKindCountVertex'], ['armyModelFragment', 'armyKindCountFragment']],
+    ['combat effects', combatEffectShader, ['combatEffectVertex'], ['combatEffectFragment']],
     ['country labels', countryLabelShader, ['countryLabelVertex'], ['countryLabelFragment']],
   ])('parses the %s shader and exposes its render entry points', (_name, source, vertexNames, fragmentNames) => {
     const reflection = new WgslReflect(source);
@@ -204,7 +242,7 @@ describe('WGSL programs', () => {
     const device = await adapter.requestDevice();
     const modules = new Map<string, GPUShaderModule>();
     for (const [label, source] of [
-      ['terrain', terrainShader], ['polar caps', polarCapShader], ['water', waterShader], ['waterways', waterwayShader], ['infrastructure', infrastructureShader], ['props', propShader], ['city lights', cityLightShader], ['rain', rainShader], ['lines', lineShader], ['map markers', mapMarkerShader], ['army markers', armyMarkerShader], ['army models', armyModelShader], ['country labels', countryLabelShader],
+      ['terrain', terrainShader], ['polar caps', polarCapShader], ['water', waterShader], ['waterways', waterwayShader], ['infrastructure', infrastructureShader], ['props', propShader], ['city lights', cityLightShader], ['rain', rainShader], ['lines', lineShader], ['map markers', mapMarkerShader], ['army markers', armyMarkerShader], ['army models', armyModelShader], ['combat effects', combatEffectShader], ['country labels', countryLabelShader],
     ] as const) {
       const module = device.createShaderModule({ label, code: source });
       modules.set(label, module);
@@ -316,6 +354,13 @@ describe('WGSL programs', () => {
       layout: device.createPipelineLayout({ bindGroupLayouts: [common, layer] }),
       vertex: { module: modules.get('map markers')!, entryPoint: 'mapMarkerVertex' },
       fragment: { module: modules.get('map markers')!, entryPoint: 'mapMarkerFragment', targets: [{ format: 'bgra8unorm' }] },
+      primitive: { topology: 'triangle-list' },
+      depthStencil: { ...depthStencil, depthWriteEnabled: false, depthCompare: 'always' },
+    })).resolves.toBeDefined();
+    await expect(device.createRenderPipelineAsync({
+      layout: device.createPipelineLayout({ bindGroupLayouts: [common, layer] }),
+      vertex: { module: modules.get('combat effects')!, entryPoint: 'combatEffectVertex' },
+      fragment: { module: modules.get('combat effects')!, entryPoint: 'combatEffectFragment', targets: [{ format: 'bgra8unorm' }] },
       primitive: { topology: 'triangle-list' },
       depthStencil: { ...depthStencil, depthWriteEnabled: false, depthCompare: 'always' },
     })).resolves.toBeDefined();

@@ -20,6 +20,14 @@ const TERRAIN_SPEED: Record<number, number> = {
   [TERRAIN_CLASS.urban]: 0.9,
 };
 const ROAD_BONUS = 1.35;
+/**
+ * Global pacing multiplier on how far a stack travels per simulation hour.
+ * Tuned purely for feel (strategic movement across a country, not units
+ * sliding across the map) — it scales every stack equally, so relative speeds,
+ * terrain ordering (plain > hill > mountain) and the road bonus are unchanged.
+ * Does NOT touch the simulation tick.
+ */
+const STRATEGIC_MOVEMENT_SCALE = 0.30;
 const EDGE_SAMPLE_DISTANCE = 18;
 const edgeProvinceCache = new WeakMap<object, Map<string, number[]>>();
 
@@ -116,9 +124,18 @@ export function issueMoveOrder(
 
   const component = session.graph.component[army.graphNodeId] ?? -1;
   const goal = nearestNode(session.graph, destX, destZ, 600, component);
-  if (goal < 0) return { ok: false, reason: 'No land route to that location.' };
+  if (goal < 0) {
+    // No reachable land-graph node near the point: it is water/void, or on a
+    // landmass this army cannot walk to.
+    const anyGoal = nearestNode(session.graph, destX, destZ, 600, -1);
+    return anyGoal < 0
+      ? { ok: false, reason: 'That destination is off the road network — pick a spot on land.' }
+      : { ok: false, reason: 'That destination is on a separate landmass this army cannot reach.' };
+  }
   const unrestricted = findPath(session.graph, army.graphNodeId, goal);
-  if (!unrestricted) return { ok: false, reason: 'No land route to that location.' };
+  if (!unrestricted) {
+    return { ok: false, reason: 'No land route to that location.' };
+  }
   const alreadyThere = unrestricted.length < 2;
   if (alreadyThere && intent === 'move') return { ok: false, reason: 'Already there.' };
 
@@ -198,7 +215,15 @@ function revalidateOrder(session: SimContext, army: ArmyStack, order: MoveOrder)
     ? targetArmy.graphNodeId
     : nearestNode(session.graph, targetX, targetZ, 600, session.graph.component[army.graphNodeId]);
   const edgeAllowed = movementEdgeAllowed(session, army.ownerCountryId);
-  const nextInvalid = order.path.length > 0 && !edgeAllowed(army.graphNodeId, order.path[0]);
+  // A path loaded from a save (or laid before a world rebuild) can contain an
+  // edge the audited graph no longer links — e.g. a land connection whose
+  // corridor was found to cross water. Treat a missing leading edge exactly
+  // like an ownership-blocked one: re-path around it, or stop if nothing legal
+  // remains. Without this a stale order lerps a land army straight over water.
+  const nextMissing = order.path.length > 0
+    && !session.graph.adjacency[army.graphNodeId]?.includes(order.path[0]);
+  const nextInvalid = order.path.length > 0
+    && (nextMissing || !edgeAllowed(army.graphNodeId, order.path[0]));
   const pursuitChanged = order.target?.kind === 'army'
     && targetNode >= 0 && order.path[order.path.length - 1] !== targetNode;
   if (!nextInvalid && !pursuitChanged) return;
@@ -281,7 +306,8 @@ export function stepMovement(session: SimContext, dtHours: number): void {
     const order = army.order;
     if (!order || order.path.length === 0 || army.status === 'engaged') continue;
     revalidateOrder(session, army, order);
-    let budget = stackBaseSpeed(army) * dtHours * (army.status === 'retreating' ? 3 : 1);
+    let budget = stackBaseSpeed(army) * dtHours * STRATEGIC_MOVEMENT_SCALE
+      * (army.status === 'retreating' ? 3 : 1);
 
     while (budget > 0 && order.path.length > 0) {
       const targetNode = order.path[0];

@@ -92,7 +92,15 @@ fn surfaceTransitionAt(mapUv: vec2f, center: vec4u) -> f32 {
 @fragment
 fn terrainFragment(input: TerrainVertexOutput) -> @location(0) vec4f {
   let bankField = bankFieldAt(input.mapUv);
-  if (bankField.r <= 0.5) { discard; }
+  // Coast split: water discards where landAt > 0.5, terrain where landAt <= 0.5,
+  // so the two passes tile the shoreline exactly once. This is only watertight
+  // because water and terrain now tessellate identically at every LOD (see
+  // renderer.ts waterMeshes) — landAt(input.mapUv) is per-pixel identical in
+  // both passes. COAST_OVERLAP keeps a hair of terrain drawn past the contour
+  // as float-precision insurance; it sits under the y=0.35 water plane so it
+  // reads only as a wet edge, never a flooded beach.
+  let COAST_OVERLAP = 0.03;
+  if (bankField.r <= 0.5 - COAST_OVERLAP) { discard; }
   let navigation = navigationAt(input.mapUv);
   let riverField = navigation.ba;
   // Water owns only the inner channel. Its wider 0.45 coverage contour keeps

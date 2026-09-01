@@ -83,6 +83,7 @@ async function sessionResponse(account: Account | null): Promise<SessionResponse
     authenticated: true,
     account: { id: account.id, username: account.username },
     assignment: await assignment(account.id),
+    profile: store.commanderProfile(account.id),
   };
 }
 
@@ -124,6 +125,10 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (!account) { sendJson(response, 401, { error: 'Authentication required.' }); return; }
+    if (request.method === 'GET' && url.pathname === '/v1/profile') {
+      sendJson(response, 200, store.commanderProfile(account.id));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/v2/game') {
       sendJson(response, 200, await gameRequest<GameLobby>(`/internal/v2/lobby?accountId=${encodeURIComponent(account.id)}`));
       return;

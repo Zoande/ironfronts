@@ -34,6 +34,30 @@ describe('music director', () => {
   });
 
 
+  it('fires onTrackChange only after playback actually succeeds, and with null on stop', async () => {
+    const player = new FakeMusicPlayer();
+    player.failedFragments.add('Honor_Bound.ogg');
+    player.failedFragments.add('Honor_Bound.mp3');
+    const changes: Array<string | null> = [];
+    const director = new MusicDirector(player, {
+      random: () => 0,
+      onTrackChange: (track) => changes.push(track ? track.title : null),
+    });
+
+    await director.setState('menu'); // blocked autoplay — no title must appear
+    expect(changes).toEqual([]);
+    expect(director.getCurrentTrack()).toBeNull();
+
+    player.failedFragments.clear();
+    await director.setState('menu', { force: true });
+    expect(changes).toEqual(['Honor Bound']);
+    expect(director.getCurrentTrack()?.title).toBe('Honor Bound');
+
+    director.stop();
+    expect(changes).toEqual(['Honor Bound', null]);
+    expect(director.getCurrentTrack()).toBeNull();
+  });
+
   it('retries the same first menu track when autoplay was blocked', async () => {
     const player = new FakeMusicPlayer();
     player.failedFragments.add('Honor_Bound.ogg');
@@ -116,5 +140,33 @@ describe('music director', () => {
 
     expect(director.getState()).toBeNull();
     expect(player.stops).toBe(1);
+  });
+
+  it('resyncPlayback replays the CURRENT state after a blocked attempt, not menu', async () => {
+    const player = new FakeMusicPlayer();
+    player.failedFragments.add('First_Sighting');
+    player.failedFragments.add('Land_between_the_two_Seas');
+    const director = new MusicDirector(player, { random: () => 0 });
+
+    await director.setState('opening');
+    expect(director.getState()).toBe('opening');
+
+    player.failedFragments.clear();
+    player.calls.length = 0;
+    await director.resyncPlayback();
+
+    expect(player.calls.length).toBeGreaterThan(0);
+    expect(player.calls[0].url).toContain('First_Sighting');
+    expect(player.calls.some((call) => call.url.toLowerCase().includes('honor_bound'))).toBe(false);
+  });
+
+  it('resyncPlayback is a no-op when no musical state is active', async () => {
+    const player = new FakeMusicPlayer();
+    const director = new MusicDirector(player, { random: () => 0 });
+
+    await director.resyncPlayback();
+
+    expect(player.calls).toHaveLength(0);
+    expect(director.getState()).toBeNull();
   });
 });

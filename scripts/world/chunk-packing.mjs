@@ -49,11 +49,18 @@ export function chunkLineRecords(source) {
   return { data, chunksX, chunksY, ranges };
 }
 
-export function buildConnections(connectionData) {
+// `suppressedLandIndices` is a Set of indices into `connectionData.segments`
+// whose land corridor leaves the coastline (see `auditLandConnections`). The
+// `medium` byte at offset 4 is left untouched so the runtime graph builder
+// registers the identical node sequence; the audit result rides in offset 5,
+// which `buildLandGraph` reads to skip linking that edge.
+export function buildConnections(connectionData, suppressedLandIndices = new Set()) {
   const records = [];
-  for (const edge of connectionData.segments) {
-    records.push(edge.x1, edge.y1, edge.x2, edge.y2, edge.medium === 'land' ? 1 : 0, 0, 0, 0);
-  }
+  connectionData.segments.forEach((edge, index) => {
+    const land = edge.medium === 'land' ? 1 : 0;
+    const suppressed = land && suppressedLandIndices.has(index) ? 1 : 0;
+    records.push(edge.x1, edge.y1, edge.x2, edge.y2, land, suppressed, 0, 0);
+  });
   return new Float32Array(records);
 }
 

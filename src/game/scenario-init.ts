@@ -23,12 +23,19 @@ import { wrappedDistance } from './geometry';
 import { mulberry32, hashString } from './rng';
 import { bootstrapResources, type ResourceBootstrapResult } from './resource-bootstrap';
 
-/** Every selectable (five-city) country starts on this identical footing. */
+/**
+ * Every selectable (five-city) country starts on this identical footing.
+ *
+ * Deliberately lean: the opening economy should force real choices (build vs.
+ * mobilise vs. bank) in the first weeks rather than letting a player queue
+ * everything at once. Roughly a third of the earlier prototype values. Sandbox
+ * keeps its own huge stockpile below.
+ */
 export const SELECTABLE_START_STOCKPILE = {
-  funds: 2_000, manpower: 1_500, food: 800, stone: 300, metal: 400, oil: 250,
+  funds: 650, manpower: 450, food: 300, stone: 110, metal: 150, oil: 90,
 };
 export const MINOR_START_STOCKPILE = {
-  funds: 1_200, manpower: 1_000, food: 600, stone: 200, metal: 250, oil: 150,
+  funds: 400, manpower: 300, food: 220, stone: 75, metal: 95, oil: 55,
 };
 const SANDBOX_STOCKPILE = {
   funds: 99_999, manpower: 99_999, food: 99_999, stone: 99_999, metal: 99_999, oil: 99_999,

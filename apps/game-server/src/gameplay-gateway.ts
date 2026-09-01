@@ -28,6 +28,7 @@ export interface GameplayGatewayOptions {
   readonly clock: AuthoritativeGameClock;
   readonly revision: () => number;
   readonly saveGameInBackground: () => void;
+  readonly devSimSpeed: { get(): number; set(multiplier: number): void; enabled: boolean };
   readonly log: (
     level: 'info' | 'warn' | 'error', event: string, fields?: Record<string, unknown>,
   ) => void;
@@ -118,10 +119,22 @@ export class GameplayGateway {
             type: 'baseline', revision, state: projection,
             catalogs: this.options.runtime.catalogs, clock: this.options.clock.snapshot(),
           });
+          this.sendSocket(socket, {
+            type: 'devSimSpeed', multiplier: this.options.devSimSpeed.get(),
+            devControlsEnabled: this.options.devSimSpeed.enabled,
+          });
           this.options.log('info', 'client_connected', { countryId: claims.countryId });
           return;
         }
         if (!connection) throw new Error('Authentication required.');
+        if (message.type === 'devSetSimSpeed') {
+          this.options.devSimSpeed.set(message.multiplier);
+          this.broadcast({
+            type: 'devSimSpeed', multiplier: this.options.devSimSpeed.get(),
+            devControlsEnabled: this.options.devSimSpeed.enabled,
+          });
+          return;
+        }
         if (message.type === 'resync') {
           const projection = this.options.runtime.projection(connection.countryId);
           connection.projection = projection;

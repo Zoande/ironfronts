@@ -1,6 +1,11 @@
 :root {
   color: #f2f3ec;
-  background: #7893a0;
+  /* Dark base, matched to the loader's floor (`.loading` background). Any frame
+     where neither the menu nor the loader covers the viewport — the F5 module
+     load gap, a menu-exit transition frame, the canvas before its first
+     WebGPU paint — then reads as a deliberate dark hold instead of a jarring
+     blue-grey flash. */
+  background: #060807;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -16,10 +21,16 @@ body { user-select: none; }
   display: block;
   touch-action: none;
   cursor: grab;
-  background: linear-gradient(#7f9ba8, #adbec1);
+  /* Dark until the renderer's first frame lands, so the ~seconds of WebGPU /
+     module init after `canvas.hidden = false` don't show a pale blue sheet. */
+  background: #060807;
 }
 
 #world:active { cursor: grabbing; }
+/* The `#world` id rule above out-specifies the UA `[hidden]` rule, so without
+   this the full-viewport canvas stays laid out (and composited) behind the
+   menu before launch. */
+#world[hidden] { display: none; }
 
 .country-labels {
   position: fixed;
@@ -58,8 +69,16 @@ body { user-select: none; }
   justify-content: flex-end;
   overflow: hidden;
   transition: opacity .5s ease;
+  /* Opaque base so the loader never flashes the blue `:root` background (and the
+     just-revealed brand mark) through in the frame before `desk-scene.jpg`
+     decodes. Matches the dark floor of the backdrop's vignette below. */
+  background: #060807;
 }
 .loading.is-done { opacity: 0; pointer-events: none; }
+/* `hidden` must actually hide the loader. Without this the fixed, full-bleed
+   `.loading` layer renders from first paint (behind the menu) and is revealed
+   with its stale initial markup the moment the menu is hidden on launch. */
+.loading[hidden] { display: none; }
 
 .loading__backdrop { position: absolute; inset: -6%; }
 .loading__backdrop::before {
@@ -123,6 +142,26 @@ body { user-select: none; }
 .loading__line { display: flex; justify-content: space-between; margin-bottom: 9px; font-size: 10px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; color: #d8cdb2; text-shadow: 0 2px 12px #20383c; }
 .loading__track { height: 2px; overflow: hidden; background: rgba(255,255,255,.18); }
 .loading__track span { display: block; width: 0; height: 100%; background: #c9a463; transition: width .25s ease; }
+
+/* Launch failure state — shown in place of the progress line so the player is
+   never left staring at a frozen loader. */
+.loading__error { position: relative; z-index: 1; width: min(520px, calc(100vw - 48px)); margin-bottom: 5vh; text-align: center; }
+.loading__error[hidden] { display: none; }
+.loading__error-eyebrow { margin: 0 0 .5em; font-family: "Cinzel Decorative", Georgia, serif; font-size: 11px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; color: #d08c5a; }
+.loading__error-message { margin: 0 0 1.4em; font-family: "Special Elite", "Courier New", monospace; font-size: .95em; line-height: 1.55; color: #e6dcc4; }
+.loading__error-actions { display: flex; gap: 10px; justify-content: center; }
+.loading__error-actions button {
+  padding: 9px 16px;
+  font: 650 11px/1 "Cinzel Decorative", Georgia, serif;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #ded3ba;
+  background: #302c25;
+  border: 1px solid #665a47;
+  cursor: pointer;
+}
+.loading__error-actions button.is-primary { background: #713c30; border-color: #a45a44; color: #f1ead6; }
+.loading__error-actions button:focus-visible { outline: 2px solid rgba(242, 223, 174, .76); outline-offset: 2px; }
 
 .tooltip {
   position: fixed;
@@ -248,6 +287,11 @@ body { user-select: none; }
 .time-controls small { display: block; margin-top: 9px; color: #71847e; font-size: 8px; line-height: 1.45; }
 .weather-controls button { margin: 7px 0 0 23px; padding: 5px 8px; border: 1px solid rgba(220,196,139,.24); border-radius: 3px; color: #c9d1ca; background: rgba(255,255,255,.035); font: 700 8px/1 inherit; letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
 .weather-controls button:hover { color: #f0dfb5; border-color: rgba(220,196,139,.42); background: rgba(201,180,119,.12); }
+
+.sim-speed-controls__buttons { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 8px 0 10px; }
+.sim-speed-controls__buttons button { min-height: 25px; padding: 4px 2px; border: 1px solid rgba(220,196,139,.2); border-radius: 3px; color: #c9d1ca; background: rgba(255,255,255,.035); font: 700 8px/1 inherit; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+.sim-speed-controls__buttons button:hover { color: #f0dfb5; border-color: rgba(220,196,139,.42); background: rgba(201,180,119,.12); }
+.sim-speed-controls__buttons button[aria-pressed="true"] { color: #12140f; background: #e8c988; border-color: #e8c988; }
 .weather-controls small { display: block; margin: 6px 0 0 23px; color: #71847e; font-size: 8px; line-height: 1.4; }
 
 .country-flag { display: flex; align-items: center; gap: 11px; margin-top: 14px; padding: 11px; border: 1px solid rgba(255,255,255,.09); border-radius: 5px; background: rgba(255,255,255,.035); }
@@ -404,3 +448,39 @@ kbd { padding: 2px 5px; border: 1px solid rgba(255,255,255,.24); border-radius: 
   }
   .diagnostics__panel { max-height: calc(100dvh - 160px - env(safe-area-inset-bottom)); }
 }
+
+/* ===== Now Playing — tiny soundtrack readout, bottom-left ===== */
+.now-playing {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 40vw;
+  padding: 5px 10px 5px 8px;
+  border-radius: 3px;
+  background: rgba(6, 8, 7, 0.62);
+  border: 1px solid rgba(201, 164, 99, 0.22);
+  color: #cfd3c8;
+  font: 500 12px/1.1 Inter, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0.62;
+  transition: opacity 0.4s ease;
+}
+.now-playing[hidden] { display: none; }
+.now-playing.is-changing { opacity: 1; }
+.now-playing__note {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: no-repeat center / contain;
+  mask: no-repeat center / contain;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 2v8.05A2.5 2.5 0 1 0 13 12V5l-6 1.2V11.3A2.5 2.5 0 1 0 6 13.5V4.2z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M12 2v8.05A2.5 2.5 0 1 0 13 12V5l-6 1.2V11.3A2.5 2.5 0 1 0 6 13.5V4.2z'/%3E%3C/svg%3E");
+  color: #c9a463;
+}
+.now-playing__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
