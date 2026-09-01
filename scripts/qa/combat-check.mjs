@@ -66,7 +66,9 @@ try {
     await page.waitForTimeout(900);
     await page.screenshot(shot('cc-00b-nation-picker.png'));
     await page.evaluate(() => {
-      document.querySelector('#ifm-country-grid .ifm__country:not(.is-unavailable)')?.click();
+      document.getElementById('ifm-country-map')?.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ArrowRight', bubbles: true,
+      }));
     });
     await page.waitForTimeout(400);
     await page.evaluate(() => document.getElementById('ifm-confirm-nation')?.click());
@@ -238,12 +240,11 @@ try {
     if (probe.pickedContact !== 'contact') {
       log('SKIP: could not isolate a contact-only army under the cursor (picked', probe.pickedContact + ')');
     } else {
-      // The pick under the cursor is definitively a contact-only enemy. The
-      // attack cursor here would be a fog leak.
-      const leak = probe.cursor.includes('action-attack');
-      log(leak ? 'FAIL: attack cursor over a confirmed contact-only target (fog leak)'
-        : 'OK: no attack affordance for a confirmed contact-only target (cursor: ' + (probe.cursor || 'default') + ')');
-      if (leak) errors.push('fog: attack cursor shown for a confirmed contact-only target');
+      // Contact-only enemies are actionable even while composition stays hidden.
+      const actionable = probe.cursor.includes('action-attack');
+      log(actionable ? 'OK: attack affordance shown for a confirmed contact-only target'
+        : 'FAIL: no attack affordance for a confirmed contact-only target (cursor: ' + (probe.cursor || 'default') + ')');
+      if (!actionable) errors.push('contact targeting: attack cursor missing for contact-only target');
     }
     await page.screenshot(shot('cc-07-cursor-contact-only.png'));
   }

@@ -7,11 +7,10 @@ const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
 const notifications = readFileSync(path.join(root, 'src/ui/notifications.ts'), 'utf8');
 
 describe('attack-order feedback', () => {
-  it('shows the attack cursor only for a fully identified enemy, never a contact-only blip', () => {
+  it('shows the attack cursor for both identified enemies and contact-only blips', () => {
     const fn = main.slice(main.indexOf('const updateWorldCursor ='), main.indexOf('canvas.addEventListener(\'pointermove\''));
-    // The strikable test is gated on visible contact, matching the server's
-    // "a direct strike needs an identified target" rule.
-    expect(fn).toMatch(/hovered\.contact === 'visible'/);
+    expect(fn).toContain('Boolean(hovered && !hovered.own)');
+    expect(fn).not.toMatch(/hovered\.contact === 'visible'/);
     expect(fn).toContain('action-attack.png');
     expect(fn).toContain('cursor-no.png');
   });

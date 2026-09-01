@@ -15,8 +15,8 @@ function lobby(countries: Partial<LobbyCountry>[]): GameLobby {
   };
 }
 
-describe('curated country selection (#3)', () => {
-  it('keeps alive, unclaimed, ≥3-city countries that have a real flag', () => {
+describe('campaign-map country eligibility (#3)', () => {
+  it('keeps every alive, unclaimed country with at least five cities', () => {
     const out = selectableCountries(lobby([
       { name: 'Germany', startingCities: 5 },
       { name: 'France', startingCities: 5 },
@@ -24,16 +24,16 @@ describe('curated country selection (#3)', () => {
     expect(out.map((c) => c.name).sort()).toEqual(['France', 'Germany']);
   });
 
-  it('drops micro-states, claimed, dead, flag-less and non-curated entities', () => {
+  it('only drops sub-five-city, claimed, and dead countries', () => {
     const out = selectableCountries(lobby([
-      { name: 'Germany', startingCities: 2 },              // too few cities
+      { name: 'Germany', startingCities: 4 },              // too few cities
       { name: 'France', claimed: true },                   // taken
       { name: 'Italy', alive: false },                     // eliminated
-      { name: 'California', startingCities: 5 },           // fictional, no flag
-      { name: 'Algeria', startingCities: 5 },              // real colony, not a curated sovereign
+      { name: 'California', startingCities: 5 },           // eligible without curation
+      { name: 'Algeria', startingCities: 5 },              // eligible without curation
       { name: 'United Kingdom', startingCities: 5 },       // keeper
     ]));
-    expect(out.map((c) => c.name)).toEqual(['United Kingdom']);
+    expect(out.map((c) => c.name)).toEqual(['California', 'Algeria', 'United Kingdom']);
   });
 });
 

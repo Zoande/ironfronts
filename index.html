@@ -164,13 +164,20 @@
             </div>
             <div class="ifm__doc-code"><span>DMO File <b>IF-02</b></span><span>Operation <b>OP-1939-01</b></span></div>
           </header>
-          <p class="ifm__registry-hint" id="ifm-country-hint">Select the nation you will command.</p>
-          <div class="ifm__roster" id="ifm-country-grid" role="listbox" tabindex="0" aria-label="Theater command roster"></div>
+          <p class="ifm__registry-hint" id="ifm-country-hint">Select a beige country. Grey countries cannot be claimed.</p>
+          <div class="ifm__campaign-map-shell">
+            <canvas class="ifm__campaign-map" id="ifm-country-map" tabindex="0" role="application" aria-label="Campaign country selection map"></canvas>
+            <div class="ifm__campaign-map-legend" aria-hidden="true">
+              <span><i class="is-available"></i>Available</span>
+              <span><i class="is-unavailable"></i>Unavailable</span>
+              <span><i class="is-selected"></i>Selected</span>
+            </div>
+          </div>
           <footer class="ifm__registry-actions">
             <button type="button" class="ifm__back" id="ifm-nation-cancel">&larr; Operation Order</button>
             <div class="ifm__footer-spacer"></div>
             <span class="ifm__registry-selected" id="ifm-nation-selected">No nation selected</span>
-            <button type="button" class="ifm__primary" id="ifm-confirm-nation" disabled>Confirm Command <span>&rarr;</span></button>
+            <button type="button" class="ifm__primary" id="ifm-confirm-nation" disabled>Join Campaign <span>&rarr;</span></button>
           </footer>
         </div>
       </div>

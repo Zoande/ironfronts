@@ -6,12 +6,11 @@ const root = process.cwd();
 const html = readFileSync(path.join(root, 'index.html'), 'utf8');
 const menu = readFileSync(path.join(root, 'src/menu/menu.ts'), 'utf8');
 const css = readFileSync(path.join(root, 'src/menu/menu.css'), 'utf8');
+const campaignMap = readFileSync(path.join(root, 'src/menu/campaign-map.ts'), 'utf8');
 
 /**
- * P2: the operation dossier and the nation list used to share one cramped page.
- * The dossier is now a full-viewport briefing with no country list, and
- * "Begin Operation" opens a dedicated Mobilization Registry overlay that owns
- * nation selection and the only launch trigger.
+ * The dossier is a full-viewport briefing. "Begin Operation" opens a dedicated
+ * world map where availability and selection are encoded directly on countries.
  */
 describe('campaign flow — dossier then nation overlay', () => {
   it('keeps the country list out of the operation dossier', () => {
@@ -28,30 +27,35 @@ describe('campaign flow — dossier then nation overlay', () => {
     expect(dossier).toContain('Operation Information');
   });
 
-  it('ships a separate nation-selection overlay with an explicit confirm', () => {
+  it('ships a separate map-based nation-selection overlay with an explicit join', () => {
     expect(html).toContain('id="ifm-nation-picker"');
     const start = html.indexOf('id="ifm-nation-picker"');
     const end = html.indexOf('</div>\n    </div>', start);
     const overlay = html.slice(start, end);
-    expect(overlay).toContain('id="ifm-country-grid"');
+    expect(overlay).toContain('id="ifm-country-map"');
+    expect(overlay).toContain('ifm__campaign-map-legend');
     expect(overlay).toContain('id="ifm-confirm-nation"');
     expect(overlay).toContain('id="ifm-nation-cancel"');
     expect(overlay).toContain('aria-modal="true"');
-    expect(overlay).toContain('role="listbox"');
+    expect(overlay).toContain('role="application"');
+    expect(overlay).not.toContain('id="ifm-country-grid"');
   });
 
-  it('the dossier fits the viewport and the overlay never scrolls the body', () => {
-    // A height cap on the dossier file + hidden subpage overflow = no body scroll.
-    expect(css).toMatch(/\.ifm__file--dossier\s*\{[^}]*height:\s*min\([^}]*\)/);
+  it('keeps the dossier footer and join controls inside the dynamic viewport', () => {
+    expect(css).toMatch(/\.ifm__file--dossier\s*\{[^}]*height:\s*min\([^}]*100dvh/s);
+    expect(css).toMatch(/\.ifm__file--dossier\s*\{[^}]*max-height:\s*calc\(100dvh/s);
     expect(css).toMatch(/\.ifm__subpage--dossier\s*\{[^}]*overflow:\s*hidden/);
-    // The roster is the only thing that scrolls, and it contains its own wheel.
-    expect(css).toMatch(/\.ifm__roster\s*\{[^}]*overflow-y:\s*auto/);
-    expect(css).toMatch(/\.ifm__roster\s*\{[^}]*overscroll-behavior:\s*contain/);
+    expect(css).toMatch(/\.ifm__registry\s*\{[^}]*height:\s*min\([^}]*100dvh/s);
+    expect(css).toMatch(/\.ifm__file-actions\s*\{[^}]*flex:\s*0 0 auto/);
+    expect(css).toMatch(/\.ifm__registry-actions\s*\{[^}]*flex:\s*0 0 auto/);
   });
 
-  it('styles a real scrollbar rather than hiding scroll (wheel + keys must work)', () => {
-    expect(css).toContain('.ifm__roster::-webkit-scrollbar');
-    expect(css).toMatch(/\.ifm__roster\s*\{[^}]*scrollbar-width:\s*thin/);
+  it('uses the pregenerated country raster and the requested availability palette', () => {
+    expect(campaignMap).toContain("const MAP_URL = '/menu/campaign-country-ids.u16'");
+    expect(campaignMap).toContain('available: [218, 207, 181, 255]');
+    expect(campaignMap).toContain('unavailable: [92, 95, 91, 255]');
+    expect(campaignMap).toContain('selected: [81, 124, 68, 255]');
+    expect(campaignMap).toContain('playableIds.has(id) ? COLORS.available : COLORS.unavailable');
   });
 
   it('avoids glassmorphism on the overlay', () => {
@@ -71,16 +75,14 @@ describe('campaign flow — dossier then nation overlay', () => {
     expect(esc).toContain('if (pickerOpen) { closeNationPicker(); return; }');
   });
 
-  it('renders the roster lazily and only launches on Confirm', () => {
-    // No eager render at mount any more (lighter lobby).
-    expect(menu).not.toContain('renderCountryGrid(null)');
-    expect(menu).toMatch(/function openNationPicker\(\)[\s\S]{0,160}renderRoster\(/);
+  it('loads the map lazily and only launches from the Join control', () => {
+    expect(menu).toMatch(/function openNationPicker\(\)[\s\S]{0,500}mountCampaignMap\(/);
     expect(menu).toMatch(/confirmNation\?\.addEventListener\('click',[\s\S]{0,120}deployFromPicker\(selectedCountryId\)/);
   });
 
   it('New Campaign is a safe preview once a campaign exists, but Continue still launches', () => {
     // previewOnly === (a country is already assigned). The picker paths
-    // (Confirm + roster Enter) go through deployFromPicker, which no-ops in
+    // (Join + map Enter) go through deployFromPicker, which no-ops in
     // preview mode; Continue calls deploy() directly and is never gated.
     expect(menu).toContain('const previewOnly = assignedCountry !== null');
     expect(menu).toContain('async function deployFromPicker(');
@@ -92,11 +94,9 @@ describe('campaign flow — dossier then nation overlay', () => {
     expect(menu).toContain('newCampaign.disabled = false');
   });
 
-  it('supports grid keyboard navigation in the roster', () => {
-    expect(menu).toContain('function onRosterKeydown(');
-    expect(menu).toContain('function rosterColumns(');
-    // Up/Down move a visual row (column count), not a single cell.
-    expect(menu).toMatch(/ArrowDown:\s*columns,\s*ArrowUp:\s*-columns/);
+  it('supports keyboard selection and joining from the map', () => {
+    expect(campaignMap).toContain("['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']");
+    expect(menu).toMatch(/countryMap\?\.addEventListener\('keydown'[\s\S]{0,260}deployFromPicker\(selectedCountryId\)/);
   });
 
   it('an abandoned launch tears the overlay down with the rest of the menu', () => {

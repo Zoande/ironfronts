@@ -7,6 +7,7 @@ import type { CommanderProfile, GameLobby } from '@ironfronts/protocol';
 import { assignedCountry as resolveAssignedCountry, selectableCountries } from './lobby-state';
 import { resolveFlagUrl } from '../ui/flags';
 import { mountCommander } from './commander';
+import { mountCampaignMap, type CampaignMapController } from './campaign-map';
 
 export interface MenuHandlers {
   /**
@@ -233,17 +234,18 @@ export function mountMenu(handlers: MenuHandlers): void {
   });
 
   // ---- Nation selection overlay (Mobilization Registry) --------------
-  // The operation dossier no longer carries the country list; "Begin Operation"
-  // opens this dedicated overlay, and only an explicit Confirm launches.
+  // The operation dossier opens a lightweight pregenerated world map. Every
+  // country is visible, while only eligible beige countries can be selected.
   const nationPicker = document.getElementById('ifm-nation-picker');
   const beginOperation = document.getElementById('ifm-begin-operation') as HTMLButtonElement | null;
   const confirmNation = document.getElementById('ifm-confirm-nation') as HTMLButtonElement | null;
   const nationCancel = document.getElementById('ifm-nation-cancel');
   const nationSelected = document.getElementById('ifm-nation-selected');
-  const roster = document.getElementById('ifm-country-grid');
+  const countryMap = document.getElementById('ifm-country-map') as HTMLCanvasElement | null;
   const countryHint = document.getElementById('ifm-country-hint');
   let selectedCountryId: number | null = null;
   let pickerOpen = false;
+  let mapController: CampaignMapController | null = null;
 
   function updateConfirmEnabled(): void {
     const country = selectedCountryId === null
@@ -251,7 +253,8 @@ export function mountMenu(handlers: MenuHandlers): void {
       : selectableCountries(handlers.lobby).find((c) => c.id === selectedCountryId) ?? null;
     if (confirmNation) {
       confirmNation.disabled = country === null;
-      confirmNation.textContent = previewOnly ? 'Preview only' : 'Confirm';
+      confirmNation.textContent = previewOnly ? 'Preview only'
+        : country ? `Join as ${country.name}` : 'Join Campaign';
     }
     if (nationSelected) {
       nationSelected.textContent = country ? `Assigned: ${country.name}` : 'No nation selected';
@@ -261,111 +264,38 @@ export function mountMenu(handlers: MenuHandlers): void {
       countryHint.textContent = previewOnly
         ? `Preview of the nation-selection flow. A second campaign slot isn't built yet, so this cannot deploy — your current campaign is safe.`
         : country === null
-          ? 'Select the nation you will command.'
-          : `${country.name} — confirm to take command for the whole campaign.`;
+          ? 'Select a beige country. Grey countries cannot be claimed.'
+          : `${country.name} is selected — join to take command for the whole campaign.`;
     }
   }
 
-  function selectRosterEntry(button: HTMLButtonElement): void {
-    if (!roster || button.classList.contains('is-unavailable')) return;
-    selectedCountryId = Number(button.dataset.countryId);
-    for (const other of roster.querySelectorAll('.ifm__country')) {
-      const on = other === button;
-      other.classList.toggle('is-selected', on);
-      other.setAttribute('aria-selected', String(on));
-    }
-    button.scrollIntoView({ block: 'nearest' });
+  function selectCountry(country: GameLobby['countries'][number]): void {
+    selectedCountryId = country.id;
+    mapController?.setSelection(country.id);
     playCue('select');
     updateConfirmEnabled();
   }
 
-  function renderRoster(preferCountryId: number | null): void {
-    if (!roster) return;
-    const playable = selectableCountries(handlers.lobby);
-    roster.replaceChildren();
-    const keep = preferCountryId !== null && playable.some((c) => c.id === preferCountryId);
-    selectedCountryId = keep ? preferCountryId : null;
-    for (const country of playable) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'ifm__country';
-      button.setAttribute('role', 'option');
-      button.dataset.countryId = String(country.id);
-      const selected = country.id === selectedCountryId;
-      button.setAttribute('aria-selected', String(selected));
-      button.classList.toggle('is-selected', selected);
-      const flag = document.createElement('span');
-      flag.className = 'ifm__country-flag';
-      const flagUrl = resolveFlagUrl(country.name);
-      if (flagUrl) {
-        flag.style.backgroundImage = `url("${flagUrl}")`;
-      } else {
-        // No period-accurate flag for this entity — a colour standard, not a
-        // wrong flag. (docs/flags.md explains which entities these are.)
-        flag.classList.add('is-standard');
-        flag.style.background = country.color;
-      }
-      const body = document.createElement('span');
-      body.className = 'ifm__country-body';
-      const name = document.createElement('span');
-      name.className = 'ifm__country-name';
-      name.textContent = country.name;
-      const meta = document.createElement('span');
-      meta.className = 'ifm__country-meta';
-      meta.textContent = `${country.startingCities} starting cities`;
-      body.append(name, meta);
-      button.append(flag, body);
-      button.addEventListener('click', () => selectRosterEntry(button));
-      roster.append(button);
-    }
-    updateConfirmEnabled();
-  }
-
-  /** Count roster columns from layout so Up/Down move a visual row, not one cell. */
-  function rosterColumns(entries: HTMLElement[]): number {
-    if (entries.length < 2) return 1;
-    const top = entries[0].offsetTop;
-    let columns = 1;
-    while (columns < entries.length && entries[columns].offsetTop === top) columns += 1;
-    return columns;
-  }
-
-  /** Arrow-key navigation across the roster grid; Enter/Space confirms. */
-  function onRosterKeydown(event: KeyboardEvent): void {
-    if (!roster) return;
-    const entries = [...roster.querySelectorAll<HTMLButtonElement>('.ifm__country')];
-    if (!entries.length) return;
-    if (event.key === 'Enter' || event.key === ' ') {
-      if (selectedCountryId !== null && !confirmNation?.disabled) { event.preventDefault(); void deployFromPicker(selectedCountryId); }
-      return;
-    }
-    const columns = rosterColumns(entries);
-    const deltas: Record<string, number> = {
-      ArrowRight: 1, ArrowLeft: -1, ArrowDown: columns, ArrowUp: -columns,
-    };
-    const step = deltas[event.key];
-    if (step === undefined) return;
-    event.preventDefault();
-    const current = entries.findIndex((entry) => entry.classList.contains('is-selected'));
-    let next = current < 0 ? (step > 0 ? 0 : entries.length - 1) : current + step;
-    // Skip unavailable entries; stop at the ends rather than wrapping.
-    while (next >= 0 && next < entries.length && entries[next].classList.contains('is-unavailable')) next += step;
-    if (next < 0 || next >= entries.length) return;
-    selectRosterEntry(entries[next]);
-    entries[next].focus();
-  }
-  roster?.addEventListener('keydown', onRosterKeydown);
-
   function openNationPicker(): void {
     if (pickerOpen || !nationPicker) return;
-    renderRoster(selectedCountryId);
     pickerOpen = true;
     nationPicker.hidden = false;
     document.getElementById('ifm-campaign')?.setAttribute('inert', '');
     playCue('dossier-open');
-    (roster?.querySelector<HTMLButtonElement>('.ifm__country.is-selected')
-      ?? roster?.querySelector<HTMLButtonElement>('.ifm__country:not(.is-unavailable)')
-      ?? roster)?.focus();
+    if (countryMap && !mapController) {
+      if (countryHint) countryHint.textContent = 'Loading campaign map…';
+      mapController = mountCampaignMap(countryMap, handlers.lobby, selectCountry, (status) => {
+        if (countryHint) countryHint.textContent = status.message;
+      });
+      void mapController.ready
+        .then(() => { updateConfirmEnabled(); mapController?.focus(); })
+        .catch((error) => {
+          if (countryHint) countryHint.textContent = error instanceof Error ? error.message : 'Campaign map failed to load.';
+        });
+    } else {
+      updateConfirmEnabled();
+      mapController?.focus();
+    }
   }
 
   function closeNationPicker(): void {
@@ -382,6 +312,12 @@ export function mountMenu(handlers: MenuHandlers): void {
   confirmNation?.addEventListener('click', () => {
     if (selectedCountryId === null) return;
     void deployFromPicker(selectedCountryId);
+  });
+  countryMap?.addEventListener('keydown', (event) => {
+    if ((event.key === 'Enter' || event.key === ' ') && selectedCountryId !== null && !confirmNation?.disabled) {
+      event.preventDefault();
+      void deployFromPicker(selectedCountryId);
+    }
   });
 
   // Graphics quality selector. Reads/persists the choice locally and only

@@ -486,11 +486,10 @@ async function startGame(token: number): Promise<void> {
       : null);
 
   // Attack-order cursor feedback. With an own army selected, the world cursor
-  // becomes the 0 A.D. attack cursor over a *fully identified* enemy stack, and
+  // becomes the 0 A.D. attack cursor over any detected enemy stack, and
   // the "no" cursor while aiming an attack at anything that can't be struck.
-  // Gating on `contact === 'visible'` keeps the cursor honest with the server's
-  // "a strike needs an identified target" rule — a contact-only blip gets no
-  // attack affordance, so hovering never confirms an unseen force is there.
+  // contact-only stacks remain composition-redacted even though their known
+  // map position can now receive an attack order.
   const updateWorldCursor = (clientX: number, clientY: number): void => {
     const session = activeSession;
     // Rally-point placement is province-scoped, not army-scoped: 0 A.D. rally
@@ -506,7 +505,7 @@ async function startGame(token: number): Promise<void> {
     }
     const hoveredId = renderer.pickArmyAt(clientX, clientY);
     const hovered = hoveredId && hoveredId !== selectedArmyId ? session.army(hoveredId) : null;
-    const strikable = Boolean(hovered && !hovered.own && hovered.contact === 'visible');
+    const strikable = Boolean(hovered && !hovered.own);
     if (strikable) {
       canvas.style.cursor = 'url(/cursors/action-attack.png) 1 1, crosshair';
     } else if (targetingMode === 'attack') {
@@ -1401,7 +1400,7 @@ function handleMapClick(
       pushNotification('information', 'Attack order issued',
         'Your force is advancing to engage.');
     };
-    const result = targetArmyId && targetArmyId !== selectedArmyId && pickedTarget?.contact === 'visible'
+    const result = targetArmyId && targetArmyId !== selectedArmyId && pickedTarget && !pickedTarget.own
       ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
       : (() => {
         const ground = renderer.groundPointAt(clientX, clientY);
@@ -1504,7 +1503,7 @@ function handleMapCommand(
   const targetArmyId = renderer.pickArmyAt(clientX, clientY);
   if (targetArmyId && targetArmyId !== selectedArmyId) {
     const target = session.army(targetArmyId);
-    if (target && !target.own && target.contact === 'visible') {
+    if (target && !target.own) {
       const result = session.orderAttackArmy(selectedArmyId, targetArmyId);
       if (!result.ok) orderFeedback(result.reason ?? 'Invalid target.');
       refreshSelectedArmy(session);

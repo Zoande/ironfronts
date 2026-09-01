@@ -18,6 +18,7 @@ import { carveRiverTerrain, buildTerrainTopology, promoteRiverChannelsToTerrain 
 import { buildBakedTerrainAlbedo, buildNavigationField, buildTerrainNormals } from './world/terrain-precompute.mjs';
 import { fillProvincePolygon, readMaterialJson } from './world/source-data.mjs';
 import { buildPoliticalPalette } from './world/political-palette.mjs';
+import { generateCampaignMap } from './generate-campaign-map.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MATERIAL = path.join(ROOT, 'material');
@@ -457,6 +458,7 @@ async function main() {
     writeFile(path.join(OUTPUT, 'world.json'), `${JSON.stringify(manifest)}\n`),
   ]);
   await promoteStagedWorld();
+  await generateCampaignMap();
   console.log(`World assets ready: ${provinceRecords.length} provinces, ${waterways.stats.riverSystems} river systems, ${waterways.stats.canalSystems} canals, ${infrastructure.stats.logicalRoads} logical roads (${infrastructure.stats.emittedRoads} visible, ${infrastructure.stats.hiddenRoads} hidden), ${trees.length / 8} trees, ${buildings.length / 8} buildings.`);
 }
 

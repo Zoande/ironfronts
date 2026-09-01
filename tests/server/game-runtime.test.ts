@@ -35,7 +35,8 @@ function tinyWorld(): WorldData {
 describe('single authoritative game runtime', () => {
   it('selects five-city countries, initializes them equally, and assigns seats atomically', () => {
     const runtime = new GameRuntime(tinyWorld());
-    expect(runtime.lobby().countries.map((country) => country.id)).toEqual([1, 2]);
+    // The lobby map includes the ineligible minor in grey; join remains gated.
+    expect(runtime.lobby().countries.map((country) => country.id)).toEqual([1, 2, 3]);
     expect(runtime.session.state.countries[1].stockpile).toEqual(runtime.session.state.countries[2].stockpile);
     expect(Object.values(runtime.session.state.armies).filter((army) => army.ownerCountryId === 1)).toHaveLength(4);
     expect(Object.values(runtime.session.state.armies).filter((army) => army.ownerCountryId === 2)).toHaveLength(4);

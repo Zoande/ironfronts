@@ -41,20 +41,26 @@ export class GameRuntime {
       const owner = this.session.state.provinceOwners[province.id];
       cityCounts.set(owner, (cityCounts.get(owner) ?? 0) + 1);
     }
+    const aliveCountryIds = new Set(Object.values(this.session.state.provinceOwners));
     return {
       gameId: GAME_ID,
       name: 'World at War',
       gameVersion: GAME_VERSION,
       protocolVersion: PROTOCOL_VERSION,
       assignedCountryId: accountId ? this.seatsByAccount.get(accountId) ?? null : null,
-      countries: this.session.diagnostics.eligibleCountryIds.map((id) => ({
-        id,
-        name: this.session.state.countries[id]?.name ?? `Country ${id}`,
-        color: this.session.state.countries[id]?.color ?? '#888888',
-        startingCities: cityCounts.get(id) ?? 0,
-        alive: Object.values(this.session.state.provinceOwners).some((owner) => owner === id),
-        claimed: this.accountsByCountry.has(id),
-      })),
+      // The lobby map shows every territorial country. `join` still enforces
+      // the scenario's five-city eligibility list authoritatively.
+      countries: Object.values(this.session.state.countries)
+        .filter((country) => aliveCountryIds.has(country.id))
+        .sort((a, b) => a.id - b.id)
+        .map((country) => ({
+          id: country.id,
+          name: country.name,
+          color: country.color,
+          startingCities: cityCounts.get(country.id) ?? 0,
+          alive: true,
+          claimed: this.accountsByCountry.has(country.id),
+        })),
     };
   }
 

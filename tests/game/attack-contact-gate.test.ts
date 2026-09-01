@@ -36,12 +36,13 @@ const world: WorldData = {
 const ctx = (armies: ArmyStack[]): { state: GameState; world: WorldData } => ({ state: state(armies), world });
 
 // infantry visionInner 90 (=> 'visible'), visionOuter 180 (=> 'contact').
-describe('direct army attack requires a fully identified target', () => {
-  it('rejects a strike on a contact-range detection without leaking its position', () => {
+describe('direct army attack accepts any currently detected target', () => {
+  it('passes the detection gate for a contact-range target', () => {
     const c = ctx([army('p', 1, 0, 0), army('e', 2, 130, 0)]);
     const result = issueAttack(c as never, { type: 'attackArmy', countryId: 1, armyId: 'p', target: { kind: 'army', armyId: 'e' } });
-    expect(result.ok).toBe(false);
-    expect(result.reason).toMatch(/only a contact/i);
+    // It may still fail later for lack of a movement graph, but not because its
+    // detailed composition is unidentified.
+    expect(result.reason ?? '').not.toMatch(/contact|detected/i);
   });
 
   it('rejects a strike on an undetected target', () => {
