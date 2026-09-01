@@ -24,6 +24,37 @@ export interface CampaignMapController {
   focus(): void;
 }
 
+interface MapRect {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * Translate a pointer into the country raster's pixel space. The canvas uses
+ * `object-fit: contain`, so its bitmap may be letterboxed inside the element;
+ * those insets must be removed before scaling or edge clicks select a country
+ * offset from the one under the pointer.
+ */
+export function campaignMapCoordinates(
+  clientX: number, clientY: number, rect: MapRect,
+): readonly [number, number] | null {
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const mapAspect = CAMPAIGN_MAP_WIDTH / CAMPAIGN_MAP_HEIGHT;
+  const rectAspect = rect.width / rect.height;
+  const displayWidth = rectAspect > mapAspect ? rect.height * mapAspect : rect.width;
+  const displayHeight = rectAspect > mapAspect ? rect.height : rect.width / mapAspect;
+  const displayLeft = rect.left + (rect.width - displayWidth) / 2;
+  const displayTop = rect.top + (rect.height - displayHeight) / 2;
+  if (clientX < displayLeft || clientX >= displayLeft + displayWidth
+    || clientY < displayTop || clientY >= displayTop + displayHeight) return null;
+  return [
+    Math.min(CAMPAIGN_MAP_WIDTH - 1, Math.floor((clientX - displayLeft) / displayWidth * CAMPAIGN_MAP_WIDTH)),
+    Math.min(CAMPAIGN_MAP_HEIGHT - 1, Math.floor((clientY - displayTop) / displayHeight * CAMPAIGN_MAP_HEIGHT)),
+  ];
+}
+
 function unavailableReason(country: LobbyCountry): string {
   if (!country.alive) return `${country.name} · No controlled territory · Unavailable`;
   if (country.claimed) return `${country.name} · Already claimed · Unavailable`;
@@ -73,10 +104,16 @@ export function mountCampaignMap(
   const countryAt = (event: PointerEvent | MouseEvent): LobbyCountry | null => {
     if (!ids) return null;
     const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(CAMPAIGN_MAP_WIDTH - 1,
-      Math.floor((event.clientX - rect.left) / rect.width * CAMPAIGN_MAP_WIDTH)));
-    const y = Math.max(0, Math.min(CAMPAIGN_MAP_HEIGHT - 1,
-      Math.floor((event.clientY - rect.top) / rect.height * CAMPAIGN_MAP_HEIGHT)));
+    // getBoundingClientRect includes the decorative border; object-fit uses the
+    // inner client box. Exclude it so even narrow border countries stay exact.
+    const point = campaignMapCoordinates(event.clientX, event.clientY, {
+      left: rect.left + canvas.clientLeft,
+      top: rect.top + canvas.clientTop,
+      width: canvas.clientWidth,
+      height: canvas.clientHeight,
+    });
+    if (!point) return null;
+    const [x, y] = point;
     return countriesById.get(ids[y * CAMPAIGN_MAP_WIDTH + x]) ?? null;
   };
 
