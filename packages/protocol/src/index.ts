@@ -82,8 +82,6 @@ export interface ProjectedArmy {
     friendlyBaselineHp: number;
     enemyHp: number;
     enemyBaselineHp: number;
-    friendlyNextVolleyTick: number;
-    enemyNextVolleyTick: number;
     reinforcementCount: number;
   }>;
   legalRetreatExits?: ReadonlyArray<{
@@ -95,7 +93,6 @@ export interface ProjectedArmy {
     range: number;
     targetArmyId: string | null;
     manualTarget: boolean;
-    nextVolleyTick: number;
   } | null;
 }
 

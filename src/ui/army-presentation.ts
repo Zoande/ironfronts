@@ -9,8 +9,6 @@ export interface BattleFrontPresentationSource {
   readonly friendlyBaselineHp: number;
   readonly enemyHp: number;
   readonly enemyBaselineHp: number;
-  readonly friendlyNextVolleyTick: number;
-  readonly enemyNextVolleyTick: number;
   readonly reinforcementCount: number;
 }
 
@@ -18,9 +16,6 @@ export interface BattleSidePresentation {
   readonly hp: number;
   readonly baselineHp: number;
   readonly healthPercent: number;
-  readonly nextVolleyTick: number;
-  readonly cooldown: string;
-  readonly ready: boolean;
 }
 
 export interface BattleOverviewPresentation {
@@ -33,17 +28,14 @@ export interface BattleOverviewPresentation {
 
 const finiteNonNegative = (value: number): number => Number.isFinite(value) ? Math.max(0, value) : 0;
 
-export function formatBattleCooldown(nextVolleyTick: number, simulationTick: number): string {
-  const seconds = Math.max(0, Math.ceil((finiteNonNegative(nextVolleyTick) - finiteNonNegative(simulationTick)) / 10));
-  if (seconds === 0) return 'Ready';
-  const minutes = Math.floor(seconds / 60);
-  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+/** Authoritative HP stays fractional; only the player-facing number is rounded. */
+export function roundDisplayedHp(value: number): number {
+  return Math.round(finiteNonNegative(value));
 }
 
 /** Condense an unbounded directional-front list into one fixed-size battle readout. */
 export function summarizeBattleFronts(
   fronts: readonly BattleFrontPresentationSource[] | undefined,
-  simulationTick: number,
 ): BattleOverviewPresentation | null {
   if (!fronts?.length) return null;
   const side = (friendly: boolean): BattleSidePresentation => {
@@ -51,16 +43,10 @@ export function summarizeBattleFronts(
     const baselineHp = fronts.reduce(
       (sum, front) => sum + finiteNonNegative(friendly ? front.friendlyBaselineHp : front.enemyBaselineHp), 0,
     );
-    const nextVolleyTick = Math.min(...fronts.map((front) => finiteNonNegative(
-      friendly ? front.friendlyNextVolleyTick : front.enemyNextVolleyTick,
-    )));
     return {
       hp,
       baselineHp,
       healthPercent: baselineHp > 0 ? Math.round(Math.min(1, hp / baselineHp) * 100) : 0,
-      nextVolleyTick,
-      cooldown: formatBattleCooldown(nextVolleyTick, simulationTick),
-      ready: nextVolleyTick <= simulationTick,
     };
   };
   const firstRole = fronts[0].role;

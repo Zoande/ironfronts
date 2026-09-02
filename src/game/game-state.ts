@@ -112,7 +112,6 @@ export interface BattleFrontSideState {
   armyIds: string[];
   /** Full HP brought into this front, retained after casualties. */
   entryMaxHpByArmy: Record<string, number>;
-  nextVolleyTick: number;
 }
 
 export interface BattleFrontState {
@@ -147,7 +146,7 @@ export interface GameState {
   readonly economyEnabled: boolean;
 
   clock: GameClock;
-  /** Fixed authoritative 10 Hz step number; 18,000 ticks = 30 real minutes. */
+  /** Fixed authoritative 10 Hz step number, used for sequencing and presentation effects. */
   simulationTick: number;
 
   /** Every country with territory, keyed by id. */

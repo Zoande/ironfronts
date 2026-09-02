@@ -87,7 +87,7 @@ export function issueSplit(ctx: SimContext, command: SplitArmyCommand): CommandR
     suspendedOrder: null,
     battleFrontIds: [],
     retreat: null,
-    artillery: { targetArmyId: null, manualTarget: false, nextVolleyTick: 0 },
+    artillery: { targetArmyId: null, manualTarget: false },
   };
   ctx.state.armies[id] = child;
   const route = issueMoveOrder(

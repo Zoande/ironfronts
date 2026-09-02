@@ -112,6 +112,7 @@ const diagnosticsPerformance = required<HTMLElement>('diagnostics-performance');
 const debugTime = required<HTMLInputElement>('debug-time');
 const debugTimeState = required<HTMLOutputElement>('debug-time-state');
 const debugTimeMultiplier = required<HTMLInputElement>('debug-time-multiplier');
+const debugTimeUnlink = required<HTMLButtonElement>('debug-time-unlink');
 const debugTimePresets = [...document.querySelectorAll<HTMLButtonElement>('[data-debug-time]')];
 const debugRain = required<HTMLInputElement>('debug-rain');
 const debugThunder = required<HTMLButtonElement>('debug-thunder');
@@ -134,6 +135,9 @@ const debugPanels = [...document.querySelectorAll<HTMLElement>('[data-debug-pane
 const debugPlayerCountry = required<HTMLElement>('debug-player-country');
 const debugCountryFlag = required<HTMLElement>('debug-country-flag');
 const debugPlayerForm = required<HTMLFormElement>('debug-player-form');
+
+let lightingClockUnlinked = false;
+let unlinkedLightingMultiplier = 1;
 const debugPlayerInput = required<HTMLInputElement>('debug-player-input');
 const debugWarForm = required<HTMLFormElement>('debug-war-form');
 const debugWarInput = required<HTMLInputElement>('debug-at-war');
@@ -627,17 +631,43 @@ async function startGame(token: number): Promise<void> {
     updateTimeControls(state);
   };
 
+  const setLightingClockUnlinked = (unlinked: boolean): void => {
+    lightingClockUnlinked = unlinked;
+    debugTimeUnlink.setAttribute('aria-pressed', String(unlinked));
+    debugTimeUnlink.textContent = unlinked ? 'Relink' : 'Unlink';
+    debugTimeUnlink.title = unlinked
+      ? 'Relink lighting to the real-life clock'
+      : 'Unlink lighting from the real-life clock';
+    const multiplier = renderer.setTimeMultiplier(unlinked ? unlinkedLightingMultiplier : 0);
+    if (unlinked) unlinkedLightingMultiplier = multiplier;
+  };
+  lightingClockUnlinked = false;
+  unlinkedLightingMultiplier = 1;
+  debugTimeMultiplier.value = unlinkedLightingMultiplier.toFixed(1);
+  setLightingClockUnlinked(false);
+  debugTimeUnlink.addEventListener('click', () => {
+    setLightingClockUnlinked(!lightingClockUnlinked);
+  }, attemptListener);
+
   debugTime.addEventListener('change', () => {
     const hour = parseClock(debugTime.value);
-    if (hour !== undefined) renderer.setTimeOfDay(hour);
+    if (hour !== undefined) {
+      setLightingClockUnlinked(true);
+      renderer.setTimeOfDay(hour);
+    }
   }, attemptListener);
   for (const preset of debugTimePresets) {
-    preset.addEventListener('click', () => renderer.setTimeOfDay(Number(preset.dataset.debugTime)), attemptListener);
+    preset.addEventListener('click', () => {
+      setLightingClockUnlinked(true);
+      renderer.setTimeOfDay(Number(preset.dataset.debugTime));
+    }, attemptListener);
   }
   const applyTimeMultiplier = () => {
     if (debugTimeMultiplier.value === '') return;
-    const multiplier = renderer.setTimeMultiplier(Number(debugTimeMultiplier.value));
-    debugTimeMultiplier.value = multiplier.toFixed(1);
+    const requestedMultiplier = Number(debugTimeMultiplier.value);
+    unlinkedLightingMultiplier = requestedMultiplier;
+    setLightingClockUnlinked(true);
+    debugTimeMultiplier.value = unlinkedLightingMultiplier.toFixed(1);
   };
   debugTimeMultiplier.addEventListener('change', applyTimeMultiplier, attemptListener);
   debugTimeMultiplier.addEventListener('blur', applyTimeMultiplier, attemptListener);
@@ -798,7 +828,9 @@ async function startGame(token: number): Promise<void> {
 function updateTimeControls(state: TimeOfDayState): void {
   debugTimeState.textContent = `${state.stage} · ${state.clock}`;
   if (document.activeElement !== debugTime) debugTime.value = state.clock;
-  if (document.activeElement !== debugTimeMultiplier) debugTimeMultiplier.value = state.multiplier.toFixed(1);
+  if (lightingClockUnlinked && document.activeElement !== debugTimeMultiplier) {
+    debugTimeMultiplier.value = state.multiplier.toFixed(1);
+  }
 }
 
 const simSpeedGroup = debugSimSpeedButtons[0]?.closest<HTMLElement>('.sim-speed-controls');
@@ -894,7 +926,9 @@ async function bootstrapGameSession(
   const updateCivilClock = (): void => {
     const clock = session.readClock();
     uiStore.patch({ clock });
-    renderer.setTimeOfDay(clock.hour + clock.minute / 60 + clock.second / 3_600);
+    if (!lightingClockUnlinked) {
+      renderer.setTimeOfDay(clock.hour + clock.minute / 60 + clock.second / 3_600);
+    }
   };
   updateCivilClock();
   const civilClockTimer = window.setInterval(updateCivilClock, 250);
@@ -1645,7 +1679,6 @@ function refreshSelectedArmy(
       canSplit: view.own && view.status !== 'engaged' && view.status !== 'retreating',
       canStop: view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && (Boolean(view.moveOrder) || view.status === 'extracting' || targetingMode !== null),
-      simulationTick: session.state.simulationTick,
       legalRetreatExits: view.legalRetreatExits,
       battleFronts: view.battleFronts,
       artillery: view.artillery,
@@ -1716,6 +1749,7 @@ function refreshSelectedProvince(session: RemoteGameSession): void {
  *  cue into a wall of noise (the server already fires 'engaged' once per
  *  battle, so this is the only extra guard needed). */
 let lastCombatAlertAt = 0;
+const lastBombardmentNoticeAt = new Map<string, number>();
 function maybePlayCombatAlert(): void {
   const now = Date.now();
   if (now - lastCombatAlertAt < 3_000) return;
@@ -1787,7 +1821,7 @@ function drainSessionEvents(session: RemoteGameSession): void {
         if (ev.kind === 'engaged') {
           combatEffects.spawnVolley('generic', spot.x, spot.z, Number.isFinite(dir) ? dir : 0);
           if (mine) combatEffects.spawn(EFFECT_KIND.targetFlash, spot.x, spot.z, { scale: 1.1 });
-        } else if (ev.kind === 'volley') {
+        } else if (ev.kind === 'combatPulse') {
           combatEffects.spawnVolley('infantry', spot.x, spot.z, Number.isFinite(dir) ? dir : 0);
         } else if (ev.kind === 'bombardment') {
           if (atkSpot) {
@@ -1823,8 +1857,15 @@ function drainSessionEvents(session: RemoteGameSession): void {
       pushNotification('combat', mine ? 'Stack destroyed' : 'Enemy stack destroyed',
         mine ? 'One of your armies has been wiped out.' : 'You have annihilated an enemy army.');
     } else if (ev.kind === 'bombardment') {
-      pushNotification('combat', mine ? 'Under bombardment' : 'Artillery firing',
-        mine ? 'Enemy artillery has struck one of your armies.' : 'Your artillery has fired a volley.');
+      // Continuous artillery emits frequent visual pulses. Keep those effects,
+      // but rate-limit the corresponding toast per pair of belligerents.
+      const noticeKey = `${ev.attacker}:${ev.defender}`;
+      const now = Date.now();
+      if (now - (lastBombardmentNoticeAt.get(noticeKey) ?? 0) >= 30_000) {
+        lastBombardmentNoticeAt.set(noticeKey, now);
+        pushNotification('combat', mine ? 'Under bombardment' : 'Artillery firing',
+          mine ? 'Enemy artillery is shelling one of your armies.' : 'Your artillery is firing continuously.');
+      }
     } else if (ev.kind === 'reinforced') {
       pushNotification('combat', 'Battle reinforced', 'Another army has joined an active direction.');
     } else if (ev.kind === 'battleEnded') {

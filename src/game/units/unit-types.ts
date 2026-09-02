@@ -16,7 +16,7 @@ export type UnitCategory = 'infantry' | 'engineer' | 'recon' | 'armor' | 'artill
 /** Coarse armour bucket used by the combat table. */
 export type ArmorClass = 'soft' | 'light' | 'heavy';
 
-/** Damage dealt to each target armour pool by one full-health unit. */
+/** HP damage dealt per game-hour to each armour pool by one full-health unit. */
 export interface DamageProfile {
   readonly soft: number;
   readonly light: number;

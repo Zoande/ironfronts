@@ -13,18 +13,18 @@ import { issueRetreatOrder, retreatPaths, type RetreatPath } from './units/movem
 import { unitType } from './units/unit-catalog';
 import { computeArmyVisibility } from './visibility';
 import { wrappedDistance } from './geometry';
-import { COMBAT_SNAP, COMBAT_VOLLEY_TICKS } from './combat/constants';
+import { COMBAT_SNAP } from './combat/constants';
 import {
-  addDamage, applyPendingDamage, calculateVolley, type GroupRef, type PendingDamage,
+  addDamage, applyPendingDamage, calculateDamage, type GroupRef, type PendingDamage,
 } from './combat/damage';
 import { provinceAtNode } from './combat/location';
 
-export { COMBAT_FRONTAGE, COMBAT_VOLLEY_TICKS } from './combat/constants';
+export { COMBAT_FRONTAGE } from './combat/constants';
 export { stepCapture, type CaptureEvent } from './combat/capture';
 
 export interface CombatEvent {
   readonly kind:
-    | 'engaged' | 'reinforced' | 'volley' | 'retreat'
+    | 'engaged' | 'reinforced' | 'combatPulse' | 'retreat'
     | 'destroyed' | 'bombardment' | 'battleEnded';
   readonly attacker: number;
   readonly defender: number;
@@ -39,7 +39,16 @@ function initializeState(session: SimContext): void {
   session.state.battles ??= {};
   session.state.battleFronts ??= {};
   session.state.nextBattleId ??= 1;
-  for (const army of Object.values(session.state.armies)) ensureArmyRuntimeState(army);
+  for (const army of Object.values(session.state.armies)) {
+    ensureArmyRuntimeState(army);
+    // Old version-2 saves can contain cadence fields. They are deliberately
+    // discarded now that every combat pass applies elapsed-hour damage.
+    delete (army.artillery as { nextVolleyTick?: number }).nextVolleyTick;
+  }
+  for (const front of Object.values(session.state.battleFronts)) {
+    delete (front.sideA as BattleFrontSideState & { nextVolleyTick?: number }).nextVolleyTick;
+    delete (front.sideB as BattleFrontSideState & { nextVolleyTick?: number }).nextVolleyTick;
+  }
 }
 
 function sideArmies(session: SimContext, side: BattleFrontSideState): ArmyStack[] {
@@ -67,7 +76,7 @@ function roleOf(army: ArmyStack, provinceId: number | null): BattleRole {
 }
 
 function makeSide(
-  army: ArmyStack, role: BattleRole, simulationTick: number, directionNodeId = directionOf(army),
+  army: ArmyStack, role: BattleRole, directionNodeId = directionOf(army),
 ): BattleFrontSideState {
   return {
     countryId: army.ownerCountryId,
@@ -75,7 +84,6 @@ function makeSide(
     role,
     armyIds: [army.id],
     entryMaxHpByArmy: { [army.id]: stackMaxHp(army) },
-    nextVolleyTick: simulationTick,
   };
 }
 
@@ -165,11 +173,11 @@ function findOrCreateFront(
     x: (a.x + b.x) / 2,
     z: (a.z + b.z) / 2,
     sideA: makeSide(
-      a, bothMoving ? 'attack' : aRole, session.state.simulationTick,
+      a, bothMoving ? 'attack' : aRole,
       aRole === 'defense' && provinceId !== null ? anchorNodeId : directionOf(a),
     ),
     sideB: makeSide(
-      b, bothMoving ? 'attack' : bRole, session.state.simulationTick,
+      b, bothMoving ? 'attack' : bRole,
       bRole === 'defense' && provinceId !== null ? anchorNodeId : directionOf(b),
     ),
   };
@@ -339,15 +347,17 @@ function cleanupFronts(session: SimContext, events: CombatEvent[]): void {
   for (const army of Object.values(session.state.armies)) resumeArmyIfFree(army);
 }
 
-function artilleryDamage(army: ArmyStack, target: ArmyStack): Array<{ ref: GroupRef; amount: number }> {
+function artilleryDamage(
+  army: ArmyStack, target: ArmyStack, dtHours: number,
+): Array<{ ref: GroupRef; amount: number }> {
   const artilleryOnly: ArmyStack = {
     ...army,
     units: army.units.filter((group) => unitType(group.typeId).category === 'artillery'),
   };
-  return calculateVolley([artilleryOnly], 'attack', [target]);
+  return calculateDamage([artilleryOnly], 'attack', [target], dtHours);
 }
 
-function stepArtillery(session: SimContext, events: CombatEvent[]): void {
+function stepArtillery(session: SimContext, dtHours: number, events: CombatEvent[]): void {
   const armies = Object.values(session.state.armies);
   for (const army of armies) {
     ensureArmyRuntimeState(army);
@@ -372,18 +382,19 @@ function stepArtillery(session: SimContext, events: CombatEvent[]): void {
       target = validTargets[0];
       army.artillery!.targetArmyId = target?.id ?? null;
     }
-    if (!target || session.state.simulationTick < army.artillery!.nextVolleyTick) continue;
+    if (!target) continue;
     const pending = new Map<string, PendingDamage>();
-    addDamage(pending, artilleryDamage(army, target));
+    addDamage(pending, artilleryDamage(army, target, dtHours));
     applyPendingDamage(pending);
     const destroyed = stackUnitCount(target) === 0;
-    army.artillery!.nextVolleyTick = destroyed
-      ? session.state.simulationTick
-      : session.state.simulationTick + COMBAT_VOLLEY_TICKS;
-    events.push({
-      kind: 'bombardment', attacker: army.ownerCountryId, defender: target.ownerCountryId,
-      armyId: army.id, targetArmyId: target.id,
-    });
+    // Damage is continuous. The event is a presentation pulse only, sampled at
+    // one real-time Hz so effects do not flood the client or event gateway.
+    if (session.state.simulationTick % 10 === 0) {
+      events.push({
+        kind: 'bombardment', attacker: army.ownerCountryId, defender: target.ownerCountryId,
+        armyId: army.id, targetArmyId: target.id,
+      });
+    }
     if (destroyed) {
       removeArmyFromAllFronts(session, target.id);
       delete session.state.armies[target.id];
@@ -395,35 +406,27 @@ function stepArtillery(session: SimContext, events: CombatEvent[]): void {
   }
 }
 
-/** One fixed authoritative combat pass. All due fronts use one pre-damage snapshot. */
-export function stepCombat(session: SimContext, _dtHours: number): CombatEvent[] {
+/** One fixed authoritative combat pass. All fronts use one pre-damage snapshot. */
+export function stepCombat(session: SimContext, dtHours: number): CombatEvent[] {
   initializeState(session);
   const events: CombatEvent[] = [];
   detectEngagements(session, events);
   const pending = new Map<string, PendingDamage>();
-  const due: BattleFrontState[] = [];
-  for (const front of Object.values(session.state.battleFronts)) {
-    const aDue = session.state.simulationTick >= front.sideA.nextVolleyTick;
-    const bDue = session.state.simulationTick >= front.sideB.nextVolleyTick;
-    if (!aDue && !bDue) continue;
+  const activeFronts = Object.values(session.state.battleFronts);
+  for (const front of activeFronts) {
     const a = sideArmies(session, front.sideA);
     const b = sideArmies(session, front.sideB);
-    if (aDue) {
-      addDamage(pending, calculateVolley(a, front.sideA.role, b));
-      front.sideA.nextVolleyTick = session.state.simulationTick + COMBAT_VOLLEY_TICKS;
-    }
-    if (bDue) {
-      addDamage(pending, calculateVolley(b, front.sideB.role, a));
-      front.sideB.nextVolleyTick = session.state.simulationTick + COMBAT_VOLLEY_TICKS;
-    }
-    due.push(front);
+    addDamage(pending, calculateDamage(a, front.sideA.role, b, dtHours));
+    addDamage(pending, calculateDamage(b, front.sideB.role, a, dtHours));
   }
   applyPendingDamage(pending);
-  for (const front of due) {
-    events.push({
-      kind: 'volley', attacker: front.sideA.countryId, defender: front.sideB.countryId,
-      battleId: front.battleId, frontId: front.id,
-    });
+  if (session.state.simulationTick % 10 === 0) {
+    for (const front of activeFronts) {
+      events.push({
+        kind: 'combatPulse', attacker: front.sideA.countryId, defender: front.sideB.countryId,
+        battleId: front.battleId, frontId: front.id,
+      });
+    }
   }
   for (const army of Object.values(session.state.armies)) {
     if (stackUnitCount(army) > 0) continue;
@@ -431,7 +434,7 @@ export function stepCombat(session: SimContext, _dtHours: number): CombatEvent[]
     delete session.state.armies[army.id];
     events.push({ kind: 'destroyed', attacker: 0, defender: army.ownerCountryId, armyId: army.id });
   }
-  for (const front of due) {
+  for (const front of activeFronts) {
     if (!session.state.battleFronts[front.id]) continue;
     if (autoRetreat(session, front, front.sideA)) {
       events.push({ kind: 'retreat', attacker: front.sideB.countryId, defender: front.sideA.countryId });
@@ -440,7 +443,7 @@ export function stepCombat(session: SimContext, _dtHours: number): CombatEvent[]
       events.push({ kind: 'retreat', attacker: front.sideA.countryId, defender: front.sideB.countryId });
     }
   }
-  stepArtillery(session, events);
+  stepArtillery(session, dtHours, events);
   cleanupFronts(session, events);
   return events;
 }

@@ -8,7 +8,7 @@
  */
 
 import { createIcon, iconMarkup, type IconName } from './icons';
-import { summarizeBattleFronts } from './army-presentation';
+import { roundDisplayedHp, summarizeBattleFronts } from './army-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import type { ArmyStackView, CombatStatus } from './ui-state';
@@ -21,6 +21,13 @@ const COMBAT_LABEL: Record<CombatStatus, string> = {
   engaged: 'In combat',
   retreating: 'Withdrawing',
 };
+
+function formatDamageRate(value: number): string {
+  if (!Number.isFinite(value)) return '--';
+  const magnitude = Math.abs(value);
+  const digits = magnitude >= 100 ? 0 : magnitude >= 10 ? 1 : magnitude >= 1 ? 2 : 4;
+  return value.toFixed(digits).replace(/\.?0+$/, '');
+}
 
 /**
  * Compact map counter for a stacked force. Original Ironfronts styling: a
@@ -123,7 +130,7 @@ export function renderSelectedArmyPanel(
   const statTable = node('table', 'ifg-army-panel__stat-table');
   const statHead = node('thead');
   const headingRow = node('tr');
-  headingRow.append(node('th', undefined, 'Damage'), node('th', undefined, 'S'), node('th', undefined, 'L'), node('th', undefined, 'H'));
+  headingRow.append(node('th', undefined, 'Damage / h'), node('th', undefined, 'S'), node('th', undefined, 'L'), node('th', undefined, 'H'));
   statHead.append(headingRow);
   const statBody = node('tbody');
   const appendProfile = (label: string, icon: IconName, value: typeof army.attack): void => {
@@ -132,9 +139,9 @@ export function renderSelectedArmyPanel(
     key.append(createIcon(icon, 'ifg-army-stat__icon'), document.createTextNode(label));
     row.append(
       key,
-      node('td', undefined, value ? String(Math.round(value.soft)) : '--'),
-      node('td', undefined, value ? String(Math.round(value.light)) : '--'),
-      node('td', undefined, value ? String(Math.round(value.heavy)) : '--'),
+      node('td', undefined, value ? formatDamageRate(value.soft) : '--'),
+      node('td', undefined, value ? formatDamageRate(value.light) : '--'),
+      node('td', undefined, value ? formatDamageRate(value.heavy) : '--'),
     );
     statBody.append(row);
   };
@@ -256,12 +263,8 @@ export function renderSelectedArmyPanel(
   const report = node('section', 'ifg-army-panel__report');
 
   const activity = node('div', 'ifg-army-panel__activity');
-  const remaining = (tick: number): string => {
-    const seconds = Math.max(0, Math.ceil((tick - (army.simulationTick ?? 0)) / 10));
-    return seconds === 0 ? 'Ready' : `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-  };
   const battle = army.combat === 'engaged'
-    ? summarizeBattleFronts(army.battleFronts, army.simulationTick ?? 0) : null;
+    ? summarizeBattleFronts(army.battleFronts) : null;
   if (battle) {
     activity.classList.add('ifg-army-panel__activity--combat');
     const battleHeader = node('div', 'ifg-battle__header');
@@ -284,7 +287,7 @@ export function renderSelectedArmyPanel(
       const sideHeader = node('div', 'ifg-battle-side__header');
       sideHeader.append(
         node('strong', undefined, label),
-        node('b', undefined, `${Math.ceil(side.hp)} / ${Math.ceil(side.baselineHp)} HP`),
+        node('b', undefined, `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP`),
       );
       const healthTrack = node('span', 'ifg-battle-side__health');
       healthTrack.setAttribute('role', 'progressbar');
@@ -295,10 +298,7 @@ export function renderSelectedArmyPanel(
       const healthFill = node('i');
       healthFill.style.width = `${side.healthPercent}%`;
       healthTrack.append(healthFill);
-      const cooldown = node('span', 'ifg-battle-side__cooldown');
-      cooldown.classList.toggle('is-ready', side.ready);
-      cooldown.append(node('small', undefined, 'Next volley'), node('b', undefined, side.cooldown));
-      row.append(sideHeader, healthTrack, cooldown);
+      row.append(sideHeader, healthTrack);
       battleSides.append(row);
     };
     appendSide(army.own ? 'Your forces' : 'Selected forces', battle.friendly, army.own ? 'friendly' : 'enemy');
@@ -321,7 +321,7 @@ export function renderSelectedArmyPanel(
     activity.append(activityValue);
     if (army.artillery?.targetArmyId) {
       activity.append(node('span', undefined,
-        `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} bombardment: ${army.artillery.targetArmyId} · ${remaining(army.artillery.nextVolleyTick)}`));
+        `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} continuous bombardment: ${army.artillery.targetArmyId}`));
     }
   }
   report.append(activity);

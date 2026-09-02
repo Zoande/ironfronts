@@ -35,8 +35,8 @@ function profileFor(role: BattleRole, group: UnitGroup): DamageProfile {
  * against every target group. Overflow strength remains in the HP pools but
  * contributes no firepower.
  */
-export function calculateVolley(
-  attackers: readonly ArmyStack[], role: BattleRole, defenders: readonly ArmyStack[],
+export function calculateDamage(
+  attackers: readonly ArmyStack[], role: BattleRole, defenders: readonly ArmyStack[], dtHours: number,
 ): Array<{ ref: GroupRef; amount: number }> {
   const hp = armorHealth(defenders);
   const total = hp.soft + hp.light + hp.heavy;
@@ -87,7 +87,7 @@ export function calculateVolley(
 
   const result: Array<{ ref: GroupRef; amount: number }> = [];
   for (const armor of ['soft', 'light', 'heavy'] as const) {
-    const classDamage = fire[armor] * ratio[armor];
+    const classDamage = fire[armor] * ratio[armor] * Math.max(0, dtHours);
     if (classDamage <= 0 || hp[armor] <= 0) continue;
     for (const army of defenders) {
       for (const group of army.units) {

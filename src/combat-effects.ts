@@ -125,8 +125,8 @@ export class CombatEffectPool {
   }
 
   /**
-   * Spawn a small burst appropriate to a single authoritative volley from a
-   * unit category. Strategic scale — a few effects per volley, never one per
+   * Spawn a small burst appropriate to one sampled continuous-combat pulse from
+   * a unit category. Strategic scale — a few effects per pulse, never one per
    * simulated round.
    */
   spawnVolley(

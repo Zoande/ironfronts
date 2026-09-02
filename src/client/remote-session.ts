@@ -23,7 +23,7 @@ export class RemoteGameSession extends EventTarget {
   readonly pendingBuildings: Array<{ provinceId: number; buildingId: BuildingId }> = [];
   readonly pendingCombat: Array<{
     attacker: number; defender: number;
-    kind: 'engaged' | 'reinforced' | 'volley' | 'retreat' | 'destroyed' | 'bombardment' | 'battleEnded';
+    kind: 'engaged' | 'reinforced' | 'combatPulse' | 'retreat' | 'destroyed' | 'bombardment' | 'battleEnded';
   }> = [];
   readonly pendingCaptures: Array<{ provinceId: number; fromCountryId: number; toCountryId: number }> = [];
   private readonly optimistic = new Map<string, OptimisticMutation>();
@@ -59,7 +59,7 @@ export class RemoteGameSession extends EventTarget {
           toCountryId: Number(detail.toCountryId),
         });
       } else if ([
-        'engaged', 'reinforced', 'volley', 'retreat', 'destroyed', 'bombardment', 'battleEnded',
+        'engaged', 'reinforced', 'combatPulse', 'retreat', 'destroyed', 'bombardment', 'battleEnded',
       ].includes(kind)) {
         this.pendingCombat.push({
           kind: kind as (typeof this.pendingCombat)[number]['kind'],

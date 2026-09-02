@@ -94,11 +94,11 @@ describe('projectArmyView', () => {
       id: 'front-1', battleId: 'battle-1', anchorNodeId: 0, kind: 'road', provinceId: null, x: 35, z: 0,
       sideA: {
         countryId: 1, directionNodeId: 0, role: 'defense', armyIds: ['p'],
-        entryMaxHpByArmy: { p: 400 }, nextVolleyTick: 500,
+        entryMaxHpByArmy: { p: 400 },
       },
       sideB: {
         countryId: 2, directionNodeId: 0, role: 'attack', armyIds: ['e'],
-        entryMaxHpByArmy: { e: 400 }, nextVolleyTick: 600,
+        entryMaxHpByArmy: { e: 400 },
       },
     };
 
@@ -107,7 +107,6 @@ describe('projectArmyView', () => {
     expect(v.battleFronts).toHaveLength(1);
     expect(v.battleFronts![0]).toMatchObject({
       role: 'attack', friendlyBaselineHp: 400, enemyBaselineHp: 400,
-      friendlyNextVolleyTick: 600, enemyNextVolleyTick: 500,
     });
   });
 

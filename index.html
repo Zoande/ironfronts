@@ -234,11 +234,12 @@
             <button type="button" data-debug-time="12">Noon</button>
             <button type="button" data-debug-time="18">Sunset</button>
             <button type="button" data-debug-time="0">Night</button>
+            <button id="debug-time-unlink" type="button" aria-pressed="false" title="Unlink lighting from the real-life clock">Unlink</button>
           </div>
           <label class="time-controls__speed" for="debug-time-multiplier">Cycle multiplier
             <span><input id="debug-time-multiplier" type="number" value="1.0" min="0" max="999.9" step="0.1" inputmode="decimal" /><b>×</b></span>
           </label>
-          <small>Sun, sky and shadows only &mdash; the game clock, movement, combat and economy are unaffected. 1.0× = a full day in 10 min; 0.0× freezes the light.</small>
+          <small>Sun, sky and shadows only &mdash; unlink to use the manual clock and cycle multiplier. The game clock, movement, combat and economy are unaffected. 1.0× = a full day in 10 min; 0.0× freezes the light.</small>
         </div>
         <div class="diagnostics__group sim-speed-controls">
           <div class="time-controls__heading"><strong>SIMULATION SPEED &mdash; DEV ONLY</strong><output id="debug-sim-speed-state">1&times;</output></div>

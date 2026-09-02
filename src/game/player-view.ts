@@ -74,8 +74,6 @@ export interface PlayerArmyView {
     friendlyBaselineHp: number;
     enemyHp: number;
     enemyBaselineHp: number;
-    friendlyNextVolleyTick: number;
-    enemyNextVolleyTick: number;
     reinforcementCount: number;
   }>;
   readonly legalRetreatExits?: ReadonlyArray<{
@@ -86,7 +84,6 @@ export interface PlayerArmyView {
     range: number;
     targetArmyId: string | null;
     manualTarget: boolean;
-    nextVolleyTick: number;
   } | null;
 }
 
@@ -151,8 +148,6 @@ export function projectArmyView(
       friendlyBaselineHp: baseline(friendly.entryMaxHpByArmy),
       enemyHp: hp(enemy.armyIds),
       enemyBaselineHp: baseline(enemy.entryMaxHpByArmy),
-      friendlyNextVolleyTick: friendly.nextVolleyTick,
-      enemyNextVolleyTick: enemy.nextVolleyTick,
       reinforcementCount: Math.max(0, friendly.armyIds.length - 1),
     }];
   }) : undefined;
@@ -185,7 +180,6 @@ export function projectArmyView(
       range: artilleryRange,
       targetArmyId: own ? army.artillery?.targetArmyId ?? null : null,
       manualTarget: own ? army.artillery?.manualTarget ?? false : false,
-      nextVolleyTick: own ? army.artillery?.nextVolleyTick ?? 0 : 0,
     } : null,
   };
 }

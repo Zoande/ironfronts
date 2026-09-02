@@ -68,11 +68,10 @@ export interface ArmyStack {
     readonly protectedUntilNodeId: number;
     protected: boolean;
   } | null;
-  /** Ranged artillery targeting/cadence state. */
+  /** Ranged artillery targeting state. */
   artillery?: {
     targetArmyId: string | null;
     manualTarget: boolean;
-    nextVolleyTick: number;
   };
 }
 
@@ -90,7 +89,7 @@ export function ensureArmyRuntimeState(stack: ArmyStack): void {
   stack.suspendedOrder ??= null;
   stack.battleFrontIds ??= [];
   stack.retreat ??= null;
-  stack.artillery ??= { targetArmyId: null, manualTarget: false, nextVolleyTick: 0 };
+  stack.artillery ??= { targetArmyId: null, manualTarget: false };
 }
 
 export function stackUnitCount(stack: ArmyStack): number {

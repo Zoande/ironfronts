@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { GameSession } from '../../src/game/game-session';
+import { stepCombat } from '../../src/game/combat';
 import { buildScenarioSelection } from '../../src/game/scenario-catalog';
 import { CATALOG_COUNTRY_BY_NAME } from '../../src/game/data/countries.generated';
 import { loadWorld, type LoadedWorld } from './load-world';
@@ -143,9 +144,8 @@ describe('gameplay vertical slice', () => {
       status: 'idle', order: null, extractingNodeId: null,
     };
 
-    for (let volley = 0; volley < 4 && s.state.armies['en-weak']; volley += 1) {
-      s.tick(0.05);
-      s.state.simulationTick += 18_000;
+    for (let interval = 0; interval < 4 && s.state.armies['en-weak']; interval += 1) {
+      stepCombat(s, 900);
     }
     // A full-strength militia this outmatched is wiped out before it ever drops
     // below the retreat threshold while still alive — it does not get to run.

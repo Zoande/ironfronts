@@ -734,9 +734,10 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       army.unitCount, army.canMove, army.canAttack, army.canRetreat,
       army.canSplit, army.canStop, army.canExtract,
       army.legalRetreatExits?.length ?? 0,
-      army.artillery?.targetArmyId ?? '', army.artillery?.nextVolleyTick ?? 0,
+      army.artillery?.targetArmyId ?? '',
       (army.groups ?? []).map((g) => `${g.typeId}:${g.count}:${Math.round(g.health * 100)}`).join(','),
-      (army.battleFronts ?? []).length,
+      (army.battleFronts ?? []).map((front) =>
+        `${front.id}:${Math.round(front.friendlyHp)}:${Math.round(front.enemyHp)}`).join(','),
     ].join('|') : '';
     if (nextArmyKey !== armyKey) {
       armyKey = nextArmyKey;

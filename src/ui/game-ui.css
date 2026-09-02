@@ -792,8 +792,8 @@
 .ifg-battle__sides { display: grid; gap: 4px; }
 .ifg-battle-side {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "heading heading" "health cooldown";
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "heading" "health";
   align-items: center;
   column-gap: 8px;
   row-gap: 4px;
@@ -836,27 +836,6 @@
   background: linear-gradient(90deg, #73382d, #bd6048);
   box-shadow: 0 0 5px rgba(177, 76, 55, 0.2);
 }
-.ifg-battle-side__cooldown {
-  grid-area: cooldown;
-  min-width: 54px;
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  gap: 4px;
-  color: #cdbb94;
-  font-variant-numeric: tabular-nums;
-}
-.ifg-battle-side__cooldown::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  box-shadow: inset 2px 0 0 rgba(205, 187, 148, 0.32);
-}
-.ifg-battle-side__cooldown small { display: none; }
-.ifg-battle-side__cooldown b { font-size: 8.5px; }
-.ifg-battle-side__cooldown.is-ready { color: #a9c676; }
 .ifg-battle__meta {
   min-width: 0;
   display: flex;

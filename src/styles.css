@@ -280,9 +280,10 @@ body { user-select: none; }
 .diagnostics .time-controls label { justify-content: space-between; margin-top: 7px; color: #b8c5bf; font-size: 9px; }
 .time-controls input[type="time"], .time-controls input[type="number"] { height: 27px; padding: 4px 7px; border: 1px solid #405250; border-radius: 4px; outline: none; color: #e5e8df; background: #142321; font: 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color-scheme: dark; user-select: text; }
 .time-controls input:focus { border-color: #a8915d; box-shadow: 0 0 0 2px rgba(201,180,119,.1); }
-.time-controls__presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 8px 0 10px; }
+.time-controls__presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 8px 0 10px; }
 .time-controls__presets button { min-height: 25px; padding: 4px; border: 1px solid rgba(220,196,139,.2); border-radius: 3px; color: #c9d1ca; background: rgba(255,255,255,.035); font: 700 8px/1 inherit; letter-spacing: .07em; text-transform: uppercase; cursor: pointer; }
 .time-controls__presets button:hover { color: #f0dfb5; border-color: rgba(220,196,139,.42); background: rgba(201,180,119,.12); }
+.time-controls__presets button[aria-pressed="true"] { color: #12140f; border-color: #e8c988; background: #e8c988; }
 .time-controls__speed span { display: flex; align-items: center; }
 .time-controls__speed input[type="number"] { width: 76px; border-radius: 4px 0 0 4px; text-align: right; }
 .time-controls__speed b { display: grid; width: 26px; height: 27px; place-items: center; border: 1px solid #405250; border-left: 0; border-radius: 0 4px 4px 0; color: #c9b477; background: #1b2b2a; font-weight: 500; }

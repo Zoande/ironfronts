@@ -203,7 +203,6 @@ export interface ArmyStackView {
   readonly canRetreat?: boolean;
   readonly canSplit?: boolean;
   readonly canStop?: boolean;
-  readonly simulationTick?: number;
   readonly legalRetreatExits?: ReadonlyArray<{
     firstNodeId: number; destinationProvinceId: number; x: number; z: number;
     readonly bearing?: string;
@@ -211,10 +210,10 @@ export interface ArmyStackView {
   readonly battleFronts?: ReadonlyArray<{
     id: string; directionNodeId: number; role: 'attack' | 'defense';
     friendlyHp: number; friendlyBaselineHp: number; enemyHp: number; enemyBaselineHp: number;
-    friendlyNextVolleyTick: number; enemyNextVolleyTick: number; reinforcementCount: number;
+    reinforcementCount: number;
   }>;
   readonly artillery?: {
-    range: number; targetArmyId: string | null; manualTarget: boolean; nextVolleyTick: number;
+    range: number; targetArmyId: string | null; manualTarget: boolean;
   } | null;
 }
 

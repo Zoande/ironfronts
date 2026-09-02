@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { COMBAT_VOLLEY_TICKS, stepCombat } from '../../src/game/combat';
+import { stepCombat } from '../../src/game/combat';
+import { LEGACY_VOLLEY_GAME_HOURS } from '../../src/game/combat/constants';
 import { GAME_STATE_VERSION, emptyStockpile, type GameState } from '../../src/game/game-state';
 import { buildLandGraph } from '../../src/game/movement/graph';
 import type { SimContext } from '../../src/game/sim-context';
@@ -47,19 +48,24 @@ function context(armies: Record<string, ArmyStack>, relations: Record<string, 'w
   return { state, graph, world };
 }
 
-describe('v2 combat catalog and cadence', () => {
-  it('contains the derived armor-specific attack and defence profiles', () => {
+describe('v2 continuous combat', () => {
+  it('contains translated armor-specific damage-per-hour profiles', () => {
+    const rate = (soft: number, light: number, heavy: number) => ({
+      soft: soft / LEGACY_VOLLEY_GAME_HOURS,
+      light: light / LEGACY_VOLLEY_GAME_HOURS,
+      heavy: heavy / LEGACY_VOLLEY_GAME_HOURS,
+    });
     expect(UNIT_TYPES.map((unit) => [unit.id, unit.attack, unit.defense])).toEqual([
-      ['infantry', { soft: 8, light: 4.4, heavy: 2.4 }, { soft: 6, light: 3.3, heavy: 1.8 }],
-      ['engineer', { soft: 1.8, light: 0.9, heavy: 0.45 }, { soft: 2.4, light: 1.2, heavy: 0.6 }],
-      ['armored-car', { soft: 6.6, light: 4.2, heavy: 2.1 }, { soft: 7.7, light: 4.9, heavy: 2.45 }],
-      ['light-tank', { soft: 16.8, light: 14.7, heavy: 9.8 }, { soft: 14.4, light: 12.6, heavy: 8.4 }],
-      ['medium-tank', { soft: 26.4, light: 23.1, heavy: 15.4 }, { soft: 24, light: 21, heavy: 14 }],
-      ['artillery', { soft: 29.9, light: 23.4, heavy: 32.5 }, { soft: 3.45, light: 2.7, heavy: 3.75 }],
+      ['infantry', rate(8, 4.4, 2.4), rate(6, 3.3, 1.8)],
+      ['engineer', rate(1.8, 0.9, 0.45), rate(2.4, 1.2, 0.6)],
+      ['armored-car', rate(6.6, 4.2, 2.1), rate(7.7, 4.9, 2.45)],
+      ['light-tank', rate(16.8, 14.7, 9.8), rate(14.4, 12.6, 8.4)],
+      ['medium-tank', rate(26.4, 23.1, 15.4), rate(24, 21, 14)],
+      ['artillery', rate(29.9, 23.4, 32.5), rate(3.45, 2.7, 3.75)],
     ]);
   });
 
-  it('fires immediately, caps damage at ten units, keeps meat shields targetable, and waits 18,000 ticks', () => {
+  it('applies frontage-capped simultaneous damage on every elapsed-hour step', () => {
     const attackers = army('attackers', 1, 'infantry', 12);
     attackers.status = 'moving';
     attackers.order = {
@@ -70,16 +76,21 @@ describe('v2 combat catalog and cadence', () => {
     const ctx = context({ attackers, defenders }, { '1:2': 'war' });
 
     stepCombat(ctx, 0.05);
-    expect(defenders.units[0].hp).toBeCloseTo(1_920, 5); // 10 × 8 attack
-    expect(attackers.units[0].hp).toBeCloseTo(1_140, 5); // simultaneous 10 × 6 defence
+    expect(defenders.units[0].hp).toBeCloseTo(2_000 - (80 / 900 * 0.05), 8);
+    expect(attackers.units[0].hp).toBeCloseTo(1_200 - (60 / 900 * 0.05), 8);
     expect(defenders.units[0].count).toBe(20); // overflow absorbed pooled damage
+    const afterFirstTick = defenders.units[0].hp;
     stepCombat(ctx, 0.05);
-    expect(defenders.units[0].hp).toBeCloseTo(1_920, 5);
+    expect(defenders.units[0].hp).toBeLessThan(afterFirstTick);
 
-    ctx.state.simulationTick = COMBAT_VOLLEY_TICKS;
-    stepCombat(ctx, 0.05);
-    // The second volley is 76 because the attacking group now fires at 95% condition.
-    expect(defenders.units[0].hp).toBeCloseTo(1_844, 5);
+    const legacyEquivalent = context({
+      attackers: army('attackers', 1, 'infantry', 12),
+      defenders: army('defenders', 2, 'infantry', 20),
+    }, { '1:2': 'war' });
+    legacyEquivalent.state.armies.attackers.status = 'moving';
+    stepCombat(legacyEquivalent, LEGACY_VOLLEY_GAME_HOURS);
+    expect(legacyEquivalent.state.armies.defenders.units[0].hp).toBeCloseTo(1_920, 5);
+    expect(legacyEquivalent.state.armies.attackers.units[0].hp).toBeCloseTo(1_140, 5);
   });
 
   it('lets peaceful overlapping armies pass without battle or war', () => {
@@ -94,13 +105,14 @@ describe('v2 combat catalog and cadence', () => {
     expect(ctx.state.armies.b.status).toBe('idle');
   });
 
-  it('allows only ten artillery pieces to one-shot one ranged target and resets cooldown', () => {
+  it('applies continuous ranged artillery damage without a cooldown', () => {
     const battery = army('battery', 1, 'artillery', 11, 100, 0);
     const target = army('target', 2, 'medium-tank', 1, 200, 1);
     const ctx = context({ battery, target }, { '1:2': 'war' });
     const events = stepCombat(ctx, 0.05);
-    expect(ctx.state.armies.target).toBeUndefined();
-    expect(ctx.state.armies.battery.artillery?.nextVolleyTick).toBe(0);
+    expect(ctx.state.armies.target.units[0].hp).toBeLessThan(190);
     expect(events.some((event) => event.kind === 'bombardment')).toBe(true);
+    stepCombat(ctx, LEGACY_VOLLEY_GAME_HOURS);
+    expect(ctx.state.armies.target).toBeUndefined();
   });
 });

@@ -14,7 +14,17 @@
  * game-time faster than wall-clock so this is minutes of play.
  */
 
-import type { UnitType } from './unit-types';
+import { LEGACY_VOLLEY_GAME_HOURS } from '../combat/constants';
+import type { DamageProfile, UnitType } from './unit-types';
+
+/** Translate the original per-volley tuning into continuous per-game-hour rates. */
+function damagePerHour(soft: number, light: number, heavy: number): DamageProfile {
+  return {
+    soft: soft / LEGACY_VOLLEY_GAME_HOURS,
+    light: light / LEGACY_VOLLEY_GAME_HOURS,
+    heavy: heavy / LEGACY_VOLLEY_GAME_HOURS,
+  };
+}
 
 export const UNIT_TYPES: readonly UnitType[] = [
   {
@@ -25,8 +35,8 @@ export const UNIT_TYPES: readonly UnitType[] = [
     icon: 'unit-infantry',
     maxHp: 100,
     speed: 90,
-    attack: { soft: 8, light: 4.4, heavy: 2.4 },
-    defense: { soft: 6, light: 3.3, heavy: 1.8 },
+    attack: damagePerHour(8, 4.4, 2.4),
+    defense: damagePerHour(6, 3.3, 1.8),
     visionOuter: 180,
     visionInner: 90,
     extractionRate: 0.4,
@@ -44,8 +54,8 @@ export const UNIT_TYPES: readonly UnitType[] = [
     icon: 'unit-engineer',
     maxHp: 80,
     speed: 85,
-    attack: { soft: 1.8, light: 0.9, heavy: 0.45 },
-    defense: { soft: 2.4, light: 1.2, heavy: 0.6 },
+    attack: damagePerHour(1.8, 0.9, 0.45),
+    defense: damagePerHour(2.4, 1.2, 0.6),
     visionOuter: 160,
     visionInner: 80,
     extractionRate: 2.0,
@@ -63,8 +73,8 @@ export const UNIT_TYPES: readonly UnitType[] = [
     icon: 'unit-armored-car',
     maxHp: 90,
     speed: 190,
-    attack: { soft: 6.6, light: 4.2, heavy: 2.1 },
-    defense: { soft: 7.7, light: 4.9, heavy: 2.45 },
+    attack: damagePerHour(6.6, 4.2, 2.1),
+    defense: damagePerHour(7.7, 4.9, 2.45),
     visionOuter: 300,
     visionInner: 160,
     extractionRate: 0,
@@ -82,8 +92,8 @@ export const UNIT_TYPES: readonly UnitType[] = [
     icon: 'unit-light-tank',
     maxHp: 130,
     speed: 150,
-    attack: { soft: 16.8, light: 14.7, heavy: 9.8 },
-    defense: { soft: 14.4, light: 12.6, heavy: 8.4 },
+    attack: damagePerHour(16.8, 14.7, 9.8),
+    defense: damagePerHour(14.4, 12.6, 8.4),
     visionOuter: 220,
     visionInner: 110,
     extractionRate: 0,
@@ -101,8 +111,8 @@ export const UNIT_TYPES: readonly UnitType[] = [
     icon: 'unit-medium-tank',
     maxHp: 190,
     speed: 110,
-    attack: { soft: 26.4, light: 23.1, heavy: 15.4 },
-    defense: { soft: 24, light: 21, heavy: 14 },
+    attack: damagePerHour(26.4, 23.1, 15.4),
+    defense: damagePerHour(24, 21, 14),
     visionOuter: 200,
     visionInner: 100,
     extractionRate: 0,
@@ -120,8 +130,8 @@ export const UNIT_TYPES: readonly UnitType[] = [
     icon: 'unit-artillery',
     maxHp: 70,
     speed: 70,
-    attack: { soft: 29.9, light: 23.4, heavy: 32.5 },
-    defense: { soft: 3.45, light: 2.7, heavy: 3.75 },
+    attack: damagePerHour(29.9, 23.4, 32.5),
+    defense: damagePerHour(3.45, 2.7, 3.75),
     visionOuter: 170,
     visionInner: 70,
     extractionRate: 0,
