@@ -12,6 +12,7 @@ export default defineConfig({
   plugins: [viteStaticCopy({ targets: [
     { src: 'public/audio', dest: '.' },
     { src: 'public/menu', dest: '.' },
+    { src: 'public/models', dest: '.' },
     { src: 'public/textures', dest: '.' },
     { src: 'public/world', dest: '.' },
   ] })],

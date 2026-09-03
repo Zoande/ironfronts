@@ -14,6 +14,7 @@
     "game:dev": "tsx watch apps/game-server/src/main.ts",
     "build:world": "node scripts/build-world.mjs",
     "build:campaign-map": "node scripts/generate-campaign-map.mjs",
+    "build:infantry-model": "node scripts/build-infantry-model.mjs",
     "build": "npm run build:world && npm run build --workspaces --if-present && tsc --noEmit && vite build",
     "check": "npm run check --workspaces --if-present && tsc --noEmit && npm run lint:scripts && npm run test:architecture && vitest run",
     "lint:scripts": "eslint \"scripts/**/*.mjs\"",

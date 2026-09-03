@@ -4,6 +4,16 @@ Ironfronts bundles a small number of third-party UI assets. Each is listed
 below with its upstream project, exact source path, and licence. Only the
 specific files we actually use are vendored.
 
+## User-provided infantry model
+
+`public/models/infantry.glb` is generated from the project owner's supplied
+Saluting Soldier GLB exports. It contains the shared mesh, armature, texture,
+and only the `Walking`, `Injured_Walk`, and `Injured_Walk_Backward` clips used
+by the game. Run `npm run build:infantry-model` to regenerate it from the
+source exports in the repository root. The supplied model is treated as an
+Ironfronts project asset; confirm its original author/licence before public
+distribution.
+
 ---
 
 ## 0 A.D. — session UI icons

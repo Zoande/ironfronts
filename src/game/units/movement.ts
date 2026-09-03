@@ -38,6 +38,34 @@ export interface MoveOrderResult {
   readonly requiredWarCountryIds?: readonly number[];
 }
 
+export interface CurrentMovementLeg {
+  readonly targetX: number;
+  readonly targetZ: number;
+  /** Effective distance travelled per game hour on the current terrain. */
+  readonly worldUnitsPerGameHour: number;
+  readonly distance: number;
+}
+
+/** The currently traversed edge, expressed for network presentation. Keeping
+ * this beside stepMovement ensures client ETA projection uses the exact same
+ * terrain, road, retreat, and global movement multipliers as simulation. */
+export function currentMovementLeg(session: SimContext, army: ArmyStack): CurrentMovementLeg | null {
+  const order = army.order;
+  if (!order?.path.length || army.status === 'engaged') return null;
+  const targetNode = order.path[0];
+  const targetX = session.graph.nodeX[targetNode];
+  const targetZ = session.graph.nodeZ[targetNode];
+  const terrainScale = (TERRAIN_SPEED[session.world.terrainClassAt(army.x, army.z)] ?? 0.9) * ROAD_BONUS;
+  const worldUnitsPerGameHour = stackBaseSpeed(army) * STRATEGIC_MOVEMENT_SCALE * terrainScale
+    * (army.status === 'retreating' ? 3 : 1);
+  return {
+    targetX,
+    targetZ,
+    worldUnitsPerGameHour,
+    distance: wrappedDistance(army.x, army.z, targetX, targetZ, session.world.width),
+  };
+}
+
 function edgeProvinceIds(session: SimContext, from: number, to: number): number[] {
   const { graph, world } = session;
   const cache = edgeProvinceCache.get(graph) ?? new Map<string, number[]>();

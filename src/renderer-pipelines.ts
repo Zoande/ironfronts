@@ -1,5 +1,5 @@
 import {
-  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, infrastructureShader,
+  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, infantryModelShader, infrastructureShader,
   lineShader, mapMarkerShader, polarCapShader, propShader, rainShader, terrainShader, waterShader, waterwayShader,
 } from './shaders';
 
@@ -8,6 +8,7 @@ export interface RendererLayouts {
   instances: GPUBindGroupLayout;
   lines: GPUBindGroupLayout;
   countryLabels: GPUBindGroupLayout;
+  infantryModel: GPUBindGroupLayout;
 }
 
 export interface RendererPipelines {
@@ -24,6 +25,7 @@ export interface RendererPipelines {
   armyMarkers: GPURenderPipeline;
   armyComposition: GPURenderPipeline;
   armyModels: GPURenderPipeline;
+  infantryModels: GPURenderPipeline;
   armyKindCounts: GPURenderPipeline;
   combatEffects: GPURenderPipeline;
   countryLabels: GPURenderPipeline;
@@ -73,7 +75,16 @@ export function createRendererLayouts(device: GPUDevice): RendererLayouts {
       { binding: 3, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
     ],
   });
-  return { common, instances, lines, countryLabels };
+  const infantryModel = device.createBindGroupLayout({
+    label: 'infantry model resource layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+      { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+    ],
+  });
+  return { common, instances, lines, countryLabels, infantryModel };
 }
 
 export function createRendererPipelines(
@@ -201,6 +212,25 @@ export function createRendererPipelines(
     primitive: { topology: 'triangle-list', cullMode: 'none' },
     depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less-equal' },
   });
+  const infantryModelModule = device.createShaderModule({ label: 'skinned infantry model shader', code: infantryModelShader });
+  const infantryModels = device.createRenderPipeline({
+    label: 'skinned infantry models pipeline',
+    layout: device.createPipelineLayout({ bindGroupLayouts: [layouts.common, layouts.lines, layouts.infantryModel] }),
+    vertex: {
+      module: infantryModelModule,
+      entryPoint: 'infantryModelVertex',
+      buffers: [
+        { arrayStride: 12, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
+        { arrayStride: 12, attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x3' }] },
+        { arrayStride: 8, attributes: [{ shaderLocation: 2, offset: 0, format: 'float32x2' }] },
+        { arrayStride: 4, attributes: [{ shaderLocation: 3, offset: 0, format: 'uint8x4' }] },
+        { arrayStride: 16, attributes: [{ shaderLocation: 4, offset: 0, format: 'float32x4' }] },
+      ],
+    },
+    fragment: { module: infantryModelModule, entryPoint: 'infantryModelFragment', targets: [{ format, blend: alphaBlend }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less-equal' },
+  });
   const armyKindCounts = device.createRenderPipeline({
     label: 'close-range army kind count pipeline',
     layout: device.createPipelineLayout({ bindGroupLayouts: [layouts.common, layouts.lines] }),
@@ -236,7 +266,7 @@ export function createRendererPipelines(
   });
   return {
     terrain, polarCaps, water, waterways, infrastructure, props, cityLights, rain, lines, mapMarkers, armyMarkers,
-    armyComposition, armyModels, armyKindCounts, combatEffects,
+    armyComposition, armyModels, infantryModels, armyKindCounts, combatEffects,
     countryLabels,
   };
 }

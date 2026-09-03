@@ -65,6 +65,14 @@ export interface PlayerArmyView {
    *  it (it owns the graph); [] here. */
   readonly moveRoute?: ReadonlyArray<{ readonly x: number; readonly z: number }>;
   readonly moveIntent?: 'move' | 'attack';
+  /** Current visible movement leg. The client can animate continuously toward
+   * this point for the remaining wall-clock duration instead of tweening
+   * between sparse position snapshots. */
+  readonly motion?: {
+    readonly targetX: number;
+    readonly targetZ: number;
+    readonly durationMs: number;
+  };
   readonly suspendedOrder?: { readonly x: number; readonly z: number; readonly intent: 'move' | 'attack' } | null;
   readonly battleFronts?: ReadonlyArray<{
     id: string;

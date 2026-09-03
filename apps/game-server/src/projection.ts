@@ -1,12 +1,13 @@
 import {
   computeArmyVisibility, projectArmyView, visibleResourceNodes,
-  legalRetreatPaths, stackExtractionRate, nearestNode, findPath,
+  currentMovementLeg, legalRetreatPaths, stackExtractionRate, nearestNode, findPath,
   type GameState, type LandGraph, type WorldData,
 } from '@ironfronts/game-core';
 import type { PlayerProjection, ProjectionDelta, PublicCountry } from '@ironfronts/protocol';
 
 export function projectFor(
   state: GameState, world: WorldData, graphOrViewer: LandGraph | number, viewerId?: number,
+  gameHoursPerRealSecond = 0.5,
 ): PlayerProjection {
   const graph = typeof graphOrViewer === 'number' ? null : graphOrViewer;
   const viewerCountryId = typeof graphOrViewer === 'number' ? graphOrViewer : viewerId!;
@@ -41,6 +42,20 @@ export function projectFor(
       const order = state.armies[army.id]?.order;
       const route = order && orderRouteForClient(order, graph, army.x, army.z);
       if (route) projected = { ...projected, moveRoute: route, moveIntent: order!.intent };
+    }
+    if (graph && army.status !== 'unknown' && gameHoursPerRealSecond > 0) {
+      const source = state.armies[army.id];
+      const leg = source ? currentMovementLeg({ state, world, graph }, source) : null;
+      if (leg && leg.worldUnitsPerGameHour > 0) {
+        projected = {
+          ...projected,
+          motion: {
+            targetX: leg.targetX,
+            targetZ: leg.targetZ,
+            durationMs: leg.distance / (leg.worldUnitsPerGameHour * gameHoursPerRealSecond) * 1_000,
+          },
+        };
+      }
     }
     return [[army.id, projected]];
   }));

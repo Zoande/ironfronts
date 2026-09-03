@@ -17,6 +17,7 @@ import { commonWgsl } from './common';
  * ArmyMarker.c = counts for up to four close-range composition rows
  * ArmyMarker.d = visual kinds for those rows (0 infantry, 1 light armor,
  *                2 medium armor, 3 artillery; 4 means unused)
+ * ArmyMarker.e = (nextWaypointX, nextWaypointZ, remainingSeconds, sampleTime)
  *
  * The counter shows a strategic army symbol: a rounded plaque in the owner's
  * colour, the unit count (1–2 digits) or a "?" for an unidentified contact, a
@@ -24,7 +25,7 @@ import { commonWgsl } from './common';
  * that summary with up to four icon-and-amount rows.
  */
 export const armyMarkerShader = commonWgsl + /* wgsl */ `
-struct ArmyMarker { a: vec4f, b: vec4f, c: vec4f, d: vec4f };
+struct ArmyMarker { a: vec4f, b: vec4f, c: vec4f, d: vec4f, e: vec4f };
 struct ArmyParams { count: u32, mode: u32, pad0: u32, pad1: u32 };
 @group(1) @binding(0) var<storage, read> armyMarkers: array<ArmyMarker>;
 @group(1) @binding(1) var<uniform> armyParams: ArmyParams;
@@ -49,6 +50,15 @@ fn unpackRgb(packed: f32) -> vec3f {
   return vec3f(r, g, b);
 }
 
+fn markerWorldPosition(marker: ArmyMarker) -> vec2f {
+  let travel = select(
+    0.0,
+    clamp((uniforms.sunTime.w - marker.e.w) / max(marker.e.z, 0.0001), 0.0, 1.0),
+    marker.e.z > 0.0,
+  );
+  return mix(marker.a.xy, marker.e.xy, travel);
+}
+
 @vertex
 fn armyMarkerVertex(
   @builtin(vertex_index) vertexIndex: u32,
@@ -63,7 +73,7 @@ fn armyMarkerVertex(
   );
   let corner = corners[vertexIndex];
 
-  let worldXZ = vec2f(marker.a.x, marker.a.y);
+  let worldXZ = markerWorldPosition(marker);
   let uv = worldXZ / uniforms.map.xy;
   let ground = heightAt(uv);
   let rangeMarker = marker.a.w > 2.5;
@@ -208,8 +218,9 @@ fn armyCompositionVertex(
     vec2f(-1.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
   );
   let corner = corners[vertexIndex];
-  let worldXZ = vec2f(marker.a.x + copyOffset, marker.a.y);
-  let worldPos = vec3f(worldXZ.x, heightAt(vec2f(marker.a.x, marker.a.y) / uniforms.map.xy) + 17.0, worldXZ.y);
+  let markerXZ = markerWorldPosition(marker);
+  let worldXZ = vec2f(markerXZ.x + copyOffset, markerXZ.y);
+  let worldPos = vec3f(worldXZ.x, heightAt(markerXZ / uniforms.map.xy) + 17.0, worldXZ.y);
   let clip = uniforms.viewProjection * vec4f(worldPos, 1.0);
   let rows = compositionRowCount(marker.c);
   let half = vec2f(29.0, 6.0 + rows * 7.5);

@@ -4,6 +4,7 @@ import {
   type CommandPayload, type GameLobby, type PlayerProjection, type PresentationCatalogs,
 } from '@ironfronts/protocol';
 import { projectFor } from './projection';
+import { SIMULATION_INTERVAL_MS, SIMULATION_TICK_HOURS } from './timing';
 
 export class GameRuntime {
   readonly session: GameSession;
@@ -86,8 +87,10 @@ export class GameRuntime {
   snapshot(): GameRuntimeSnapshot {
     return { version: 2, state: this.session.snapshot(), seats: [...this.seatsByAccount.entries()] };
   }
-  projection(countryId: number): PlayerProjection {
-    return projectFor(this.session.state, this.world, this.session.graph, countryId);
+  projection(countryId: number, simulationSpeedMultiplier = 1): PlayerProjection {
+    const gameHoursPerRealSecond = SIMULATION_TICK_HOURS * 1_000 / SIMULATION_INTERVAL_MS
+      * simulationSpeedMultiplier;
+    return projectFor(this.session.state, this.world, this.session.graph, countryId, gameHoursPerRealSecond);
   }
 
   command(countryId: number, payload: CommandPayload) {

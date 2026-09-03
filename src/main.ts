@@ -27,6 +27,7 @@ import { configureWorldAssetBase } from './world-assets';
 import { CombatEffectPool, EFFECT_KIND, effectDensityForDistance } from './combat-effects';
 import type { SessionResponse } from '@ironfronts/protocol';
 import { buildArmyCompositionRows, buildArmyFormation, dominantVisualKind } from './army-map-presentation';
+import { ArmyMotionInterpolator } from './army-motion';
 
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance';
 
@@ -955,6 +956,7 @@ async function bootstrapGameSession(
   const teardownSession = (): void => {
     window.clearInterval(hudTimer);
     window.clearInterval(civilClockTimer);
+    armyMotionInterpolator.clear();
     window.removeEventListener('keydown', onKey);
     session.removeEventListener('change', syncDiplomaticRelations);
     clearAllNotificationTimers();
@@ -976,8 +978,9 @@ async function bootstrapGameSession(
   );
 }
 
-const armyMarkerScratch = new Float32Array(16 * 1_024);
-const armyModelScratch = new Float32Array(12 * 4_096);
+const armyMarkerScratch = new Float32Array(20 * 1_024);
+const armyModelScratch = new Float32Array(16 * 4_096);
+const armyMotionInterpolator = new ArmyMotionInterpolator();
 /** LineRecord (8 f32) per own-army route segment — see renderer.setOrderRoutes. */
 const routeScratch = new Float32Array(8 * 4_096);
 
@@ -1065,11 +1068,22 @@ function syncArmyMarkers(
   let modelCount = 0;
   let routeCursor = 0;
   let routeCount = 0;
+  const motionNow = performance.now();
+  const activeArmyIds = new Set<string>();
   const activeModelKeys = new Set<string>();
   armyPickScratch.length = 0;
   for (const army of Object.values(session.state.armies)) {
     if (count >= 1_024) break;
     const identified = army.contact === 'visible';
+    activeArmyIds.add(army.id);
+    const armyMotion = armyMotionInterpolator.sample(
+      army.id,
+      army.x,
+      army.z,
+      army.motion,
+      motionNow,
+      renderer.manifest?.world.width ?? 0,
+    );
 
     // Authoritative route polyline for the SELECTED own army only (move = cream,
     // attack = red, retreating = amber). Other armies' routes stay hidden so the
@@ -1117,8 +1131,8 @@ function syncArmyMarkers(
 
     const formation = identified ? buildArmyFormation(army.composition?.groups ?? []) : [];
     const compositionRows = identified ? buildArmyCompositionRows(army.composition?.groups ?? []) : [];
-    armyMarkerScratch[cursor] = army.x;
-    armyMarkerScratch[cursor + 1] = army.z;
+    armyMarkerScratch[cursor] = armyMotion.x;
+    armyMarkerScratch[cursor + 1] = armyMotion.z;
     armyMarkerScratch[cursor + 2] = packRgb(army.ownerColor);
     armyMarkerScratch[cursor + 3] = identified ? 1 : 2;
     // Contact markers render as '?'; don't ship the real strength/health.
@@ -1130,21 +1144,25 @@ function syncArmyMarkers(
       armyMarkerScratch[cursor + 8 + row] = compositionRows[row]?.count ?? 0;
       armyMarkerScratch[cursor + 12 + row] = compositionRows[row]?.kind ?? 4;
     }
-    cursor += 16;
+    armyMarkerScratch[cursor + 16] = armyMotion.targetX;
+    armyMarkerScratch[cursor + 17] = armyMotion.targetZ;
+    armyMarkerScratch[cursor + 18] = armyMotion.remainingMs / 1_000;
+    armyMarkerScratch[cursor + 19] = 0;
+    cursor += 20;
     count += 1;
-    armyPickScratch.push({ id: army.id, x: army.x, z: army.z });
+    armyPickScratch.push({ id: army.id, x: armyMotion.x, z: armyMotion.z });
 
     if (identified && army.id === selectedArmyId && army.artillery && count < 1_024) {
-      armyMarkerScratch[cursor] = army.x;
-      armyMarkerScratch[cursor + 1] = army.z;
+      armyMarkerScratch[cursor] = armyMotion.x;
+      armyMarkerScratch[cursor + 1] = armyMotion.z;
       armyMarkerScratch[cursor + 2] = packRgb(army.ownerColor);
       armyMarkerScratch[cursor + 3] = 3;
       armyMarkerScratch[cursor + 4] = army.artillery.range;
       armyMarkerScratch[cursor + 5] = 0;
       armyMarkerScratch[cursor + 6] = 0;
       armyMarkerScratch[cursor + 7] = 0;
-      armyMarkerScratch.fill(0, cursor + 8, cursor + 16);
-      cursor += 16;
+      armyMarkerScratch.fill(0, cursor + 8, cursor + 20);
+      cursor += 20;
       count += 1;
     }
     if (identified && formation.length) {
@@ -1158,7 +1176,7 @@ function syncArmyMarkers(
       const previousHeading = previousArmyHeading.get(army.id);
       // A stopped army keeps its last facing; a marching one aims a little way
       // along the road and eases toward it, so corners are a turn, not a snap.
-      const desiredHeading = routeLookaheadHeading(route, target, army.x, army.z, worldW)
+      const desiredHeading = routeLookaheadHeading(route, target, armyMotion.x, armyMotion.z, worldW)
         ?? previousHeading ?? 0;
       const heading = previousHeading === undefined
         ? desiredHeading
@@ -1192,9 +1210,10 @@ function syncArmyMarkers(
         const jf = (hashUnit(`${army.id}:${index}:f`) - 0.5) * jitterF + (armyJitter - 0.5) * 1.5;
         const right = slotR + jr;
         const forward = slotF + jf;
-        let x = army.x + rightX * right + forwardX * forward;
-        if (renderer.manifest?.world.width) x = ((x % renderer.manifest.world.width) + renderer.manifest.world.width) % renderer.manifest.world.width;
-        const z = army.z + rightZ * right + forwardZ * forward;
+        const x = armyMotion.x + rightX * right + forwardX * forward;
+        const z = armyMotion.z + rightZ * right + forwardZ * forward;
+        const targetX = armyMotion.targetX + rightX * right + forwardX * forward;
+        const targetZ = armyMotion.targetZ + rightZ * right + forwardZ * forward;
         const modelKey = `${army.id}:${index}`;
         activeModelKeys.add(modelKey);
         const previous = previousArmyModelPositions.get(modelKey) ?? { x, z };
@@ -1208,7 +1227,12 @@ function syncArmyMarkers(
         armyModelScratch[modelCursor + 3] = group.kind;
         armyModelScratch[modelCursor + 4] = group.count;
         armyModelScratch[modelCursor + 5] = group.health;
-        armyModelScratch[modelCursor + 6] = army.id === selectedArmyId ? 1 : 0;
+        // Model flags: bit 0 selected, bit 1 moving, bit 2 auto/manual retreat.
+        // The skinned infantry shader uses these to choose a stationary pose,
+        // Walking, Injured_Walk, or Injured_Walk_Backward.
+        armyModelScratch[modelCursor + 6] = (army.id === selectedArmyId ? 1 : 0)
+          | (marching ? 2 : 0)
+          | (army.status === 'retreating' ? 4 : 0);
         armyModelScratch[modelCursor + 7] = heading;
         armyModelScratch[modelCursor + 8] = previousX;
         armyModelScratch[modelCursor + 9] = previous.z;
@@ -1217,8 +1241,12 @@ function syncArmyMarkers(
         // the same window it uses to slide the model, so the turn is smooth
         // between the 2.5 Hz marker syncs.
         armyModelScratch[modelCursor + 11] = previousHeading ?? heading;
+        armyModelScratch[modelCursor + 12] = targetX;
+        armyModelScratch[modelCursor + 13] = targetZ;
+        armyModelScratch[modelCursor + 14] = armyMotion.remainingMs / 1_000;
+        armyModelScratch[modelCursor + 15] = 0;
         previousArmyModelPositions.set(modelKey, { x, z });
-        modelCursor += 12;
+        modelCursor += 16;
         modelCount += 1;
       }
     }
@@ -1226,8 +1254,7 @@ function syncArmyMarkers(
   for (const key of previousArmyModelPositions.keys()) {
     if (!activeModelKeys.has(key)) previousArmyModelPositions.delete(key);
   }
-  const activeArmyIds = new Set<string>();
-  for (const key of activeModelKeys) activeArmyIds.add(key.slice(0, key.lastIndexOf(':')));
+  armyMotionInterpolator.retain(activeArmyIds);
   for (const id of previousArmyHeading.keys()) {
     if (!activeArmyIds.has(id)) previousArmyHeading.delete(id);
   }

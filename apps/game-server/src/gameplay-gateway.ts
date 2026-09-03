@@ -100,7 +100,7 @@ export class GameplayGateway {
           }
           clearTimeout(authenticationTimeout);
           const revision = this.options.revision();
-          const projection = this.options.runtime.projection(claims.countryId);
+          const projection = this.options.runtime.projection(claims.countryId, this.options.devSimSpeed.get());
           connection = {
             socket, accountId: claims.accountId, countryId: claims.countryId, projection, revision,
           };
@@ -136,7 +136,7 @@ export class GameplayGateway {
           return;
         }
         if (message.type === 'resync') {
-          const projection = this.options.runtime.projection(connection.countryId);
+          const projection = this.options.runtime.projection(connection.countryId, this.options.devSimSpeed.get());
           connection.projection = projection;
           connection.revision = this.options.revision();
           this.sendSocket(socket, {

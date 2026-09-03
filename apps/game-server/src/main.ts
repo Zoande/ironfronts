@@ -106,7 +106,9 @@ const publishTimer = setInterval(() => {
   if (!gateway.connections.size) return;
   const byCountry = new Map<number, PlayerProjection>();
   for (const connection of gateway.connections) {
-    if (!byCountry.has(connection.countryId)) byCountry.set(connection.countryId, runtime.projection(connection.countryId));
+    if (!byCountry.has(connection.countryId)) {
+      byCountry.set(connection.countryId, runtime.projection(connection.countryId, simSpeedMultiplier));
+    }
   }
   const changes = [...gateway.connections].map((connection) => ({
     connection,

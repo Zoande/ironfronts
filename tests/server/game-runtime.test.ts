@@ -70,6 +70,26 @@ describe('single authoritative game runtime', () => {
     expect(runtime.session.gameTimeHours).toBe(1);
   });
 
+  it('projects the next movement waypoint with a sim-speed-aware wall-clock ETA', () => {
+    const runtime = new GameRuntime(tinyWorld());
+    const army = Object.values(runtime.session.state.armies).find((candidate) => candidate.ownerCountryId === 1)!;
+    const targetNode = runtime.session.graph.adjacency[army.graphNodeId][0];
+    army.order = {
+      path: [targetNode],
+      destX: runtime.session.graph.nodeX[targetNode],
+      destZ: runtime.session.graph.nodeZ[targetNode],
+      intent: 'move',
+      edgeProgress: 0,
+    };
+    army.status = 'moving';
+    const normal = runtime.projection(1, 1).armies[army.id].motion!;
+    const fast = runtime.projection(1, 2).armies[army.id].motion!;
+    expect(normal.targetX).toBe(runtime.session.graph.nodeX[targetNode]);
+    expect(normal.targetZ).toBe(runtime.session.graph.nodeZ[targetNode]);
+    expect(normal.durationMs).toBeGreaterThan(0);
+    expect(fast.durationMs).toBeCloseTo(normal.durationMs / 2);
+  });
+
   it('round-trips authoritative state and permanent seats through game.json', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'ironfronts-game-'));
     const persistence = new GamePersistence(path.join(directory, 'game.json'));

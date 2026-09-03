@@ -9,6 +9,7 @@ export { nearestNode } from '../../../src/game/movement/graph';
 export { findPath } from '../../../src/game/movement/pathfind';
 export { UNIT_TYPES, unitType } from '../../../src/game/units/unit-catalog';
 export { stackExtractionRate } from '../../../src/game/units/army';
+export { currentMovementLeg } from '../../../src/game/units/movement';
 export { BUILDINGS } from '../../../src/game/construction';
 export type { GameState, CountryState, ResourceNodeState } from '../../../src/game/game-state';
 export type { GameCommand, CommandResult } from '../../../src/game/commands';

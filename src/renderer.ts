@@ -12,6 +12,7 @@ import { buildDiplomacyColorData, findCountryByName } from './diplomacy';
 import { EnvironmentController, type TimeOfDayState } from './environment-controller';
 import { FRAME_UNIFORM_BYTES, packFrameUniforms } from './frame-uniforms';
 import { align4, fetchBinary, fetchJson, uploadMipmappedTexture, uploadTexture } from './gpu-utils';
+import { loadInfantryModel, type InfantryModel } from './infantry-model';
 import { createMaterialTexture, createTreeMaterialTexture } from './material-texture';
 import {
   createEmptyRenderWorkload, PerformanceMonitor,
@@ -85,6 +86,7 @@ export class WorldRenderer {
   private instanceLayout!: GPUBindGroupLayout;
   private lineLayout!: GPUBindGroupLayout;
   private countryLabelLayout!: GPUBindGroupLayout;
+  private infantryModelLayout!: GPUBindGroupLayout;
   private commonBindGroup!: GPUBindGroup;
   private uniformBuffer!: GPUBuffer;
   private terrainPipeline!: GPURenderPipeline;
@@ -100,6 +102,7 @@ export class WorldRenderer {
   private armyMarkerPipeline!: GPURenderPipeline;
   private armyCompositionPipeline!: GPURenderPipeline;
   private armyModelPipeline!: GPURenderPipeline;
+  private infantryModelPipeline!: GPURenderPipeline;
   private combatEffectPipeline!: GPURenderPipeline;
   private countryLabelPipeline!: GPURenderPipeline;
   private countryLabelBuffer?: GPUBuffer;
@@ -156,9 +159,17 @@ export class WorldRenderer {
    *  drawn. Rewritten from authoritative GameState when the army set changes. */
   private armyMarkers?: InstanceLayer;
   private armyModels?: InstanceLayer;
+  private infantryModels?: InstanceLayer;
+  private infantryModel?: InfantryModel;
   private static readonly ARMY_MARKER_CAPACITY = 1_024;
   private static readonly ARMY_MODEL_CAPACITY = 4_096;
   private static readonly ARMY_MODEL_VERTEX_COUNT = 6 * 36;
+  private readonly armyModelSource = new Float32Array(WorldRenderer.ARMY_MODEL_CAPACITY * 16);
+  private armyModelSourceCount = 0;
+  private armyModelSourceRevision = 0;
+  private visibleInfantrySourceRevision = -1;
+  private visibleInfantryCameraRevision = -1;
+  private readonly visibleInfantryScratch = new Float32Array(WorldRenderer.ARMY_MODEL_CAPACITY * 16);
   /** Base camera distance for the strategic-marker <-> 3D-model LOD swap. */
   private static readonly ARMY_MODEL_RANGE_BASE = 1_900;
   /** The ONLY resource-deposit marker layer: fed the player-visible authoritative
@@ -547,6 +558,14 @@ export class WorldRenderer {
 
     report('Compiling WebGPU pipelines', 0.62);
     this.createPipelines();
+    report('Loading infantry model', 0.68);
+    try {
+      this.infantryModel = await loadInfantryModel(this.device, this.infantryModelLayout);
+    } catch (error) {
+      // A missing optional art asset must not make the strategy map unusable.
+      // The procedural infantry remains enabled as the fallback in this case.
+      console.warn('Could not load the skinned infantry model; using the procedural fallback.', error);
+    }
     this.terrainMeshes = [this.manifest.terrain.gridResolution, 33, 17, 9]
       .map((resolution) => createTerrainMesh(this.device, resolution, true));
     this.polarCapMesh = createTerrainMesh(this.device, 65);
@@ -853,6 +872,7 @@ export class WorldRenderer {
     this.instanceLayout = layouts.instances;
     this.lineLayout = layouts.lines;
     this.countryLabelLayout = layouts.countryLabels;
+    this.infantryModelLayout = layouts.infantryModel;
   }
 
   private createPipelines(): void {
@@ -861,6 +881,7 @@ export class WorldRenderer {
       instances: this.instanceLayout,
       lines: this.lineLayout,
       countryLabels: this.countryLabelLayout,
+      infantryModel: this.infantryModelLayout,
     });
     this.terrainPipeline = pipelines.terrain;
     this.polarCapPipeline = pipelines.polarCaps;
@@ -875,6 +896,7 @@ export class WorldRenderer {
     this.armyMarkerPipeline = pipelines.armyMarkers;
     this.armyCompositionPipeline = pipelines.armyComposition;
     this.armyModelPipeline = pipelines.armyModels;
+    this.infantryModelPipeline = pipelines.infantryModels;
     this.combatEffectPipeline = pipelines.combatEffects;
     this.countryLabelPipeline = pipelines.countryLabels;
   }
@@ -983,16 +1005,19 @@ export class WorldRenderer {
     );
   }
 
-  /** Allocate the fixed-capacity army-marker instance buffer (4 vec4f per
+  /** Allocate the fixed-capacity army-marker instance buffer (5 vec4f per
    *  stack). `setArmyMarkers` fills only the used prefix each update. */
   private createArmyMarkerLayer(): void {
-    const zero = new Float32Array(WorldRenderer.ARMY_MARKER_CAPACITY * 16);
+    const zero = new Float32Array(WorldRenderer.ARMY_MARKER_CAPACITY * 20);
     this.armyMarkers = this.createInstanceLayer(
       'army stack markers', zero.buffer as ArrayBuffer, 0, 0, this.lineLayout,
     );
-    const zeroModels = new Float32Array(WorldRenderer.ARMY_MODEL_CAPACITY * 12);
+    const zeroModels = new Float32Array(WorldRenderer.ARMY_MODEL_CAPACITY * 16);
     this.armyModels = this.createInstanceLayer(
       'army formation models', zeroModels.buffer as ArrayBuffer, 0, 0, this.lineLayout,
+    );
+    this.infantryModels = this.createInstanceLayer(
+      'visible skinned infantry models', zeroModels.buffer as ArrayBuffer, 0, 0, this.lineLayout,
     );
     const zeroR = new Float32Array(WorldRenderer.RESOURCE_MARKER_CAPACITY * 4);
     this.gameResourceMarkers = this.createInstanceLayer(
@@ -1071,7 +1096,7 @@ export class WorldRenderer {
   }
 
   /**
-   * Replace the drawn army markers. `records` is 16 floats per stack; see
+   * Replace the drawn army markers. `records` is 20 floats per stack; see
    * `armyMarkerShader`. `count` stacks are drawn; the rest of the capacity is
    * ignored. Cheap: one buffer write, no pipeline or bind-group churn.
    */
@@ -1083,9 +1108,10 @@ export class WorldRenderer {
     if (!this.armyMarkers) return;
     const capped = Math.min(count, WorldRenderer.ARMY_MARKER_CAPACITY);
     if (capped > 0) {
+      for (let index = 0; index < capped; index += 1) records[index * 20 + 19] = this.elapsed;
       this.device.queue.writeBuffer(
         this.armyMarkers.buffer, 0,
-        records.buffer as ArrayBuffer, records.byteOffset, capped * 16 * 4,
+        records.buffer as ArrayBuffer, records.byteOffset, capped * 20 * 4,
       );
     }
     this.device.queue.writeBuffer(
@@ -1095,18 +1121,72 @@ export class WorldRenderer {
     if (this.armyModels) {
       const cappedModels = Math.min(modelCount, WorldRenderer.ARMY_MODEL_CAPACITY);
       if (cappedModels > 0) {
-        for (let index = 0; index < cappedModels; index += 1) modelRecords[index * 12 + 10] = this.elapsed;
+        for (let index = 0; index < cappedModels; index += 1) {
+          modelRecords[index * 16 + 10] = this.elapsed;
+          modelRecords[index * 16 + 15] = this.elapsed;
+        }
         this.device.queue.writeBuffer(
           this.armyModels.buffer, 0,
-          modelRecords.buffer as ArrayBuffer, modelRecords.byteOffset, cappedModels * 12 * 4,
+          modelRecords.buffer as ArrayBuffer, modelRecords.byteOffset, cappedModels * 16 * 4,
         );
       }
       this.device.queue.writeBuffer(
-        this.armyModels.params, 0, new Uint32Array([Math.max(1, cappedModels), 0, 1, 0]),
+        this.armyModels.params, 0, new Uint32Array([Math.max(1, cappedModels), this.infantryModel ? 1 : 0, 1, 0]),
       );
       this.armyModels.count = cappedModels;
+      this.armyModelSourceCount = cappedModels;
+      if (cappedModels > 0) this.armyModelSource.set(modelRecords.subarray(0, cappedModels * 16));
+      this.armyModelSourceRevision += 1;
+      this.visibleInfantrySourceRevision = -1;
     }
     this.armyPickList = pickList;
+  }
+
+  /** Keep the high-poly skinned draw to infantry that can intersect the current
+   * camera frustum. The procedural models are tiny; the imported mesh is not,
+   * so submitting every army on the world map would waste millions of vertices. */
+  private updateVisibleInfantryModels(): void {
+    if (!this.infantryModel || !this.infantryModels) return;
+    if (this.visibleInfantrySourceRevision === this.armyModelSourceRevision
+      && this.visibleInfantryCameraRevision === this.camera.revision) return;
+    this.visibleInfantrySourceRevision = this.armyModelSourceRevision;
+    this.visibleInfantryCameraRevision = this.camera.revision;
+    let visibleCount = 0;
+    const worldWidth = this.manifest.world.width;
+    for (let index = 0; index < this.armyModelSourceCount; index += 1) {
+      const sourceOffset = index * 16;
+      if (Math.round(this.armyModelSource[sourceOffset + 3]) !== 0) continue;
+      const x = this.armyModelSource[sourceOffset];
+      const z = this.armyModelSource[sourceOffset + 1];
+      let visible = false;
+      for (const copy of WORLD_COPY_INDICES) {
+        if (this.chunkIntersectsView(x + (copy - 1) * worldWidth, z, 12)) {
+          visible = true;
+          break;
+        }
+      }
+      if (!visible) continue;
+      this.visibleInfantryScratch.set(
+        this.armyModelSource.subarray(sourceOffset, sourceOffset + 16),
+        visibleCount * 16,
+      );
+      visibleCount += 1;
+    }
+    if (visibleCount > 0) {
+      this.device.queue.writeBuffer(
+        this.infantryModels.buffer,
+        0,
+        this.visibleInfantryScratch.buffer as ArrayBuffer,
+        0,
+        visibleCount * 16 * 4,
+      );
+    }
+    this.device.queue.writeBuffer(
+      this.infantryModels.params,
+      0,
+      new Uint32Array([Math.max(1, visibleCount), 0, 1, 0]),
+    );
+    this.infantryModels.count = visibleCount;
   }
 
   private armyPickList: ReadonlyArray<{ id: string; x: number; z: number }> = [];
@@ -1317,6 +1397,7 @@ export class WorldRenderer {
     this.camera.update(deltaMs / 1000);
     this.resize();
     this.updateVisibleTerrainChunks();
+    this.updateVisibleInfantryModels();
     const cameraMs = performance.now() - phaseStarted;
 
     phaseStarted = performance.now();
@@ -1562,6 +1643,22 @@ export class WorldRenderer {
       pass.setBindGroup(1, this.armyModels.bindGroup);
       pass.draw(WorldRenderer.ARMY_MODEL_VERTEX_COUNT, instances, 0, WORLD_COPY_INDICES[0] * this.armyModels.count);
       this.recordTriangleDraw('roadFurniture', WorldRenderer.ARMY_MODEL_VERTEX_COUNT / 3 * instances, instances);
+    }
+    if (this.infantryModel && this.infantryModels && this.infantryModels.count > 0
+      && this.camera.distance < this.armyModelDrawDistance) {
+      const model = this.infantryModel;
+      const instances = this.infantryModels.count * WORLD_COPY_INDICES.length;
+      pass.setPipeline(this.infantryModelPipeline);
+      pass.setBindGroup(1, this.infantryModels.bindGroup);
+      pass.setBindGroup(2, model.resources);
+      pass.setVertexBuffer(0, model.positions);
+      pass.setVertexBuffer(1, model.normals);
+      pass.setVertexBuffer(2, model.texcoords);
+      pass.setVertexBuffer(3, model.joints);
+      pass.setVertexBuffer(4, model.weights);
+      pass.setIndexBuffer(model.indices, 'uint16');
+      pass.drawIndexed(model.indexCount, instances);
+      this.recordIndexedDraw('roadFurniture', model.indexCount, instances);
     }
     if (this.armyMarkers && this.armyMarkers.count > 0 && this.camera.distance < 5_000) {
       pass.setBindGroup(1, this.armyMarkers.bindGroup);

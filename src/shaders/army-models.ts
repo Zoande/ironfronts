@@ -2,7 +2,7 @@ import { commonWgsl } from './common';
 
 /** Procedural close-range army models plus their screen-facing per-kind counters. */
 export const armyModelShader = commonWgsl + /* wgsl */ `
-struct ArmyModel { a: vec4f, b: vec4f, c: vec4f };
+struct ArmyModel { a: vec4f, b: vec4f, c: vec4f, d: vec4f };
 struct ArmyModelParams { count: u32, mode: u32, pad0: u32, pad1: u32 };
 @group(1) @binding(0) var<storage, read> armyModels: array<ArmyModel>;
 @group(1) @binding(1) var<uniform> armyModelParams: ArmyModelParams;
@@ -114,7 +114,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let scale = 1.7;
   let local = (part.center + cube.position * part.halfSize) * scale;
   let rotated = vec3f(local.x * cosine - local.z * sine, local.y, local.x * sine + local.z * cosine);
-  let centerXZ = mix(model.c.xy, model.a.xy, motion) + vec2f(copyOffset, 0.0);
+  let travel = select(0.0, clamp((uniforms.sunTime.w - model.d.w) / max(model.d.z, 0.0001), 0.0, 1.0), model.d.z > 0.0);
+  let centerXZ = mix(model.a.xy, model.d.xy, travel) + vec2f(copyOffset, 0.0);
   let ground = heightAt(centerXZ / uniforms.map.xy);
   // Ground lift tracks model scale so shrinking the unit doesn't leave it hovering.
   let worldPosition = vec3f(centerXZ.x + rotated.x, ground + rotated.y + scale * 0.2, centerXZ.y + rotated.z);
@@ -125,7 +126,14 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   output.color = unpackModelRgb(model.a.z) * part.shade;
   let closeFade = 1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y);
   output.alpha = closeFade * (1.0 - horizontalWorldFog(worldPosition.x));
-  if (model.b.z > 0.5) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
+  let modelFlags = u32(model.b.z + 0.5);
+  if ((modelFlags & 1u) != 0u) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
+  // The skinned asset has its own indexed draw. Keep the procedural infantry
+  // only as a graceful fallback if that optional asset failed to load.
+  if (kind == 0u && armyModelParams.mode == 1u) {
+    output.position = vec4f(2.0, 2.0, 2.0, 1.0);
+    output.alpha = 0.0;
+  }
   return output;
 }
 
@@ -152,8 +160,8 @@ fn armyKindCountVertex(
   let copyIndex = instanceIndex / armyModelParams.count;
   let model = armyModels[instanceIndex % armyModelParams.count];
   let copyOffset = f32(i32(copyIndex) - 1) * uniforms.map.x;
-  let motion = smoothstep(0.0, 1.0, (uniforms.sunTime.w - model.c.z) / 0.42);
-  let worldXZ = mix(model.c.xy, model.a.xy, motion) + vec2f(copyOffset, 0.0);
+  let travel = select(0.0, clamp((uniforms.sunTime.w - model.d.w) / max(model.d.z, 0.0001), 0.0, 1.0), model.d.z > 0.0);
+  let worldXZ = mix(model.a.xy, model.d.xy, travel) + vec2f(copyOffset, 0.0);
   let worldPosition = vec3f(worldXZ.x, heightAt(worldXZ / uniforms.map.xy) + 17.0, worldXZ.y);
   let clip = uniforms.viewProjection * vec4f(worldPosition, 1.0);
   let corners = array<vec2f, 6>(

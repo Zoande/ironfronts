@@ -73,6 +73,8 @@ export interface ProjectedArmy {
    *  idle stacks. */
   moveRoute?: ReadonlyArray<{ x: number; z: number }>;
   moveIntent?: 'move' | 'attack';
+  /** Next authoritative movement waypoint and wall-clock time remaining. */
+  motion?: { targetX: number; targetZ: number; durationMs: number };
   suspendedOrder?: { x: number; z: number; intent: 'move' | 'attack' } | null;
   battleFronts?: ReadonlyArray<{
     id: string;
