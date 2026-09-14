@@ -9,6 +9,7 @@ import { COMBAT_SNAP } from './constants';
 import { provinceAtNode } from './location';
 import type { CombatEvent } from './events';
 import { stanceModifiers } from './stance';
+import { armyParticipatesInFront } from './membership';
 
 export function initializeState(session: SimContext): void {
   session.state.simulationTick ??= 0;
@@ -216,7 +217,10 @@ export function removeArmyFromAllFronts(session: SimContext, armyId: string): vo
 
 function resumeArmyIfFree(session: SimContext, army: ArmyStack): void {
   ensureArmyRuntimeState(army);
-  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => Boolean(session.state.battleFronts[frontId]));
+  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => {
+    const front = session.state.battleFronts[frontId];
+    return Boolean(front && armyParticipatesInFront(army.id, front));
+  });
   if (army.battleFrontIds!.length > 0 || army.status === 'retreating') return;
   if (army.suspendedOrder) {
     army.order = army.suspendedOrder;

@@ -2254,6 +2254,15 @@ function refreshSelectedArmy(
   const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
     ? 0 : Math.max(0, Date.now() - view.motion.sampledAtEpochMs);
   const motionDurationMs = view.motion?.durationMs ?? 0;
+  const moveDisabledReason = !session.fresh
+    ? 'Waiting for an authoritative update from the game server.'
+    : inCloseCombat
+      ? 'This formation is currently locked in close combat.'
+      : view.status === 'retreating'
+        ? 'This formation is withdrawing and cannot receive a new move order.'
+        : NAVAL_TRANSIT_STATUSES.has(view.status)
+          ? 'This formation is in transit and cannot receive a land move order.'
+          : 'Movement is unavailable in the current state.';
   uiStore.patch({
     selectedArmy: {
       id: view.id,
@@ -2288,6 +2297,7 @@ function refreshSelectedArmy(
       targetingMode: view.own && targetingMode !== 'strike' ? targetingMode : null,
       canMove: session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),
+      moveDisabledReason,
       canAttack: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),
       canRetreat: session.fresh && view.own && view.status === 'engaged' && Boolean(view.legalRetreatExits?.length),

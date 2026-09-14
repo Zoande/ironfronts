@@ -298,6 +298,8 @@ export interface ArmyStackView {
   readonly awaitingMoveTarget?: boolean;
   readonly targetingMode?: 'move' | 'attack' | 'retreat' | 'split' | null;
   readonly canMove?: boolean;
+  /** Specific explanation shown when movement is unavailable. */
+  readonly moveDisabledReason?: string;
   readonly canAttack?: boolean;
   readonly canRetreat?: boolean;
   readonly canSplit?: boolean;

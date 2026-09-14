@@ -1152,7 +1152,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     const nextArmyKey = showArmy && army ? [
       army.id, army.identified, army.combat, army.targetingMode ?? '', army.activity,
       Math.round((army.health ?? 0) * 100), Math.round((army.strength ?? 0) * 100),
-      army.unitCount, army.canMove, army.canAttack, army.canRetreat,
+      army.unitCount, army.canMove, army.moveDisabledReason ?? '', army.canAttack, army.canRetreat,
       army.canSplit, army.canStop, army.canExtract,
       army.legalRetreatExits?.length ?? 0,
       army.artillery?.targetArmyId ?? '',

@@ -306,7 +306,7 @@ export function renderSelectedArmyPanel(
     commands.append(
       command('Move', 'cmd-move', 'move', army.canMove === true, moveActive, {
         description: 'Move this army to a chosen destination in your territory or discovered ground.',
-        disabledReason: 'This formation is currently locked in combat.',
+        disabledReason: army.moveDisabledReason,
       }),
       command('Attack', 'cmd-attack', 'attack', army.canAttack === true, attackActive, {
         description: 'Advance to contact against a visible hostile force or province.',
@@ -327,7 +327,10 @@ export function renderSelectedArmyPanel(
     );
     for (const resource of army.extractableResources ?? []) commands.append(command(
       `Amplify ${resource}`, 'cmd-extract', `extract-${resource}` as ArmyPanelCommand, army.canExtract === true, false,
-      { description: `Assign this army's engineers to continuous ${resource} production at the province center.` },
+      {
+        description: `Assign this army's engineers to continuous ${resource} production at the province center.`,
+        disabledReason: 'No extractable resource deposit at this position.',
+      },
     ));
   }
 

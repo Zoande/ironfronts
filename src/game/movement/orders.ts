@@ -6,6 +6,7 @@ import { nearestNode, type LandGraph } from './graph';
 import { relationOf, setRelation } from '../game-state';
 import { movementEdgeAllowed, warsRequiredForPath } from './policy';
 import { combinedGraph, isNavalStatus } from './naval';
+import { armyParticipatesInFront } from '../combat/membership';
 
 export interface MoveOrderResult {
   readonly ok: boolean;
@@ -24,6 +25,7 @@ export function installOrder(
   intent: 'move' | 'attack', target?: MoveOrder['target'],
 ): void {
   army.order = { path: path.slice(1), destX, destZ, intent, target, edgeProgress: 0 };
+  army.suspendedOrder = null;
   army.status = 'moving';
   army.extractingNodeId = null;
   army.extractionAssignment = null;
@@ -40,7 +42,10 @@ export function issueMoveOrder(
   const army = session.state.armies[armyId];
   if (!army) return { ok: false, reason: 'No such army.' };
   ensureArmyRuntimeState(army);
-  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => Boolean(session.state.battleFronts[frontId]));
+  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => {
+    const front = session.state.battleFronts[frontId];
+    return Boolean(front && armyParticipatesInFront(army.id, front));
+  });
   if (army.status === 'engaged' && army.battleFrontIds!.length === 0) army.status = 'idle';
   if (army.status === 'engaged') return { ok: false, reason: 'Army is in close combat.' };
   if (army.status === 'retreating') return { ok: false, reason: 'Army is retreating.' };

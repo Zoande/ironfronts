@@ -32,6 +32,7 @@ import { unitType } from './units/unit-catalog';
 import { ORGANIZATION_MAX, ENTRENCHMENT_MAX } from './combat/constants';
 import { calculateFrontDamageRates, type CombatRateModifiers } from './combat';
 import { armySupplyPlan } from './combat/supply';
+import { armyParticipatesInFront } from './combat/membership';
 
 export interface ProjectedGroup {
   readonly typeId: string;
@@ -175,6 +176,7 @@ export function projectArmyView(
   const fronts = fullyVisible ? (army.battleFrontIds ?? []).flatMap((frontId) => {
     const front = state.battleFronts?.[frontId];
     if (!front) return [];
+    if (!armyParticipatesInFront(army.id, front)) return [];
     const friendly = front.sideA.countryId === army.ownerCountryId ? front.sideA : front.sideB;
     const enemy = friendly === front.sideA ? front.sideB : front.sideA;
     const hp = (ids: readonly string[]): number => ids.reduce(
