@@ -33,7 +33,7 @@ const ironfrontsPng = (name: string): string => ironfrontsPngUrls[`./assets/icon
 export type IconName =
   | 'funds' | 'manpower' | 'food' | 'metal' | 'oil' | 'industry'
   | 'mode-strategic' | 'mode-political' | 'mode-diplomacy' | 'mode-terrain'
-  | 'diplomacy' | 'economy' | 'objectives' | 'events' | 'provinces'
+  | 'diplomacy' | 'economy' | 'objectives' | 'events' | 'provinces' | 'trade'
   | 'resource-overlay' | 'close' | 'focus' | 'expand' | 'system'
   | 'weather-clear' | 'weather-rain'
   | 'note-warning' | 'note-combat' | 'note-completed' | 'note-diplomacy' | 'note-information'
@@ -68,6 +68,7 @@ const ICONS: Record<IconName, IconDef> = {
   objectives: { kind: 'img', value: png('objectives') },
   events: { kind: 'svg', value: svg('event') },
   provinces: { kind: 'svg', value: svg('provinces') },
+  trade: { kind: 'svg', value: svg('trade') },
   'resource-overlay': { kind: 'svg', value: svg('pickaxe') },
   close: { kind: 'svg', value: svg('close') },
   focus: { kind: 'svg', value: svg('focus') },

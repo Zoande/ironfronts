@@ -16,12 +16,13 @@ import { renderSelectedArmyPanel, type ArmyPanelCommand } from './army';
 import { createFlag } from './flags';
 import { createIcon, type IconName } from './icons';
 import { createDiplomacyPanel } from './diplomacy-panel';
+import { createTradePanel, type MarketResource } from './trade-panel';
 import { buildNotification } from './notifications';
 import { groupQueueItems, type QueueGroup } from './queue-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import type {
-  MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, TechnologyBranch, UiStore,
+  MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, TechnologyBranch, TradeLegView, UiStore,
 } from './ui-state';
 
 export interface GameUiActions {
@@ -37,6 +38,10 @@ export interface GameUiActions {
   declareWar(countryId: number): void;
   endAlliance(countryId: number): void;
   respondDiplomacy(proposalId: string, accept: boolean): void;
+  proposeResourceTrade(countryId: number, offer: TradeLegView, request: TradeLegView): void;
+  respondResourceTrade(proposalId: string, accept: boolean): void;
+  marketBuy(resource: MarketResource, amount: number): void;
+  marketSell(resource: MarketResource, amount: number): void;
   dismissNotification(id: string): void;
   togglePause(open: boolean): void;
   returnToMenu(): void;
@@ -72,6 +77,7 @@ const MAP_MODES: ReadonlyArray<{ mode: MapMode; label: string; icon: IconName }>
 const DOCK_SECTIONS: ReadonlyArray<{ id: NavId; label: string; icon: IconName }> = [
   { id: 'research', label: 'Technology', icon: 'objectives' },
   { id: 'diplomacy', label: 'Diplomacy', icon: 'diplomacy' },
+  { id: 'trade', label: 'Trade', icon: 'trade' },
   { id: 'economy', label: 'Economy', icon: 'economy' },
   { id: 'events', label: 'Objectives', icon: 'objectives' },
 ];
@@ -390,7 +396,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   for (const section of DOCK_SECTIONS) {
     const b = el('button', 'ifg-dock__btn');
     b.type = 'button';
-    const available = section.id === 'research' || section.id === 'diplomacy';
+    const available = section.id === 'research' || section.id === 'diplomacy' || section.id === 'trade';
     b.disabled = !available;
     b.dataset.nav = section.id;
     b.title = `${section.label} — not available yet`;
@@ -398,7 +404,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (available) {
       b.title = section.label;
       b.setAttribute('aria-label', section.label);
-      b.setAttribute('aria-controls', section.id === 'research' ? 'ifg-technology-panel' : 'ifg-diplomacy-panel');
+      b.setAttribute('aria-controls', section.id === 'research' ? 'ifg-technology-panel'
+        : section.id === 'trade' ? 'ifg-trade-panel' : 'ifg-diplomacy-panel');
       b.setAttribute('aria-expanded', 'false');
     }
     b.append(createIcon(section.icon), el('span', 'ifg-dock__tip', section.label));
@@ -416,6 +423,14 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     declareWar: actions.declareWar,
     endAlliance: actions.endAlliance,
     respondProposal: actions.respondDiplomacy,
+    proposeTrade: actions.proposeResourceTrade,
+    respondTrade: actions.respondResourceTrade,
+  });
+
+  const tradePanel = createTradePanel({
+    close: () => actions.navSelect('trade'),
+    buy: actions.marketBuy,
+    sell: actions.marketSell,
   });
 
   // ---------------- technology: one active no-cost project ----------------
@@ -826,7 +841,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (event.target === overlay) actions.togglePause(false);
   });
 
-  root.append(topbar, dock, diplomacyPanel.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, overlay);
+  root.append(topbar, dock, diplomacyPanel.element, tradePanel.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, overlay);
   document.body.append(root);
 
   const onKey = (event: KeyboardEvent): void => {
@@ -872,11 +887,22 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       diplomacyDockButton.setAttribute('aria-pressed', String(diplomacyOpen));
     }
     diplomacyPanel.render(diplomacyOpen, state.diplomacy);
+    const tradeOpen = state.activeSidePanel === 'trade';
+    const tradeDockButton = dockButtons.get('trade');
+    if (tradeDockButton) {
+      tradeDockButton.classList.toggle('is-on', tradeOpen);
+      tradeDockButton.setAttribute('aria-expanded', String(tradeOpen));
+      tradeDockButton.setAttribute('aria-pressed', String(tradeOpen));
+    }
+    tradePanel.render(tradeOpen, state.resources, state.market.busy, state.market.feedback);
     const technologyOpen = state.activeSidePanel === 'research';
     technologyPanel.hidden = !technologyOpen;
     if (technologyOpen) renderTechnology(state);
     if (renderedSidePanel === 'diplomacy' && state.activeSidePanel === null) {
       diplomacyDockButton?.focus({ preventScroll: true });
+    }
+    if (renderedSidePanel === 'trade' && state.activeSidePanel === null) {
+      tradeDockButton?.focus({ preventScroll: true });
     }
     renderedSidePanel = state.activeSidePanel;
     for (const [id, button] of dockButtons) {

@@ -2,6 +2,7 @@ import { createFlag } from './flags';
 import { createIcon, type IconName } from './icons';
 import type {
   DiplomacyCountryView, DiplomacyProposalView, DiplomacyRelation, DiplomacyView,
+  TradeLegView, TradeProposalView, TradeResourceKey,
 } from './ui-state';
 
 export interface DiplomacyPanelActions {
@@ -13,6 +14,17 @@ export interface DiplomacyPanelActions {
   declareWar(countryId: number): void;
   endAlliance(countryId: number): void;
   respondProposal(proposalId: string, accept: boolean): void;
+  proposeTrade(countryId: number, offer: TradeLegView, request: TradeLegView): void;
+  respondTrade(proposalId: string, accept: boolean): void;
+}
+
+const TRADE_RESOURCES: readonly { readonly key: TradeResourceKey; readonly icon: IconName }[] = [
+  { key: 'funds', icon: 'funds' }, { key: 'manpower', icon: 'manpower' }, { key: 'food', icon: 'food' },
+  { key: 'stone', icon: 'node-stone' }, { key: 'metal', icon: 'metal' }, { key: 'oil', icon: 'oil' },
+];
+
+function tradeResourceIcon(resource: TradeResourceKey): IconName {
+  return TRADE_RESOURCES.find((entry) => entry.key === resource)?.icon ?? 'funds';
 }
 
 export interface DiplomacyPanelHandle {
@@ -57,6 +69,119 @@ function proposalLabel(proposal: DiplomacyProposalView): string {
   return proposal.kind === 'alliance' ? 'Alliance proposal' : 'Peace offer';
 }
 
+function tradeLegChip(leg: TradeLegView): HTMLElement {
+  const chip = node('span', 'ifg-dip__trade-leg');
+  chip.append(createIcon(tradeResourceIcon(leg.resource), 'ifg-dip__trade-leg-icon'), node('b', undefined, String(leg.amount)));
+  return chip;
+}
+
+function tradeProposalCard(
+  proposal: TradeProposalView, viewerCountryId: number | null, actions: DiplomacyPanelActions, busy: boolean,
+): HTMLElement {
+  const outgoing = proposal.fromCountryId === viewerCountryId;
+  const card = node('section', 'ifg-dip__proposal ifg-dip__proposal--trade');
+  const row = node('div', 'ifg-dip__trade-row');
+  row.append(
+    tradeLegChip(outgoing ? proposal.offer : proposal.request),
+    createIcon('trade', 'ifg-dip__trade-arrow'),
+    tradeLegChip(outgoing ? proposal.request : proposal.offer),
+  );
+  card.append(node('p', 'ifg-dip__proposal-kind', outgoing ? 'Your trade offer' : 'Trade offer'), row);
+  if (outgoing) {
+    card.append(node('p', 'ifg-dip__pending', 'Awaiting reply.'));
+  } else {
+    const responses = node('div', 'ifg-dip__proposal-actions');
+    const accept = actionButton('Accept', 'note-completed', 'is-primary', busy);
+    const decline = actionButton('Decline', 'close', '', busy);
+    accept.addEventListener('click', () => actions.respondTrade(proposal.id, true));
+    decline.addEventListener('click', () => actions.respondTrade(proposal.id, false));
+    responses.append(accept, decline);
+    card.append(responses);
+  }
+  return card;
+}
+
+function tradeResourceSelect(selected: TradeResourceKey): HTMLSelectElement {
+  const select = node('select', 'ifg-dip__trade-select');
+  for (const { key } of TRADE_RESOURCES) {
+    const option = node('option', undefined, key[0].toUpperCase() + key.slice(1));
+    option.value = key;
+    option.selected = key === selected;
+    select.append(option);
+  }
+  return select;
+}
+
+function tradeOfferForm(
+  countryId: number,
+  draft: { offerResource: TradeResourceKey; offerAmount: number; requestResource: TradeResourceKey; requestAmount: number },
+  actions: DiplomacyPanelActions,
+  busy: boolean,
+): HTMLElement {
+  const form = node('form', 'ifg-dip__trade-form');
+  const heading = node('p', 'ifg-dip__section-label', 'Propose a trade');
+
+  let offerIcon = createIcon(tradeResourceIcon(draft.offerResource), 'ifg-dip__trade-form-icon');
+  const offerSelect = tradeResourceSelect(draft.offerResource);
+  const offerAmount = node('input', 'ifg-dip__trade-amount');
+  offerAmount.type = 'number';
+  offerAmount.min = '1';
+  offerAmount.max = '100000';
+  offerAmount.step = '1';
+  offerAmount.value = String(draft.offerAmount);
+  offerAmount.setAttribute('aria-label', 'You give — amount');
+  offerSelect.setAttribute('aria-label', 'You give — resource');
+  offerSelect.addEventListener('change', () => {
+    const next = createIcon(tradeResourceIcon(offerSelect.value as TradeResourceKey), 'ifg-dip__trade-form-icon');
+    offerIcon.replaceWith(next);
+    offerIcon = next;
+  });
+
+  const arrow = createIcon('trade', 'ifg-dip__trade-arrow');
+
+  let requestIcon = createIcon(tradeResourceIcon(draft.requestResource), 'ifg-dip__trade-form-icon');
+  const requestSelect = tradeResourceSelect(draft.requestResource);
+  const requestAmount = node('input', 'ifg-dip__trade-amount');
+  requestAmount.type = 'number';
+  requestAmount.min = '0';
+  requestAmount.max = '100000';
+  requestAmount.step = '1';
+  requestAmount.value = String(draft.requestAmount);
+  requestAmount.setAttribute('aria-label', 'You get — amount');
+  requestSelect.setAttribute('aria-label', 'You get — resource');
+  requestSelect.addEventListener('change', () => {
+    const next = createIcon(tradeResourceIcon(requestSelect.value as TradeResourceKey), 'ifg-dip__trade-form-icon');
+    requestIcon.replaceWith(next);
+    requestIcon = next;
+  });
+
+  const give = node('span', 'ifg-dip__trade-field');
+  give.append(offerIcon, offerSelect, offerAmount);
+  const get = node('span', 'ifg-dip__trade-field');
+  get.append(requestIcon, requestSelect, requestAmount);
+
+  const row = node('div', 'ifg-dip__trade-row');
+  row.append(give, arrow, get);
+
+  const send = actionButton('Offer trade', 'trade', 'is-primary', busy);
+  send.type = 'submit';
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const offer: TradeLegView = { resource: offerSelect.value as TradeResourceKey, amount: Math.round(Number(offerAmount.value)) };
+    const request: TradeLegView = { resource: requestSelect.value as TradeResourceKey, amount: Math.round(Number(requestAmount.value)) };
+    if (!Number.isFinite(offer.amount) || offer.amount < 1) return;
+    if (!Number.isFinite(request.amount) || request.amount < 0) return;
+    draft.offerResource = offer.resource;
+    draft.offerAmount = offer.amount;
+    draft.requestResource = request.resource;
+    draft.requestAmount = request.amount;
+    actions.proposeTrade(countryId, offer, request);
+  });
+
+  form.append(heading, row, send);
+  return form;
+}
+
 /** A non-modal field-communications drawer. The game map remains operable around it. */
 export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyPanelHandle {
   const panel = node('section', 'ifg-dip');
@@ -85,6 +210,15 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
   panel.append(header, body);
 
   const drafts = new Map<number, string>();
+  const tradeDrafts = new Map<number, { offerResource: TradeResourceKey; offerAmount: number; requestResource: TradeResourceKey; requestAmount: number }>();
+  const tradeDraft = (countryId: number) => {
+    let draft = tradeDrafts.get(countryId);
+    if (!draft) {
+      draft = { offerResource: 'metal', offerAmount: 100, requestResource: 'oil', requestAmount: 100 };
+      tradeDrafts.set(countryId, draft);
+    }
+    return draft;
+  };
   let rosterFilter = '';
   let renderedView: DiplomacyView | null = null;
   let wasOpen = false;
@@ -263,6 +397,14 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
           `${proposalLabel(pendingOutgoing)} awaiting reply.`));
       }
       controls.append(relationshipActions);
+
+      if (country.relation === 'allied') {
+        const pendingTrades = view.tradeProposals.filter((proposal) => proposal.status === 'pending');
+        for (const proposal of pendingTrades) {
+          controls.append(tradeProposalCard(proposal, view.viewerCountryId, actions, busy));
+        }
+        if (!blocked) controls.append(tradeOfferForm(country.id, tradeDraft(country.id), actions, busy));
+      }
 
       if (blocked) controls.append(node('p', 'ifg-dip__blocked', blocked));
       if (view.feedback) {

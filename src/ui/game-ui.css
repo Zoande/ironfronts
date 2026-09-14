@@ -616,6 +616,117 @@
   .ifg-dip { animation: none; }
 }
 
+/* ---- ally trade offers, embedded in the diplomacy cable panel ---- */
+.ifg-dip__proposal--trade { border-color: rgba(201, 164, 99, 0.48); border-left-color: var(--ifg-brass); }
+.ifg-dip__trade-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 6px; }
+.ifg-dip__trade-leg { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; background: rgba(9, 11, 8, 0.5); border: 1px solid var(--ifg-rule-soft); }
+.ifg-dip__trade-leg-icon { width: 16px; height: 16px; }
+.ifg-dip__trade-leg b { color: var(--ifg-text); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ifg-dip__trade-arrow { flex: none; width: 18px; height: 18px; color: var(--ifg-brass-lit); }
+.ifg-dip__trade-form { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--ifg-rule-soft); }
+.ifg-dip__trade-field { display: inline-flex; align-items: center; gap: 5px; }
+.ifg-dip__trade-form-icon { width: 16px; height: 16px; flex: none; }
+.ifg-dip__trade-select {
+  padding: 5px 4px;
+  color: var(--ifg-text);
+  background: #0d0f0b;
+  border: 1px solid var(--ifg-rule-soft);
+  font: 10px Bitter, Georgia, serif;
+}
+.ifg-dip__trade-amount {
+  width: 64px;
+  padding: 5px 6px;
+  color: var(--ifg-text);
+  background: #0d0f0b;
+  border: 1px solid var(--ifg-rule-soft);
+  font: 10.5px/1 Bitter, Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+.ifg-dip__trade-form .ifg-dip__action { width: 100%; margin-top: 8px; }
+
+/* ================= market: buy/sell resources for funds ================= */
+.ifg-trade {
+  position: absolute;
+  top: 58px;
+  left: 56px;
+  z-index: 2;
+  width: min(420px, calc(100vw - 80px));
+  max-height: min(560px, calc(100dvh - 82px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  color: var(--ifg-text);
+  background: linear-gradient(105deg, rgba(18, 20, 15, 0.985), rgba(29, 31, 26, 0.97));
+  border: 1px solid var(--ifg-rule);
+  border-top: 2px solid var(--ifg-brass);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.64);
+  font-family: Bitter, Georgia, serif;
+  animation: ifg-dip-open 150ms var(--ifg-ease);
+}
+.ifg-trade__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px 8px 15px;
+  background: #12140f;
+  border-bottom: 1px solid var(--ifg-rule);
+}
+.ifg-trade__title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ifg-trade__title-icon { width: 26px; height: 26px; filter: sepia(0.3) saturate(0.8); }
+.ifg-trade__title h2 { margin: 0; color: #ece7d8; font-family: "Special Elite", Georgia, serif; font-size: 17px; font-weight: 400; }
+.ifg-trade__title p { margin: 2px 0 0; color: var(--ifg-dim); font-size: 9px; letter-spacing: 0.06em; }
+.ifg-trade__close {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--ifg-dim);
+  border: 1px solid var(--ifg-rule-soft) !important;
+}
+.ifg-trade__close:hover { color: var(--ifg-text); border-color: var(--ifg-brass) !important; }
+.ifg-trade__body { min-height: 0; overflow: auto; padding: 10px 13px 12px; }
+.ifg-trade__funds { display: flex; align-items: center; gap: 6px; margin: 0 0 9px; padding-bottom: 8px; border-bottom: 1px solid var(--ifg-rule-soft); font-size: 15px; }
+.ifg-trade__funds-icon { width: 18px; height: 18px; }
+.ifg-trade__funds b { color: var(--ifg-brass-lit); font-variant-numeric: tabular-nums; }
+.ifg-trade__row { display: grid; grid-template-columns: 1fr 64px auto auto; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--ifg-rule-soft); }
+.ifg-trade__row-identity { display: inline-flex; align-items: center; gap: 6px; }
+.ifg-trade__row-icon { width: 19px; height: 19px; }
+.ifg-trade__row-identity b { color: var(--ifg-text); font-size: 12px; font-variant-numeric: tabular-nums; }
+.ifg-trade__row-amount {
+  width: 64px;
+  padding: 5px 6px;
+  color: var(--ifg-text);
+  background: #0d0f0b;
+  border: 1px solid var(--ifg-rule-soft);
+  font: 10.5px/1 Bitter, Georgia, serif;
+  font-variant-numeric: tabular-nums;
+}
+.ifg-trade__action {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 7px !important;
+  color: #d7d1c2 !important;
+  background: rgba(45, 48, 41, 0.82) !important;
+  border: 1px solid var(--ifg-rule-soft) !important;
+  font-size: 9px !important;
+  white-space: nowrap;
+}
+.ifg-trade__action-icon { width: 12px; height: 12px; }
+.ifg-trade__action:not(:disabled):hover { color: var(--ifg-brass-lit) !important; border-color: var(--ifg-brass) !important; }
+.ifg-trade__action.is-sell { color: #cfe0b8 !important; }
+.ifg-trade__action:disabled { opacity: 0.42; }
+.ifg-trade__feedback { margin: 8px 13px 0; color: #c09c85; font-size: 9.5px; }
+.ifg-trade__feedback:empty { display: none; }
+@media (max-width: 680px) {
+  .ifg-trade { top: max(48px, env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left)); width: calc(100vw - max(12px, env(safe-area-inset-left) + env(safe-area-inset-right))); }
+  .ifg-trade__row { grid-template-columns: 1fr; row-gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ifg-trade { animation: none; }
+}
+
 /* ================= map-mode cluster (below the top bar) ================= */
 .ifg-modes {
   position: absolute;

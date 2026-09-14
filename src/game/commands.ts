@@ -14,6 +14,7 @@ import { startResearch } from './technology';
 import {
   declareWar, endAlliance, proposeDiplomacy, respondDiplomacy, sendDiplomaticMessage,
 } from './diplomacy';
+import { marketTrade, proposeResourceTrade, respondResourceTrade } from './trade';
 import type { CommandResult, GameCommand } from './commands/types';
 
 export type {
@@ -22,6 +23,7 @@ export type {
   RetreatArmyCommand, SplitArmyCommand, StopArmyCommand, SetStanceCommand, DeclareWarCommand,
   EndAllianceCommand, ProposeDiplomacyCommand, RespondDiplomacyCommand,
   SendDiplomaticMessageCommand, StrikeCommand, ResearchCommand,
+  MarketTradeCommand, ProposeResourceTradeCommand, RespondResourceTradeCommand,
 } from './commands/types';
 
 function controlsArmy(ctx: SimContext, countryId: number, armyId: string): boolean {
@@ -93,5 +95,11 @@ export function applyCommand(ctx: SimContext, command: GameCommand): CommandResu
       return endAlliance(ctx.state, command.countryId, command.targetCountryId);
     case 'strike':
       return issueStrike(ctx, command);
+    case 'marketTrade':
+      return marketTrade(ctx.state, command.countryId, command.action, command.resource, command.amount);
+    case 'proposeResourceTrade':
+      return proposeResourceTrade(ctx.state, command.countryId, command.targetCountryId, command.offer, command.request);
+    case 'respondResourceTrade':
+      return respondResourceTrade(ctx.state, command.countryId, command.proposalId, command.accept);
   }
 }

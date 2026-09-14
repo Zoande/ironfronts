@@ -8,11 +8,11 @@ export const MAX_DIPLOMACY_MESSAGE_LENGTH = 500;
 export const MAX_DIPLOMACY_MESSAGES_PER_PAIR = 50;
 export const MAX_DIPLOMACY_PROPOSALS_PER_PAIR = 50;
 
-function isAlive(state: GameState, countryId: number): boolean {
+export function isAlive(state: GameState, countryId: number): boolean {
   return Object.values(state.provinceOwners).some((ownerId) => ownerId === countryId);
 }
 
-function validateCountries(
+export function validateCountries(
   state: GameState, fromCountryId: number, toCountryId: number,
 ): CommandResult | null {
   if (fromCountryId === toCountryId) return { ok: false, reason: 'Cannot target your own country.' };
@@ -25,7 +25,7 @@ function validateCountries(
   return null;
 }
 
-function validatePlayerRecipient(
+export function validatePlayerRecipient(
   state: GameState, fromCountryId: number, toCountryId: number,
 ): CommandResult | null {
   const invalid = validateCountries(state, fromCountryId, toCountryId);
@@ -36,11 +36,12 @@ function validatePlayerRecipient(
   return null;
 }
 
-function nextRecordId(state: GameState, prefix: 'message' | 'proposal'): string {
+export function nextRecordId(state: GameState, prefix: 'message' | 'proposal' | 'trade'): string {
   if (state.nextDiplomacyId === undefined) {
     const ids = [
       ...Object.keys(state.diplomacyMessages ?? {}),
       ...Object.keys(state.diplomacyProposals ?? {}),
+      ...Object.keys(state.resourceTradeProposals ?? {}),
     ];
     state.nextDiplomacyId = ids.reduce((next, id) => {
       const suffix = Number(id.slice(id.lastIndexOf('-') + 1));
@@ -52,8 +53,8 @@ function nextRecordId(state: GameState, prefix: 'message' | 'proposal'): string 
   return `${prefix}-${sequence}`;
 }
 
-function samePair(
-  a: Pick<DiplomacyMessage, 'fromCountryId' | 'toCountryId'>,
+export function samePair(
+  a: { fromCountryId: number; toCountryId: number },
   fromCountryId: number,
   toCountryId: number,
 ): boolean {

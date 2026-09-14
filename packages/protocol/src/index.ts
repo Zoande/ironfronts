@@ -5,6 +5,10 @@ export const GAME_ID = 'world-at-war-2' as const;
 export const GAME_VERSION = 'world-at-war@4' as const;
 
 const confirmedWars = z.array(z.number().int().positive()).optional();
+const tradeLegSchema = z.object({
+  resource: z.enum(['funds', 'manpower', 'food', 'stone', 'metal', 'oil']),
+  amount: z.number().int().nonnegative().max(100_000),
+});
 const attackTargetSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('province'), provinceId: z.number().int().nonnegative(),
@@ -52,6 +56,18 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('strike'), provinceId: z.number().int().nonnegative(),
     x: z.number().finite(), z: z.number().finite(),
+  }),
+  z.object({
+    type: z.literal('marketTrade'), action: z.enum(['buy', 'sell']),
+    resource: z.enum(['manpower', 'food', 'stone', 'metal', 'oil']),
+    amount: z.number().int().positive().max(5_000),
+  }),
+  z.object({
+    type: z.literal('proposeResourceTrade'), targetCountryId: z.number().int().positive(),
+    offer: tradeLegSchema, request: tradeLegSchema,
+  }),
+  z.object({
+    type: z.literal('respondResourceTrade'), proposalId: z.string().min(1).max(100), accept: z.boolean(),
   }),
 ]);
 export type CommandPayload = z.infer<typeof commandPayloadSchema>;
@@ -110,6 +126,22 @@ export interface DiplomacyProposal {
   fromCountryId: number;
   toCountryId: number;
   kind: 'alliance' | 'peace';
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  createdAtTick: number;
+  resolvedAtTick?: number;
+}
+
+export interface TradeLeg {
+  resource: 'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil';
+  amount: number;
+}
+
+export interface ResourceTradeProposal {
+  id: string;
+  fromCountryId: number;
+  toCountryId: number;
+  offer: TradeLeg;
+  request: TradeLeg;
   status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
   createdAtTick: number;
   resolvedAtTick?: number;
@@ -245,6 +277,7 @@ export interface PlayerProjection {
   diplomacy?: {
     messages: DiplomacyMessage[];
     proposals: DiplomacyProposal[];
+    tradeProposals: ResourceTradeProposal[];
   };
   /** Set once the campaign is decided from the viewer's point of view. */
   outcome?: {

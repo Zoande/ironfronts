@@ -121,6 +121,10 @@ export function projectFor(
       .filter((proposal) => proposal.fromCountryId === viewerCountryId || proposal.toCountryId === viewerCountryId)
       .map((proposal) => ({ ...proposal }))
       .sort((a, b) => a.createdAtTick - b.createdAtTick || a.id.localeCompare(b.id)),
+    tradeProposals: Object.values(state.resourceTradeProposals ?? {})
+      .filter((proposal) => proposal.fromCountryId === viewerCountryId || proposal.toCountryId === viewerCountryId)
+      .map((proposal) => ({ ...proposal }))
+      .sort((a, b) => a.createdAtTick - b.createdAtTick || a.id.localeCompare(b.id)),
   };
   const visibleEconomies = debugPotential ? (state.provinceEconomies ?? {}) : privateMap(state.provinceEconomies ?? {});
   const engineerAssignments = buildEngineerAssignmentIndex({ state, world, graph });
