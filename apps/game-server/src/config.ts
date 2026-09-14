@@ -13,6 +13,10 @@ function secret(name: string, fallback: string): string {
 }
 
 const debugControlsEnabled = process.env.IRONFRONTS_DEBUG_CONTROLS_ENABLED === 'true';
+const debugPassword = process.env.IRONFRONTS_DEBUG_PASSWORD;
+if (debugControlsEnabled && !debugPassword) {
+  throw new Error('IRONFRONTS_DEBUG_PASSWORD is required when IRONFRONTS_DEBUG_CONTROLS_ENABLED=true.');
+}
 
 export const config = {
   port: numberEnv('GAME_PORT', 3002),
@@ -30,6 +34,8 @@ export const config = {
   internalSecret: secret('INTERNAL_SERVICE_SECRET', 'ironfronts-local-service-secret-change-me'),
   /** Explicit deployment gate layered on top of the signed account claim. */
   debugControlsEnabled,
+  /** Never shipped to the browser; verified by the game server when an entitled tester unlocks the inspector. */
+  debugPassword: debugPassword ?? '',
   /**
    * DEV / TESTING ONLY. Multiplies simulation time (movement, production,
    * combat, clock all scale together — it just advances game-time faster).
