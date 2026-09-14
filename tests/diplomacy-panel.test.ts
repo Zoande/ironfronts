@@ -65,9 +65,11 @@ describe('diplomacy side drawer', () => {
   });
 
   it('keeps the side layout responsive and honors reduced-motion preferences', () => {
-    expect(css).toMatch(/\.ifg-dip\s*\{[\s\S]*?left: 56px;[\s\S]*?width: min\(720px,/);
+    expect(css).toMatch(/\.ifg-dip\s*\{[\s\S]*?left: 56px;[\s\S]*?width: min\(780px,/);
     expect(css).toContain('@media (max-width: 680px)');
     expect(css).toContain('grid-template-columns: minmax(0, 1fr);');
+    expect(css).toContain('@media (max-height: 520px) and (orientation: landscape)');
+    expect(css).toContain('env(safe-area-inset-bottom)');
     expect(css).toMatch(/\.ifg-dip__roster\s*\{[^}]*min-width: 0;[^}]*overflow: hidden;/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?animation: none;/);
   });

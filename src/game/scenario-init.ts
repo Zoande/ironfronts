@@ -17,6 +17,7 @@ import type { WorldData, WorldProvince } from './world-data';
 import type {
   ControllerType, CountryState, GameState, ProductionOrder, ProvinceBuildings,
 } from './game-state';
+import { initialTechnologyLevels } from './technology';
 import { GAME_STATE_VERSION, emptyStockpile } from './game-state';
 import type { ArmyStack, UnitGroup } from './units/army';
 import { makeGroup } from './units/army';
@@ -103,6 +104,7 @@ function makeCountryState(
     // Selectable powers open with one warhead ready so the strategic strike is
     // usable from turn one; minors start dry and must build an Ordnance Workshop.
     warheads: selectable && !sandbox ? 1 : 0,
+    technologies: initialTechnologyLevels(),
   };
   ensureCountryEconomy(country);
   return country;

@@ -4,7 +4,7 @@ import { setRelation } from '../../src/game/game-state';
 import { stepCombat } from '../../src/game/combat';
 import { regenOrganization } from '../../src/game/combat/organization';
 import { stepEntrenchment } from '../../src/game/combat/entrenchment';
-import { stepSupply, SUPPLY_RANGE } from '../../src/game/combat/supply';
+import { armySupplyPlan, stepSupply, SUPPLY_RANGE } from '../../src/game/combat/supply';
 
 describe('stepSupply', () => {
   it('an army standing on its own territory is in supply', () => {
@@ -44,6 +44,24 @@ describe('stepSupply', () => {
 });
 
 describe('supply effects', () => {
+  it('allocates army capacity by each unit upkeep ratio', () => {
+    const plan = armySupplyPlan(army('a', 1, 100, 100, 0, 'engineer', 1));
+    expect(plan.capacity).toBe(100);
+    expect(plan.allocation.funds).toBeCloseTo(56);
+    expect(plan.allocation.food).toBeCloseTo(40);
+    expect(plan.allocation.metal).toBeCloseTo(4);
+  });
+
+  it('activates only the resource-specific shortage when its army store empties', () => {
+    const ctx = fixture();
+    const cutOff = army('cutOff', 1, 100 + SUPPLY_RANGE * 3, 100 + SUPPLY_RANGE * 3, 0, 'engineer');
+    ctx.state.armies = { cutOff };
+    stepSupply(ctx, 1_000);
+    expect(cutOff.inSupply).toBe(false);
+    expect(cutOff.supplyStores?.metal).toBe(0);
+    expect(cutOff.shortageSeverity).toMatchObject({ metal: 100, funds: 100, food: 100, oil: 0 });
+  });
+
   it('an out-of-supply army regains organization more slowly than a supplied one', () => {
     const ctx = fixture();
     ctx.state.armies = {

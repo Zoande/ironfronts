@@ -3,7 +3,8 @@ export type ArmyVisualKind = 0 | 1 | 2 | 3 | 4 | 5;
 /** Five close-range model families; engineers share infantry. Light tanks get
  *  their own skinned model, so they are split from the armored-car hull they
  *  used to share (kind 1) into kind 4. */
-export type ArmyModelKind = 0 | 1 | 2 | 3 | 4;
+/** Kind 5 is the procedural transport ship used while a stack is at sea. */
+export type ArmyModelKind = 0 | 1 | 2 | 3 | 4 | 5;
 
 export interface ProjectedTroopGroup {
   readonly typeId: string;
@@ -24,6 +25,7 @@ export interface ArmyCompositionRow {
 }
 
 export function visualKindForUnit(typeId: string): ArmyVisualKind {
+  typeId = typeId.replace(/-l[2-8]$/, '');
   if (typeId === 'engineer') return 1;
   if (typeId === 'armored-car') return 2;
   if (typeId === 'light-tank') return 3;
@@ -33,6 +35,7 @@ export function visualKindForUnit(typeId: string): ArmyVisualKind {
 }
 
 function modelKindForUnit(typeId: string): ArmyModelKind {
+  typeId = typeId.replace(/-l[2-8]$/, '');
   if (typeId === 'armored-car') return 1;
   if (typeId === 'medium-tank') return 2;
   if (typeId === 'artillery') return 3;

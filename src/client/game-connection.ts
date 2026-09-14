@@ -9,6 +9,7 @@ import { InterpolatedGameClock, type GameClockReading } from './game-clock';
 type ResultCallback = (ok: boolean, reason?: string, wars?: readonly number[], appliedRevision?: number) => void;
 interface PendingCommand { timer: number; settle: ResultCallback }
 export type ConnectionStatus = 'connecting' | 'ready' | 'resyncing' | 'disconnected' | 'closed' | 'incompatible';
+const CONNECTION_STALE_MS = 5_000;
 
 export class GameConnection extends EventTarget {
   state!: PlayerProjection;
@@ -53,7 +54,10 @@ export class GameConnection extends EventTarget {
     this.dispatchEvent(new Event('connection-status'));
   }
 
-  get fresh(): boolean { return this.status === 'ready' && performance.now() - this.lastMessageMs < 2_500; }
+  get fresh(): boolean {
+    return this.status === 'ready' && this.socket?.readyState === WebSocket.OPEN
+      && performance.now() - this.lastMessageMs < CONNECTION_STALE_MS;
+  }
   serverNow(): number { return this.serverEpochMs + Math.max(0, performance.now() - this.serverSampleAt); }
 
   private async connect(onStage?: (stage: string) => void): Promise<void> {
@@ -172,7 +176,9 @@ export class GameConnection extends EventTarget {
     window.clearInterval(this.heartbeat);
     this.send({ type: 'ping', sentAt: performance.now() });
     this.heartbeat = window.setInterval(() => {
-      if (performance.now() - this.lastMessageMs > 5_000) { this.socket?.close(4000, 'Connection stale'); return; }
+      if (performance.now() - this.lastMessageMs > CONNECTION_STALE_MS) {
+        this.socket?.close(4000, 'Connection stale'); return;
+      }
       this.send({ type: 'ping', sentAt: performance.now() });
     }, 1_000);
   }
@@ -200,7 +206,9 @@ export class GameConnection extends EventTarget {
   }
   command(command: CommandPayload, onResult: ResultCallback): string {
     const commandId = crypto.randomUUID();
-    if (!this.fresh || this.socket?.readyState !== WebSocket.OPEN) {
+    // The heartbeat owns stale-link detection. A shorter command threshold
+    // rejected healthy sockets during brief server-load or scheduling lulls.
+    if (this.status !== 'ready' || this.socket?.readyState !== WebSocket.OPEN) {
       queueMicrotask(() => onResult(false, 'Connection unavailable.')); return commandId;
     }
     const timer = window.setTimeout(() => {

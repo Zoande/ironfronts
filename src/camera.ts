@@ -147,6 +147,14 @@ export class StrategyCamera {
     return this.ray;
   }
 
+  zoomAtViewportCenter(factor: number): void {
+    this.zoomAt(
+      this.canvasRect.left + this.canvasRect.width * 0.5,
+      this.canvasRect.top + this.canvasRect.height * 0.5,
+      factor,
+    );
+  }
+
   private recalculateMatrices(): void {
     this.distance = Math.max(this.distance, this.minimumAltitude / Math.max(0.12, Math.sin(this.pitch)));
     const nextState = [

@@ -31,6 +31,8 @@ import {
 import { unitType } from './units/unit-catalog';
 import { ORGANIZATION_MAX, ENTRENCHMENT_MAX } from './combat/constants';
 import { calculateFrontDamageRates, type CombatRateModifiers } from './combat';
+import { armySupplyPlan } from './combat/supply';
+import { armyParticipatesInFront } from './combat/membership';
 
 export interface ProjectedGroup {
   readonly typeId: string;
@@ -87,6 +89,12 @@ export interface PlayerArmyView {
     readonly targetZ: number;
     readonly durationMs: number;
   };
+    readonly supply?: {
+      readonly capacity: number;
+      readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+      readonly connected: boolean;
+      readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    };
   readonly suspendedOrder?: { readonly x: number; readonly z: number; readonly intent: 'move' | 'attack' } | null;
   readonly battleFronts?: ReadonlyArray<{
     id: string;
@@ -168,6 +176,7 @@ export function projectArmyView(
   const fronts = fullyVisible ? (army.battleFrontIds ?? []).flatMap((frontId) => {
     const front = state.battleFronts?.[frontId];
     if (!front) return [];
+    if (!armyParticipatesInFront(army.id, front)) return [];
     const friendly = front.sideA.countryId === army.ownerCountryId ? front.sideA : front.sideB;
     const enemy = friendly === front.sideA ? front.sideB : front.sideA;
     const hp = (ids: readonly string[]): number => ids.reduce(
@@ -214,6 +223,7 @@ export function projectArmyView(
     ? army.units.filter((group) => unitType(group.typeId).category === 'artillery') : [];
   const artilleryRange = artilleryGroups.length
     ? Math.max(...artilleryGroups.map((group) => unitType(group.typeId).engagementRange)) : 0;
+  const supplyPlan = fullyVisible ? armySupplyPlan(army) : null;
   return {
     id: army.id,
     name: fullyVisible ? army.name : 'Unidentified force',
@@ -233,6 +243,15 @@ export function projectArmyView(
     suspendedOrder: own && army.suspendedOrder
       ? { x: army.suspendedOrder.destX, z: army.suspendedOrder.destZ, intent: army.suspendedOrder.intent }
       : null,
+    supply: supplyPlan ? {
+      capacity: supplyPlan.capacity,
+      stores: { funds: army.supplyStores?.funds ?? supplyPlan.allocation.funds,
+        food: army.supplyStores?.food ?? supplyPlan.allocation.food,
+        metal: army.supplyStores?.metal ?? supplyPlan.allocation.metal,
+        oil: army.supplyStores?.oil ?? supplyPlan.allocation.oil },
+      connected: army.inSupply ?? false,
+      allocation: supplyPlan.allocation,
+    } : undefined,
     battleFronts: fronts,
     // The server projection, which also owns the movement graph, fills these.
     legalRetreatExits: [],

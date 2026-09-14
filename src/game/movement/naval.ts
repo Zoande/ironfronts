@@ -6,7 +6,7 @@ import type { LandGraph } from './graph';
 import { GAME_PACE } from '../pacing';
 import { ROAD_BONUS, STRATEGIC_MOVEMENT_SCALE } from './speed';
 
-/** Six hours each to embark and disembark on the authoritative 1x timeline. */
+/** Thirty real minutes each to embark and disembark on the authoritative 1x timeline. */
 export const NAVAL_DWELL_HOURS = GAME_PACE.movement.navalDwellHours;
 
 const combinedGraphCache = new WeakMap<LandGraph, LandGraph>();

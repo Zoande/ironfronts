@@ -8,7 +8,7 @@
  */
 
 import { createIcon, iconMarkup, type IconName } from './icons';
-import { roundDisplayedHp, summarizeBattleFronts } from './army-presentation';
+import { roundDisplayedHp, summarizeBattleFronts, type BattleSidePresentation } from './army-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import type { ArmyStackView, CombatStatus } from './ui-state';
@@ -41,6 +41,12 @@ function formatRealDuration(seconds: number | null): string {
   if (seconds < 3_600) return `${Math.round(seconds / 60)} min real`;
   const hours = seconds / 3_600;
   return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)} hr real`;
+}
+
+function formatCompactDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
+  const total = Math.max(0, Math.round(seconds));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
 /**
@@ -101,6 +107,12 @@ const STANCE_OPTIONS: ReadonlyArray<{ command: ArmyPanelCommand; icon: IconName;
   { command: 'stance-defend-retreat', icon: 'stance-defend-retreat', label: 'Defensive', description: 'Some defensive bonus, but pulls back early to preserve the force.' },
   { command: 'stance-retreat', icon: 'stance-retreat', label: 'Cautious', description: 'No combat bonus; breaks off at the first real pressure.' },
 ];
+const SUPPLY_RESOURCES = [
+  { id: 'funds', label: 'Funds', color: '#d1b56a' },
+  { id: 'food', label: 'Food', color: '#d6a24f' },
+  { id: 'metal', label: 'Metal', color: '#91a0a5' },
+  { id: 'oil', label: 'Oil', color: '#6d9b8d' },
+] as const;
 
 function node<K extends keyof HTMLElementTagNameMap>(
   tag: K, className?: string, text?: string,
@@ -119,19 +131,25 @@ export function renderSelectedArmyPanel(
 ): void {
   host.style.setProperty('--army-country', army.countryColor);
   host.dataset.combat = army.combat;
-  host.setAttribute('aria-label', `${army.name}, ${army.country}`);
-
   const header = node('header', 'ifg-army-panel__header');
   const identity = node('span', 'ifg-army-panel__identity');
   identity.append(node('strong', undefined, army.name), node('small', undefined, army.country));
+  const headerStats = node('span', 'ifg-army-panel__header-stats');
+  const headerMetric = (label: string, icon: IconName, value: string): HTMLElement => {
+    const item = node('span');
+    item.append(createIcon(icon, 'ifg-army-stat__icon'), node('small', undefined, label), node('b', undefined, value));
+    return item;
+  };
+  headerStats.append(
+    headerMetric('Speed', 'stat-speed', army.identified === false || army.speed === undefined ? '--' : String(Math.round(army.speed))),
+    headerMetric('Troops', 'stat-troops', army.identified === false ? '--' : String(army.unitCount)),
+  );
   const close = node('button', 'ifg-army-panel__close');
   close.type = 'button';
   close.title = 'Deselect army';
   close.setAttribute('aria-label', 'Deselect army');
   close.append(createIcon('close'));
   close.addEventListener('click', () => onCommand('deselect'));
-  header.append(node('span', 'ifg-army-panel__header-spacer'), identity, close);
-
   const health = node('section', 'ifg-army-panel__health');
   const healthEyebrow = node('small', 'ifg-army-panel__eyebrow');
   healthEyebrow.append(createIcon('stat-health', 'ifg-army-panel__eyebrow-icon'), document.createTextNode('Health'));
@@ -164,11 +182,17 @@ export function renderSelectedArmyPanel(
   const statTable = node('table', 'ifg-army-panel__stat-table');
   const statHead = node('thead');
   const headingRow = node('tr');
+  const statHeading = (label: string, icon: IconName, description: string): HTMLElement => {
+    const heading = node('th');
+    heading.append(createIcon(icon, 'ifg-army-stat__icon'));
+    bindTooltip(heading, () => ({ title: label, description }));
+    return heading;
+  };
   headingRow.append(
-    node('th', undefined, 'Base damage / game hour'),
-    node('th', undefined, 'Soft'),
-    node('th', undefined, 'Light'),
-    node('th', undefined, 'Heavy'),
+    statHeading('Base damage per game hour', 'stat-attack', 'Total damage output against the target per game hour.'),
+    statHeading('Soft damage', 'marker-infantry', 'Damage applied to soft targets.'),
+    statHeading('Light damage', 'marker-light-tank', 'Damage applied to light armor.'),
+    statHeading('Heavy damage', 'marker-medium-tank', 'Damage applied to heavy armor.'),
   );
   statHead.append(headingRow);
   const statBody = node('tbody');
@@ -187,21 +211,11 @@ export function renderSelectedArmyPanel(
   appendProfile('Attack', 'stat-attack', army.identified === false ? undefined : army.attack);
   appendProfile('Defence', 'stat-defence', army.identified === false ? undefined : army.defense);
   statTable.append(statHead, statBody);
-  const statMeta = node('div', 'ifg-army-panel__stat-meta');
-  const metric = (label: string, icon: IconName, value: string): HTMLElement => {
-    const item = node('span');
-    item.append(createIcon(icon, 'ifg-army-stat__icon'), node('small', undefined, label), node('b', undefined, value));
-    return item;
-  };
-  statMeta.append(
-    metric('Speed', 'stat-speed', army.identified === false || army.speed === undefined ? '--' : String(Math.round(army.speed))),
-    metric('Troops', 'stat-troops', army.identified === false ? '--' : String(army.unitCount)),
-  );
-  stats.append(statTable, statMeta);
+  stats.append(statTable);
+  const headerStances = node('div', 'ifg-army-panel__stances');
+  headerStances.setAttribute('role', 'group');
+  headerStances.setAttribute('aria-label', 'Combat stance');
   if (army.own) {
-    const stanceRow = node('div', 'ifg-army-panel__stances');
-    stanceRow.setAttribute('role', 'group');
-    stanceRow.setAttribute('aria-label', 'Combat stance');
     for (const option of STANCE_OPTIONS) {
       const btn = node('button', 'ifg-army-panel__stance');
       btn.type = 'button';
@@ -211,10 +225,46 @@ export function renderSelectedArmyPanel(
       btn.append(createIcon(option.icon, 'ifg-army-panel__stance-icon'));
       bindTooltip(btn, () => ({ title: option.label, description: option.description }));
       btn.addEventListener('click', () => onCommand(option.command));
-      stanceRow.append(btn);
+      headerStances.append(btn);
     }
-    stats.append(stanceRow);
   }
+  const headerControls = node('span', 'ifg-army-panel__header-controls');
+  if (army.supply) {
+    const supplyBar = node('span', 'ifg-army-panel__supply-bar');
+    supplyBar.setAttribute('role', 'img');
+    supplyBar.setAttribute('aria-label', army.supply.connected ? 'Supply connected' : 'Supply stores');
+    const children = SUPPLY_RESOURCES.filter((resource) => (army.supply!.allocation[resource.id] ?? 0) > 0).map((resource) => {
+      const maximum = army.supply!.allocation[resource.id] ?? 0;
+      const current = Math.max(0, army.supply!.stores[resource.id] ?? 0);
+      const segment = node('i', 'ifg-army-panel__supply-segment');
+      segment.style.width = `${army.supply!.capacity > 0 ? current / army.supply!.capacity * 100 : 0}%`;
+      segment.style.backgroundColor = resource.color;
+      supplyBar.append(segment);
+      const depleted = current <= 0;
+      const debuff = depleted
+        ? 'Store empty: this resource’s unit-specific shortages are active.'
+        : army.shortage?.modifiers && Object.values(army.shortage.modifiers).some((value) => value < 0.999)
+          ? 'A shortage effect is active on this army.' : 'No shortage effect active.';
+      return { label: resource.label, value: `${Math.round(current)} / ${Math.round(maximum)}`, content: {
+        title: resource.label, description: debuff, status: army.supply!.connected ? 'Connected' : 'Depleting',
+      } };
+    });
+    const activeDebuffs = Object.entries(army.shortage?.modifiers ?? {}).filter(([, value]) => value < 0.999);
+    bindTooltip(supplyBar, () => ({
+      title: 'Supply stores',
+      description: army.supply!.connected ? 'Connected to the capital or a nearby ocean route.' : 'Disconnected: stores are being consumed.',
+      children: [
+        ...children,
+        ...(activeDebuffs.length ? [{ label: 'Active debuffs', value: `${activeDebuffs.length}`, content: {
+          title: 'Active shortage effects',
+          children: activeDebuffs.map(([stat, value]) => ({ label: stat.replace(/([A-Z])/g, ' $1'), value: `${Math.round(value * 100)}%` })),
+        } }] : []),
+      ],
+    }));
+    headerControls.append(supplyBar);
+  }
+  headerControls.append(headerStances);
+  header.append(headerStats, identity, headerControls, close);
   const summary = node('div', 'ifg-army-panel__summary');
   summary.append(health, stats);
 
@@ -256,7 +306,7 @@ export function renderSelectedArmyPanel(
     commands.append(
       command('Move', 'cmd-move', 'move', army.canMove === true, moveActive, {
         description: 'Move this army to a chosen destination in your territory or discovered ground.',
-        disabledReason: 'This formation is currently locked in combat.',
+        disabledReason: army.moveDisabledReason,
       }),
       command('Attack', 'cmd-attack', 'attack', army.canAttack === true, attackActive, {
         description: 'Advance to contact against a visible hostile force or province.',
@@ -277,7 +327,10 @@ export function renderSelectedArmyPanel(
     );
     for (const resource of army.extractableResources ?? []) commands.append(command(
       `Amplify ${resource}`, 'cmd-extract', `extract-${resource}` as ArmyPanelCommand, army.canExtract === true, false,
-      { description: `Assign this army's engineers to continuous ${resource} production at the province center.` },
+      {
+        description: `Assign this army's engineers to continuous ${resource} production at the province center.`,
+        disabledReason: 'No extractable resource deposit at this position.',
+      },
     ));
   }
 
@@ -336,29 +389,30 @@ export function renderSelectedArmyPanel(
   const activity = node('div', 'ifg-army-panel__activity');
   const battle = army.combat === 'engaged'
     ? summarizeBattleFronts(army.battleFronts) : null;
-  if (battle) {
+  {
     activity.classList.add('ifg-army-panel__activity--combat');
-    const battleHeader = node('div', 'ifg-battle__header');
+    const battleHeader = node('div', `ifg-battle__header${battle ? '' : ' is-inactive'}`);
     const battleTitle = node('span');
     battleTitle.append(
-      node('small', 'ifg-army-panel__eyebrow', 'Combat overview'),
-      node('strong', undefined, battle.role === 'mixed'
-        ? 'Contested battle' : battle.role === 'attack' ? 'Offensive' : 'Defensive line'),
+      node('small', 'ifg-army-panel__eyebrow', battle ? 'Combat overview' : 'Battle readiness'),
+      node('strong', undefined, battle
+        ? battle.role === 'mixed' ? 'Contested battle' : battle.role === 'attack' ? 'Offensive' : 'Defensive line'
+        : 'Not engaged'),
     );
     battleHeader.append(
       battleTitle,
-      node('span', 'ifg-battle__front-count', `${battle.frontCount} ${battle.frontCount === 1 ? 'front' : 'fronts'}`),
+      node('span', 'ifg-battle__front-count', battle ? `${battle.frontCount} ${battle.frontCount === 1 ? 'front' : 'fronts'}` : 'No active front'),
     );
 
     const battleSides = node('div', 'ifg-battle__sides');
-    const appendSide = (
-      label: string, side: typeof battle.friendly, tone: 'friendly' | 'enemy',
+      const appendSide = (
+        label: string, side: BattleSidePresentation, tone: 'friendly' | 'enemy',
     ): void => {
-      const row = node('article', `ifg-battle-side ifg-battle-side--${tone}`);
+      const row = node('article', `ifg-battle-side ifg-battle-side--${tone}${battle ? '' : ' is-inactive'}`);
       const sideHeader = node('div', 'ifg-battle-side__header');
       sideHeader.append(
         node('strong', undefined, label),
-        node('b', undefined, `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP`),
+        node('b', undefined, `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP · ${battle ? side.organizationPercent : '--'}% org`),
       );
       const healthTrack = node('span', 'ifg-battle-side__health');
       healthTrack.setAttribute('role', 'progressbar');
@@ -372,33 +426,56 @@ export function renderSelectedArmyPanel(
       row.append(sideHeader, healthTrack);
       battleSides.append(row);
     };
-    appendSide(army.own ? 'Your forces' : 'Selected forces', battle.friendly, army.own ? 'friendly' : 'enemy');
-    appendSide(army.own ? 'Enemy forces' : 'Opposing forces', battle.enemy, army.own ? 'enemy' : 'friendly');
+    const friendlySide = battle?.friendly ?? {
+      hp: army.identified === false ? 0 : army.health,
+      baselineHp: army.identified === false ? 0 : 1,
+      healthPercent: army.identified === false ? 0 : Math.round(army.health * 100),
+      organizationPercent: army.identified === false ? 0 : Math.round((army.organization ?? 0) * 100),
+      damagePerGameHour: 0,
+    };
+    const enemySide = battle?.enemy ?? { hp: 0, baselineHp: 0, healthPercent: 0, organizationPercent: 0, damagePerGameHour: 0 };
+    appendSide(army.own ? 'Your forces' : 'Selected forces', friendlySide, army.own ? 'friendly' : 'enemy');
+    appendSide(army.own ? 'Enemy forces' : 'Opposing forces', enemySide, army.own ? 'enemy' : 'friendly');
 
     const battleLive = node('div', 'ifg-battle__live');
     battleLive.append(
-      node('span', undefined, `Outgoing ${formatDamageRate(battle.outgoingDamagePerGameHour)} HP / game h`),
-      node('span', undefined, `Incoming ${formatDamageRate(battle.incomingDamagePerGameHour)} HP / game h`),
-      node('span', undefined, `Losses ${roundDisplayedHp(battle.friendlyCasualties)} friendly / ${roundDisplayedHp(battle.enemyCasualties)} enemy HP`),
-      node('span', undefined, `Estimated ${formatGameDuration(battle.estimatedGameHours)} · ${formatRealDuration(battle.estimatedRealSeconds)}`),
+      node('span', undefined, `Outgoing ${battle ? formatDamageRate(battle.outgoingDamagePerGameHour) : '--'} HP / game h`),
+      node('span', undefined, `Incoming ${battle ? formatDamageRate(battle.incomingDamagePerGameHour) : '--'} HP / game h`),
+      node('span', undefined, battle ? `Losses ${roundDisplayedHp(battle.friendlyCasualties)} friendly / ${roundDisplayedHp(battle.enemyCasualties)} enemy HP` : 'No combat damage applied'),
+      node('span', undefined, battle ? `Estimated ${formatGameDuration(battle.estimatedGameHours)} · ${formatRealDuration(battle.estimatedRealSeconds)}` : 'Awaiting contact'),
     );
-    const battleModifiers = node('div', 'ifg-battle__modifiers', battle.modifiers.join(' · '));
+    const battleModifiers = node('div', 'ifg-battle__modifiers', battle ? battle.modifiers.join(' · ') : 'Combat organization and damage rates appear when a front is active.');
 
     const battleMeta = node('div', 'ifg-battle__meta');
     battleMeta.append(
-      node('span', undefined, battle.reinforcementCount
+      node('span', undefined, battle?.reinforcementCount
         ? `${battle.reinforcementCount} supporting ${battle.reinforcementCount === 1 ? 'army' : 'armies'}`
         : 'No reinforcements'),
-      node('span', undefined, army.legalRetreatExits?.length
+      node('span', undefined, battle && army.legalRetreatExits?.length
         ? `${army.legalRetreatExits.length} retreat ${army.legalRetreatExits.length === 1 ? 'route' : 'routes'} available`
         : 'No safe retreat'),
     );
     activity.append(battleHeader, battleSides, battleLive, battleModifiers, battleMeta);
-  } else {
+  }
+  if (!battle) {
     activity.append(node('small', 'ifg-army-panel__eyebrow', 'Activity'));
     const activityValue = node('strong', 'ifg-army-panel__activity-value', army.activity);
     activityValue.dataset.combat = army.combat;
     activity.append(activityValue);
+    if (army.combat === 'moving') {
+      const movement = node('div', 'ifg-army-panel__movement');
+      const movementHeader = node('div', 'ifg-army-panel__movement-header');
+      movementHeader.append(
+        node('span', undefined, 'Arrival'),
+        node('b', undefined, formatCompactDuration(army.arrivalSeconds ?? Number.NaN)),
+      );
+      const movementTrack = node('span', 'ifg-army-panel__movement-track');
+      const movementFill = node('i');
+      movementFill.style.width = `${Math.round((army.movementProgress ?? 0) * 100)}%`;
+      movementTrack.append(movementFill);
+      movement.append(movementHeader, movementTrack);
+      activity.append(movement);
+    }
     if (army.artillery?.targetArmyId) {
       activity.append(node('span', undefined,
         `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} continuous bombardment: ${army.artillery.targetArmyId}`));

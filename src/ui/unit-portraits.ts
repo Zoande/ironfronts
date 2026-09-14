@@ -28,6 +28,7 @@ const rasterUrls = import.meta.glob('./assets/units/*.png', {
 }) as Record<string, string>;
 
 const rasterPortrait = (stem: string): string | undefined => rasterUrls[`./assets/units/${stem}.png`];
+const familyId = (typeId: string): string => typeId.replace(/-l[2-8]$/, '');
 
 const PORTRAIT_BY_TYPE: Readonly<Record<string, string>> = {
   infantry: portrait('infantry'),
@@ -49,7 +50,7 @@ export const UNIT_ROLE_NOTE: Readonly<Record<string, string>> = {
 };
 
 export function unitPortraitMarkup(typeId: string): string {
-  return PORTRAIT_BY_TYPE[typeId] ?? portrait('_fallback');
+  return PORTRAIT_BY_TYPE[familyId(typeId)] ?? portrait('_fallback');
 }
 
 /**
@@ -63,7 +64,7 @@ export function createUnitPortrait(typeId: string, label: string): HTMLElement {
   frame.className = 'ifg-army-unit__portrait';
   frame.setAttribute('role', 'img');
   frame.setAttribute('aria-label', label);
-  const raster = rasterPortrait(typeId);
+  const raster = rasterPortrait(familyId(typeId));
   if (raster) {
     const img = document.createElement('img');
     img.src = raster;

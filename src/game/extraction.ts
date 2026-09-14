@@ -4,6 +4,7 @@ import type { SimContext } from './sim-context';
 import { nearestNode } from './movement/graph';
 import { PHYSICAL_RESOURCES } from './economy/resources';
 import { clearInvalidExtractionAssignments } from './economy/resource-production';
+import { baseUnitId } from './units/unit-catalog';
 
 export interface ExtractResult {
   readonly ok: boolean;
@@ -28,7 +29,7 @@ export function extractionEligibility(
   if (army.status === 'engaged') return { ok: false, reason: 'Army is in close combat.' };
   if (army.status === 'retreating') return { ok: false, reason: 'Army is retreating.' };
   if (army.order) return { ok: false, reason: 'Army is moving.' };
-  if (!army.units.some((group) => group.typeId === 'engineer' && group.count > 0)) {
+  if (!army.units.some((group) => baseUnitId(group.typeId) === 'engineer' && group.count > 0)) {
     return { ok: false, reason: 'Engineers required.' };
   }
   const provinceId = centerProvinceAtArmy(session, army.graphNodeId, army.ownerCountryId);

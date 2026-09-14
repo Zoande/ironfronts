@@ -8,7 +8,7 @@ export { legalRetreatPaths } from '../../../src/game/combat';
 export type { CombatEvent } from '../../../src/game/combat';
 export { nearestNode } from '../../../src/game/movement/graph';
 export { findPath } from '../../../src/game/movement/pathfind';
-export { UNIT_TYPES, unitType } from '../../../src/game/units/unit-catalog';
+export { UNIT_TYPES, BASE_UNIT_IDS, baseUnitId, unitType } from '../../../src/game/units/unit-catalog';
 export { stackExtractionRate } from '../../../src/game/units/army';
 export { currentMovementLeg } from '../../../src/game/units/movement';
 export { BUILDINGS } from '../../../src/game/construction';
@@ -21,6 +21,7 @@ export {
 export type {
   GameState, CountryState, DiplomacyMessage, DiplomacyProposal, Relation, ResourceNodeState,
   ProvinceEconomy, PhysicalResource, ResourceBuildingId, ResourcePotential, UpkeepResource,
+  TechnologyBranch, TechnologyLevels, ResearchState,
   WorldWeather,
 } from '../../../src/game/game-state';
 export { automaticWeatherForDay, updateRealWeather, setWeatherMode } from '../../../src/game/weather';
@@ -50,3 +51,7 @@ export {
 export { extractionEligibility } from '../../../src/game/extraction';
 export { movementEdgeAllowed } from '../../../src/game/units/movement';
 export { parseGameState } from '../../../src/game/state-schema';
+export {
+  TECHNOLOGY_BRANCHES, TECHNOLOGY_HOURS_BY_LEVEL, TECHNOLOGY_LABELS,
+  TECHNOLOGY_MAX_LEVEL, initialTechnologyLevels, startResearch, stepTechnology,
+} from '../../../src/game/technology';

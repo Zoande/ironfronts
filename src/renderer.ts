@@ -913,6 +913,10 @@ export class WorldRenderer {
     this.focus(x, z, distance, PLAYER_START_YAW, PLAYER_START_PITCH);
   }
 
+  zoomMap(factor: number): void {
+    this.camera.zoomAtViewportCenter(factor);
+  }
+
   getPerformanceSnapshot(): PerformanceSnapshot {
     return this.performanceMonitor.snapshot();
   }

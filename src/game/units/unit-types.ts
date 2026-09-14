@@ -56,6 +56,10 @@ export interface ShortageEffect {
 
 export interface UnitType {
   readonly id: string;
+  /** Visual/gameplay family shared by all levels of this unit. */
+  readonly baseId: string;
+  readonly level: number;
+  readonly technology: 'infantry' | 'resources' | 'hybrid' | 'armored';
   readonly name: string;
   readonly category: UnitCategory;
   readonly armorClass: ArmorClass;

@@ -9,8 +9,8 @@ describe('selected army panel containment', () => {
     expect(css).toContain('height: 244px;');
     expect(css).toContain('max-height: calc(100vh - 36px);');
     expect(css).toMatch(/\.ifg-army-panel__body\s*\{[^}]*height: calc\(100% - 34px\);[^}]*overflow: hidden;/s);
-    expect(css).toMatch(/\.ifg-army-panel__activity\s*\{[^}]*overflow: auto;/s);
-    expect(css).toMatch(/\.ifg-army-panel__units\s*\{[^}]*overflow: auto;/s);
+    expect(css).toMatch(/\.ifg-army-panel__activity\s*\{[^}]*overflow: hidden;/s);
+    expect(css).toMatch(/\.ifg-army-panel__units\s*\{[^}]*overflow: hidden;/s);
   });
 
   it('renders one aggregate battle card instead of unbounded front and retreat lists', () => {

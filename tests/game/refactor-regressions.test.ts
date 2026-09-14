@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { army, fixture } from '../helpers/simulation';
 import { issueMoveOrder, issueStop, stepMovement, retreatPaths } from '../../src/game/units/movement';
 import { stepCapture, stepCombat } from '../../src/game/combat';
+import { cleanupFronts } from '../../src/game/combat/fronts';
 import { issueExtract } from '../../src/game/extraction';
 import { stepProduction } from '../../src/game/production';
 import { issueAttack } from '../../src/game/commands/attack';
@@ -52,6 +53,28 @@ describe('movement, diplomacy and combat invariants', () => {
     c.state.armies.b=army('b',2,160,100);c.state.relations['1:2']='war';
     issueMoveOrder(c,'a',300,100);stepMovement(c,1.5/1800);stepCombat(c,FIXED_STEP_HOURS);
     expect(a.x).toBeLessThan(160);expect(a.status).toBe('engaged');
+  });
+  it('clears a stale combat lock when its front no longer exists', () => {
+    const c=fixture(); const a=c.state.armies.a=army('a');
+    a.status='engaged'; a.battleFrontIds=['front-gone'];
+    cleanupFronts(c, []);
+    expect(a.battleFrontIds).toEqual([]);
+    expect(a.status).toBe('idle');
+  });
+  it('clears a combat lock when the referenced front belongs to other armies', () => {
+    const c=fixture(); const a=c.state.armies.a=army('a');
+    a.status='engaged'; a.battleFrontIds=['front-other'];
+    a.suspendedOrder={path:[1],destX:100,destZ:300,intent:'move',edgeProgress:0};
+    c.state.battleFronts['front-other'] = {
+      id: 'front-other', battleId: 'battle-1', anchorNodeId: 0, kind: 'road', provinceId: null,
+      x: 100, z: 100,
+      sideA: { countryId: 1, directionNodeId: 0, role: 'attack', armyIds: ['other'], entryMaxHpByArmy: { other: 100 } },
+      sideB: { countryId: 2, directionNodeId: 1, role: 'defense', armyIds: ['enemy'], entryMaxHpByArmy: { enemy: 100 } },
+    };
+    expect(issueMoveOrder(c, 'a', 300, 100).ok).toBe(true);
+    expect(a.battleFrontIds).toEqual([]);
+    expect(a.status).toBe('moving');
+    expect(a.suspendedOrder).toBeNull();
   });
   it('never reuses an active front identifier after another front ends', () => {
     const c=fixture();c.state.armies.a=army();c.state.relations['1:2']='war';

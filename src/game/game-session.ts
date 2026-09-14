@@ -33,6 +33,7 @@ import { regenOrganization } from './combat/organization';
 import { stepSupply } from './combat/supply';
 import { stepPhaseProgression } from './phase';
 import { stepWarheads } from './strike';
+import { stepTechnology } from './technology';
 import { stepVictory } from './victory';
 import { stepAi } from './ai/simple-ai';
 import { applyCommand as runCommand, type CommandResult, type GameCommand } from './commands';
@@ -141,14 +142,16 @@ export class GameSession {
     // --- gameplay systems, fixed order ------------------------------
     stepMovement(this, dtHours);
     if (cadence.supplyHours + 1e-12 >= SUPPLY_INTERVAL) {
+      const elapsedSupplyHours = cadence.supplyHours;
       cadence.supplyHours %= SUPPLY_INTERVAL;
-      stepSupply(this);
+      stepSupply(this, elapsedSupplyHours);
     }
     stepEntrenchment(this, dtHours);
     regenOrganization(this, dtHours);
     stepExtraction(this, dtHours);
     for (const b of stepConstruction(this, dtHours)) this.pendingBuildings.push(b);
     stepWarheads(this, dtHours);
+    stepTechnology(this.state.countries, dtHours);
     for (const done of stepProduction(this, dtHours)) this.pendingCompletions.push(done);
     for (const ev of stepCombat(this, dtHours)) this.pendingCombat.push(ev);
     for (const cap of stepCapture(this)) this.pendingCaptures.push(cap);

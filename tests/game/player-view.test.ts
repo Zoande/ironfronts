@@ -110,6 +110,20 @@ describe('projectArmyView', () => {
     });
   });
 
+  it('does not project another army\'s front through a stale front id', () => {
+    const player = army('p', 1, 0, 0);
+    player.status = 'engaged';
+    player.battleFrontIds = ['front-1'];
+    const s = state(true, [player]);
+    s.battleFronts['front-1'] = {
+      id: 'front-1', battleId: 'battle-1', anchorNodeId: 0, kind: 'road', provinceId: null,
+      x: 100, z: 100,
+      sideA: { countryId: 1, directionNodeId: 0, role: 'attack', armyIds: ['other'], entryMaxHpByArmy: { other: 100 } },
+      sideB: { countryId: 2, directionNodeId: 1, role: 'defense', armyIds: ['enemy'], entryMaxHpByArmy: { enemy: 100 } },
+    };
+    expect(projectArmyView(s, world, 1, 'p')?.battleFronts).toEqual([]);
+  });
+
   it('does not project a hidden foreign stack at all', () => {
     const s = state(true, [army('p', 1, 0, 0), army('e', 2, 400, 0)]);
     expect(projectArmyView(s, world, 1, 'e')).toBeNull();

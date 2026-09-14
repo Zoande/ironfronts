@@ -33,10 +33,10 @@ describe('icon-first army command strip', () => {
   it('keeps commands click-only and gives each unavailable action a concrete reason', () => {
     for (const reason of [
       'No visible hostile target in range.',
-      'This formation is currently locked in combat.',
       'This force is too small to divide.',
       'No extractable resource deposit at this position.',
     ]) expect(army, reason).toContain(reason);
+    expect(army).toContain('disabledReason: army.moveDisabledReason');
     expect(army).not.toContain('shortcut:');
     // Retreat still explains the encirclement / close-combat rule.
     expect(army).toContain('Retreat opens once the stack is locked in close combat.');

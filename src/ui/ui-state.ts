@@ -162,7 +162,14 @@ export type NavId =
   | 'armies' | 'provinces' | 'production' | 'research'
   | 'diplomacy' | 'economy' | 'intelligence' | 'events';
 
-export type SidePanelId = 'diplomacy';
+export type SidePanelId = 'diplomacy' | 'research';
+export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
+
+export interface TechnologyView {
+  readonly levels: Record<TechnologyBranch, number>;
+  readonly active?: { readonly branch: TechnologyBranch; readonly targetLevel: number; readonly progress: number; readonly etaSeconds: number };
+  readonly pending?: boolean;
+}
 
 export type DiplomacyRelation = 'neutral' | 'allied' | 'war';
 
@@ -278,6 +285,10 @@ export interface ArmyStackView {
   readonly defense?: { readonly soft: number; readonly light: number; readonly heavy: number };
   /** Player-facing current activity, e.g. moving, extracting, or holding. */
   readonly activity: string;
+  /** Current movement-leg estimate, when the army is marching. */
+  readonly arrivalSeconds?: number;
+  /** 0..1 progress through the current movement leg. */
+  readonly movementProgress?: number;
   /** True when the player commands this stack (enables order buttons). */
   readonly own?: boolean;
   /** Which order buttons are currently valid. */
@@ -287,6 +298,8 @@ export interface ArmyStackView {
   readonly awaitingMoveTarget?: boolean;
   readonly targetingMode?: 'move' | 'attack' | 'retreat' | 'split' | null;
   readonly canMove?: boolean;
+  /** Specific explanation shown when movement is unavailable. */
+  readonly moveDisabledReason?: string;
   readonly canAttack?: boolean;
   readonly canRetreat?: boolean;
   readonly canSplit?: boolean;
@@ -294,6 +307,12 @@ export interface ArmyStackView {
   readonly shortage?: {
     severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
     modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
+  };
+  readonly supply?: {
+    readonly capacity: number;
+    readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    readonly connected: boolean;
+    readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
   };
   readonly legalRetreatExits?: ReadonlyArray<{
     firstNodeId: number; destinationProvinceId: number; x: number; z: number;
@@ -345,6 +364,7 @@ export interface StrategicUiState {
    *  with `phase` above (lobby/loading/in-game) — named distinctly for that
    *  reason. */
   readonly countryPhase?: number;
+  readonly technology: TechnologyView;
 }
 
 /** Resources are declared up-front so the top bar has stable slots. */
@@ -383,6 +403,7 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
     paused: false,
     resourceOverlay: false,
     debugEnabled: false,
+    technology: { levels: { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1 } },
     ...overrides,
   };
 }

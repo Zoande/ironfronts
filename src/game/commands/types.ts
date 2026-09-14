@@ -1,6 +1,7 @@
 import type { BuildingId } from '../units/unit-types';
 import type { ArmyStance } from '../units/army';
 import type { PhysicalResource } from '../game-state';
+import type { TechnologyBranch } from '../game-state';
 
 export interface MoveArmyCommand {
   readonly type: 'moveArmy';
@@ -75,6 +76,12 @@ export interface BuildCommand {
   readonly buildingId: BuildingId;
 }
 
+export interface ResearchCommand {
+  readonly type: 'research';
+  readonly countryId: number;
+  readonly branch: TechnologyBranch;
+}
+
 export interface RallyCommand {
   readonly type: 'setRally';
   readonly countryId: number;
@@ -117,7 +124,7 @@ export interface EndAllianceCommand {
 
 export type GameCommand =
   | MoveArmyCommand | AttackCommand | RetreatArmyCommand | SplitArmyCommand
-  | StopArmyCommand | SetStanceCommand | ExtractCommand | ProduceCommand | BuildCommand | RallyCommand
+  | StopArmyCommand | SetStanceCommand | ExtractCommand | ProduceCommand | BuildCommand | ResearchCommand | RallyCommand
   | SendDiplomaticMessageCommand | ProposeDiplomacyCommand | RespondDiplomacyCommand
   | DeclareWarCommand | EndAllianceCommand | StrikeCommand;
 
