@@ -21,7 +21,13 @@ For local defaults, only the generated world and matching service secrets are re
 
 ## Local process order
 
-Use separate terminals from the repository root:
+Start the full stack from the repository root:
+
+```sh
+npm run dev:all
+```
+
+The launcher stops every service when Ctrl+C is pressed or when one service exits. To manage each process separately:
 
 ```sh
 npm run build:world
@@ -47,10 +53,12 @@ All are ignored by git. Removing `data/game.json` resets the world/seats; removi
 
 | Script | Behavior |
 |---|---|
+| `npm run dev:all` | Run the Vite client, auth watcher, and world-build/game watcher as one stack |
 | `npm run dev` | Vite client at `127.0.0.1:5173` |
 | `npm run dev:fast` | Same current Vite invocation as `dev` |
 | `npm run auth:dev` | Watch/restart auth server through `tsx` |
 | `npm run game:dev` | Watch/restart game server through `tsx` |
+| `npm run reset:data` | Ask for confirmation, then reset the repository's local `data/` directory |
 | `npm run build:world` | Compile and atomically promote `public/world` |
 | `npm run pregame:dev` | Alias for world build |
 | `npm run build` | Build world, check workspace builds, root TypeScript, then Vite production assets |

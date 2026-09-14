@@ -51,7 +51,13 @@ npm install
 
 Review `.env.example`. Vite reads `VITE_*` values from its environment/files; the Node services read `process.env` and need variables exported by your shell/process manager when overriding defaults.
 
-Run these from the repository root in separate terminals:
+Start the complete local stack from the repository root:
+
+```sh
+npm run dev:all
+```
+
+This runs the world build/game watcher, auth watcher, and Vite client together. Press Ctrl+C once to stop all three. To run them separately instead:
 
 ```sh
 npm run build:world
@@ -87,9 +93,11 @@ Deleting the game save resets the world and country assignments. Deleting auth S
 
 | Command | Purpose |
 |---|---|
+| `npm run dev:all` | Start the client, auth server, and game server together |
 | `npm run dev` | Start Vite client |
 | `npm run game:dev` | Watch authoritative game server |
 | `npm run auth:dev` | Watch auth server |
+| `npm run reset:data` | Confirm, then erase all local accounts and game runtime data |
 | `npm run build:world` | Generate `public/world` |
 | `npm run build` | Generate world, check workspaces/root TypeScript, build production client |
 | `npm run check` | Workspace/root checks, script lint, architecture test, full Vitest suite |

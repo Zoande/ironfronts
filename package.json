@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
+    "dev:all": "node scripts/dev-all.mjs",
+    "reset:data": "node scripts/reset-data.mjs",
     "auth:dev": "tsx watch apps/auth-server/src/main.ts",
     "pregame:dev": "npm run build:world",
     "game:dev": "tsx watch apps/game-server/src/main.ts",
