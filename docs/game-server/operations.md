@@ -34,7 +34,8 @@ The root `npm run check` covers every workspace, architecture checks, script lin
 | `DATA_DIRECTORY` | `data` | Default state directory when `GAME_DATA_PATH` is absent. |
 | `TICKET_SECRET` | local development value | HMAC secret used to verify gameplay tickets. Required to differ from the fallback in production. Must match the issuer. |
 | `INTERNAL_SERVICE_SECRET` | local development value | Bearer secret protecting `/internal/v2/*`. Required to differ from the fallback in production. Must match callers. |
-| `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Explicit deployment gate for hidden debug controls and cheat commands. Authenticated clients open the inspector with Ctrl+D+E. |
+| `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Deployment gate for debug controls. Access additionally requires the signed `DimaTest1` entitlement and a successful password unlock. |
+| `IRONFRONTS_DEBUG_PASSWORD` | none | Required whenever debug controls are enabled. Kept server-side; unlock from System → World Inspector. |
 | `NODE_ENV` | unset | When equal to `production`, startup rejects either fallback secret. |
 
 Paths are resolved against `process.cwd()`. Start the process from the repository root unless explicit absolute paths are supplied.
@@ -50,6 +51,8 @@ WORLD_DIRECTORY=/srv/ironfronts/world-at-war-2
 GAME_DATA_PATH=/var/lib/ironfronts/game.json
 TICKET_SECRET=replace-with-a-long-random-shared-secret
 INTERNAL_SERVICE_SECRET=replace-with-a-different-long-random-secret
+IRONFRONTS_DEBUG_CONTROLS_ENABLED=false
+# IRONFRONTS_DEBUG_PASSWORD=only-set-on-approved-qa-deployments
 ```
 
 ## Network exposure
