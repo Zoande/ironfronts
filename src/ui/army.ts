@@ -437,25 +437,31 @@ export function renderSelectedArmyPanel(
     appendSide(army.own ? 'Your forces' : 'Selected forces', friendlySide, army.own ? 'friendly' : 'enemy');
     appendSide(army.own ? 'Enemy forces' : 'Opposing forces', enemySide, army.own ? 'enemy' : 'friendly');
 
-    const battleLive = node('div', 'ifg-battle__live');
-    battleLive.append(
-      node('span', undefined, `Outgoing ${battle ? formatDamageRate(battle.outgoingDamagePerGameHour) : '--'} HP / game h`),
-      node('span', undefined, `Incoming ${battle ? formatDamageRate(battle.incomingDamagePerGameHour) : '--'} HP / game h`),
-      node('span', undefined, battle ? `Losses ${roundDisplayedHp(battle.friendlyCasualties)} friendly / ${roundDisplayedHp(battle.enemyCasualties)} enemy HP` : 'No combat damage applied'),
-      node('span', undefined, battle ? `Estimated ${formatGameDuration(battle.estimatedGameHours)} · ${formatRealDuration(battle.estimatedRealSeconds)}` : 'Awaiting contact'),
-    );
-    const battleModifiers = node('div', 'ifg-battle__modifiers', battle ? battle.modifiers.join(' · ') : 'Combat organization and damage rates appear when a front is active.');
-
-    const battleMeta = node('div', 'ifg-battle__meta');
-    battleMeta.append(
-      node('span', undefined, battle?.reinforcementCount
-        ? `${battle.reinforcementCount} supporting ${battle.reinforcementCount === 1 ? 'army' : 'armies'}`
-        : 'No reinforcements'),
-      node('span', undefined, battle && army.legalRetreatExits?.length
-        ? `${army.legalRetreatExits.length} retreat ${army.legalRetreatExits.length === 1 ? 'route' : 'routes'} available`
-        : 'No safe retreat'),
-    );
-    activity.append(battleHeader, battleSides, battleLive, battleModifiers, battleMeta);
+    activity.append(battleHeader, battleSides);
+    // Damage rates, modifiers, and reinforcement/retreat counts only mean
+    // anything once a front actually exists — showing them as "--" placeholders
+    // while idle was just clutter (and at the small size they need to stay
+    // legible, they don't have room for a "no data" long-form fallback).
+    if (battle) {
+      const battleLive = node('div', 'ifg-battle__live');
+      battleLive.append(
+        node('span', undefined, `Outgoing ${formatDamageRate(battle.outgoingDamagePerGameHour)} HP / game h`),
+        node('span', undefined, `Incoming ${formatDamageRate(battle.incomingDamagePerGameHour)} HP / game h`),
+        node('span', undefined, `Losses ${roundDisplayedHp(battle.friendlyCasualties)} friendly / ${roundDisplayedHp(battle.enemyCasualties)} enemy HP`),
+        node('span', undefined, `Estimated ${formatGameDuration(battle.estimatedGameHours)} · ${formatRealDuration(battle.estimatedRealSeconds)}`),
+      );
+      const battleModifiers = node('div', 'ifg-battle__modifiers', battle.modifiers.join(' · '));
+      const battleMeta = node('div', 'ifg-battle__meta');
+      battleMeta.append(
+        node('span', undefined, battle.reinforcementCount
+          ? `${battle.reinforcementCount} supporting ${battle.reinforcementCount === 1 ? 'army' : 'armies'}`
+          : 'No reinforcements'),
+        node('span', undefined, army.legalRetreatExits?.length
+          ? `${army.legalRetreatExits.length} retreat ${army.legalRetreatExits.length === 1 ? 'route' : 'routes'} available`
+          : 'No safe retreat'),
+      );
+      activity.append(battleLive, battleModifiers, battleMeta);
+    }
   }
   if (!battle) {
     activity.append(node('small', 'ifg-army-panel__eyebrow', 'Activity'));

@@ -14,7 +14,7 @@ import './game-ui.css';
 import { FRAME_RATE_CAPS, QUALITY_LEVELS, QUALITY_PRESETS, type FrameRateCap, type QualityLevel } from '../graphics/quality';
 import { renderSelectedArmyPanel, type ArmyPanelCommand } from './army';
 import { createFlag } from './flags';
-import { createIcon, type IconName } from './icons';
+import { createIcon, RESOURCE_ICON, type IconName } from './icons';
 import { createDiplomacyPanel } from './diplomacy-panel';
 import { createTradePanel, type MarketResource } from './trade-panel';
 import { buildNotification } from './notifications';
@@ -57,8 +57,6 @@ export interface GameUiActions {
   produceUnit(provinceId: number, unitTypeId: string): void;
   /** Start a building in the selected (own, urban) province. */
   buildStructure(provinceId: number, buildingId: string): void;
-  /** Arm map-click placement of a production city's rally point, or clear it. */
-  rallyPoint(provinceId: number, action: 'arm' | 'clear'): void;
   researchTechnology(branch: TechnologyBranch): void;
 }
 export interface GameUiHandle {
@@ -550,6 +548,17 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const pvHeadText = el('span', 'ifg-card__headtext');
   pvHeadText.append(pvName, pvSub);
 
+  // Set/cleared by right-clicking the map (see main.ts) — a read-only status
+  // badge, not a control, kept in the always-visible header rather than the
+  // scrollable body so it's never hidden behind an empty production queue.
+  const pvRally = el('span', 'ifg-card__iconbtn ifg-card__rally-status');
+  pvRally.hidden = true;
+  pvRally.append(createIcon('rally'));
+  bindTooltip(pvRally, () => ({
+    title: 'Rally point set',
+    description: 'Right-click the map to move it, or right-click this city to clear it.',
+  }));
+
   const pvFocusBtn = el('button', 'ifg-card__iconbtn');
   pvFocusBtn.type = 'button';
   pvFocusBtn.title = 'Centre map on province';
@@ -561,13 +570,14 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     pvFocusBtn.disabled = true;
     pvFocusBtn.title = 'Centre map — not available yet';
   }
-  pvHead.append(pvFlagHost, pvHeadText, pvFocusBtn, pvClose);
+  pvHead.append(pvFlagHost, pvHeadText, pvRally, pvFocusBtn, pvClose);
 
   const pvGrid = el('div', 'ifg-card__grid');
   const pvFieldValue = new Map<ProvinceFieldKey, HTMLElement>();
   for (const label of PROVINCE_FIELDS) {
     const cell = el('span', 'ifg-field');
-    const value = el('b', undefined, '--');
+    const isResourceRow = label === 'Deposits' || label === 'Extraction';
+    const value = el('b', isResourceRow ? 'ifg-card__resource-row' : undefined, isResourceRow ? undefined : '--');
     cell.append(el('small', undefined, label), value);
     pvFieldValue.set(label, value);
     pvGrid.append(cell);
@@ -624,15 +634,6 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   pvQueue.setAttribute('aria-label', 'Unit production queue');
   pvQueue.hidden = true;
   pvProduce.append(pvQueue);
-  const pvRally = el('div', 'ifg-card__actions');
-  pvRally.hidden = true;
-  const pvRallyBtn = el('button', 'ifg-card__act');
-  pvRallyBtn.type = 'button';
-  const pvRallyClear = el('button', 'ifg-card__act');
-  pvRallyClear.type = 'button';
-  pvRallyClear.textContent = 'Clear rally';
-  pvRally.append(pvRallyBtn, pvRallyClear);
-  pvProduce.append(pvRally);
 
   // BUILD — construct a production building in an owned urban province.
   const pvBuild = el('div', 'ifg-card__resources ifg-card__queue-section');
@@ -648,7 +649,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const pvOverview = el('div', 'ifg-card__overview');
   pvOverview.append(pvFacilities, pvResources);
   const pvActivity = el('div', 'ifg-card__activity');
-  pvActivity.append(pvProduce, pvBuild, pvRally);
+  pvActivity.append(pvProduce, pvBuild);
   const pvBody = el('div', 'ifg-card__body');
   pvBody.append(pvGrid, pvOverview, pvActivity);
   provinceCard.append(pvHead, pvBody);
@@ -658,7 +659,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const pvCommandBar = el('div', 'ifg-province-commands');
   pvCommandBar.hidden = true;
   const makeProvinceCommand = (label: string, icon: IconName): HTMLButtonElement => {
-    const button = el('button', 'ifg-province-command');
+    const button = el('button', `ifg-province-command ifg-province-command--${label.toLowerCase()}`);
     button.type = 'button';
     button.append(createIcon(icon, 'ifg-province-command__icon'), el('span', 'ifg-province-command__label', label));
     const progress = el('span', 'ifg-province-command__progress');
@@ -726,16 +727,23 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const icon = mode === 'build' ? FACILITY_ICON[option.id] : UNIT_PRODUCTION_ICON[family];
       const thumb = icon ? createIcon(icon, 'ifg-province-picker__thumb') : createUnitPortrait(option.id, option.name);
       thumb.classList.add('ifg-province-picker__thumb');
+      const costRow = el('small', 'ifg-province-picker__cost');
+      costRow.setAttribute('aria-label', option.costLabel);
+      for (const item of option.costItems) {
+        const chip = el('span', 'ifg-province-picker__cost-chip');
+        chip.append(createIcon(RESOURCE_ICON[item.resource], 'ifg-province-picker__cost-icon'), el('b', undefined, String(item.amount)));
+        costRow.append(chip);
+      }
       const copy = el('span', 'ifg-province-picker__copy');
-      copy.append(el('b', undefined, option.name), el('small', undefined, option.costLabel));
+      copy.append(el('b', undefined, option.name), costRow);
       button.append(thumb, copy);
       button.disabled = selected.commandPending === true || !option.affordable || !option.available;
       button.classList.toggle('is-locked', !option.available);
       bindTooltip(button, () => ({
         title: option.name,
         description: mode === 'build' ? FACILITY_NOTE[option.id] : UNIT_ROLE_NOTE[family],
-        cost: option.costLabel,
-        disabledReason: option.reason ?? (!option.affordable ? `Not enough resources — needs ${option.costLabel}.` : undefined),
+        costItems: option.costItems,
+        disabledReason: option.reason ?? (!option.affordable ? 'Not enough resources.' : undefined),
       }));
       if (option.affordable && option.available) button.addEventListener('click', () => {
         closeProvincePicker();
@@ -1085,23 +1093,52 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         : province.isOwn === false ? province.owner : '—';
       pvFieldValue.get('Terrain')!.textContent = province.terrain || '—';
       const physical = province.resourceEconomy;
-      pvFieldValue.get('Deposits')!.textContent = physical
-        ? (['food', 'stone', 'metal', 'oil'] as const).map((key) => {
-          const tier = physical.productionBreakdown?.[key];
-      const tierText = tier ? ` L${tier.currentTier}/${tier.maximumTier}` : '';
-          return `${key[0].toUpperCase()}${key.slice(1)} ${Math.round(physical.potential[key] * 100)}%${tierText}`;
-        }).join(' · ')
-        : depositKinds.length
-        ? depositKinds.map((k) => k[0].toUpperCase() + k.slice(1)).join(' · ')
-        : province.isOwn === false ? 'Unknown' : 'None';
+      const depositsCell = pvFieldValue.get('Deposits')!;
+      if (physical) {
+        depositsCell.replaceChildren(...(['food', 'stone', 'metal', 'oil'] as const)
+          .filter((key) => physical.potential[key] > 0 || physical.productionBreakdown?.[key])
+          .map((key) => {
+            const tier = physical.productionBreakdown?.[key];
+            const chip = el('span', 'ifg-card__resource-chip');
+            chip.append(createIcon(RESOURCE_ICON[key], 'ifg-card__resource-icon'),
+              el('b', undefined, `${Math.round(physical.potential[key] * 100)}%`));
+            bindTooltip(chip, () => ({
+              title: `${key[0].toUpperCase()}${key.slice(1)} deposit`,
+              status: tier ? `Tier ${tier.currentTier} / ${tier.maximumTier}` : undefined,
+            }));
+            return chip;
+          }));
+        if (!depositsCell.childElementCount) depositsCell.textContent = province.isOwn === false ? 'Unknown' : 'None';
+      } else if (depositKinds.length) {
+        depositsCell.replaceChildren(...depositKinds.map((key) => {
+          const chip = el('span', 'ifg-card__resource-chip');
+          chip.append(createIcon(RESOURCE_ICON[key], 'ifg-card__resource-icon'));
+          return chip;
+        }));
+      } else {
+        depositsCell.textContent = province.isOwn === false ? 'Unknown' : 'None';
+      }
       // Plain-language: either an engineer is mining, or the action the player
       // needs to take is to send one. "Controlled / Uncontrolled" read as jargon.
-      pvFieldValue.get('Extraction')!.textContent = physical?.productionBreakdown
-        ? (['food', 'stone', 'metal', 'oil'] as const).map((key) => {
-          const value = physical.productionBreakdown![key];
-          return `${key[0].toUpperCase()}${key.slice(1)} ${value.total.toFixed(1)}/h (${value.base.toFixed(1)} base + ${value.passive.toFixed(1)} infra + ${value.engineer.toFixed(1)} eng)`;
-        }).join(' · ')
-        : province.isOwn === false ? 'Unknown' : '—';
+      const extractionCell = pvFieldValue.get('Extraction')!;
+      if (physical?.productionBreakdown) {
+        extractionCell.replaceChildren(...(['food', 'stone', 'metal', 'oil'] as const)
+          .filter((key) => physical.productionBreakdown![key].total > 0)
+          .map((key) => {
+            const value = physical.productionBreakdown![key];
+            const chip = el('span', 'ifg-card__resource-chip');
+            chip.append(createIcon(RESOURCE_ICON[key], 'ifg-card__resource-icon'),
+              el('b', undefined, `${value.total.toFixed(1)}/h`));
+            bindTooltip(chip, () => ({
+              title: `${key[0].toUpperCase()}${key.slice(1)} extraction`,
+              description: `${value.base.toFixed(1)} base + ${value.passive.toFixed(1)} infrastructure + ${value.engineer.toFixed(1)} engineer`,
+            }));
+            return chip;
+          }));
+        if (!extractionCell.childElementCount) extractionCell.textContent = '—';
+      } else {
+        extractionCell.textContent = province.isOwn === false ? 'Unknown' : '—';
+      }
 
       // Facilities row — own provinces only, shown when at least one stands.
       const b = province.buildings;
@@ -1126,7 +1163,6 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         (province.buildable ?? []).map((b) => `${b.id}:${b.available}${b.affordable ? '+' : '-'}`).join(','),
         (province.construction ?? []).map((q) => `${q.id}:${Math.round(q.progress * 100)}:${Math.round(q.etaSeconds)}`).join(','),
         province.rally ? `${Math.round(province.rally.x)},${Math.round(province.rally.z)}` : '-',
-        province.awaitingRallyTarget ? 'arm' : '',
         province.commandPending ? 'pending' : '',
         province.canSetRally ? 'rally-ok' : 'rally-blocked',
         physical?.productionBreakdown
@@ -1153,21 +1189,9 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         const prod = province.producible ?? [];
         const q = province.queue ?? [];
         pvProduce.hidden = !(province.isOwn && q.length > 0);
-        if (province.isOwn && prod.length > 0) {
-          // Rally point: where finished units march. Placed by a map click.
-          pvRally.hidden = false;
-          pvRallyBtn.textContent = province.awaitingRallyTarget
-            ? 'Click map…'
-            : province.rally ? 'Move rally' : 'Set rally point';
-          pvRallyBtn.classList.toggle('is-active', province.awaitingRallyTarget === true);
-          pvRallyBtn.disabled = province.commandPending === true || province.canSetRally !== true;
-          pvRallyBtn.onclick = () => actions.rallyPoint(province.id, 'arm');
-          pvRallyClear.hidden = !province.rally;
-          pvRallyClear.disabled = province.commandPending === true;
-          pvRallyClear.onclick = () => actions.rallyPoint(province.id, 'clear');
-        } else {
-          pvRally.hidden = true;
-        }
+        // Rally point: where finished units march. Set/moved/cleared by
+        // right-clicking the map — this chip just shows whether one is set.
+        pvRally.hidden = !(province.isOwn && prod.length > 0 && province.rally);
         pvQueue.hidden = q.length === 0;
         updateQueue(pvQueue, q, (id, label) => {
           const thumb = createUnitPortrait(id, label);

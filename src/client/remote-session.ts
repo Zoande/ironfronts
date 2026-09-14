@@ -322,8 +322,12 @@ export class RemoteGameSession extends EventTarget {
   research(branch: TechnologyBranch, onAccepted?: () => void) {
     return this.send({ type: 'research', branch }, onAccepted);
   }
-  setRally(provinceId: number, x: number, z: number) { return this.send({ type: 'setRally', provinceId, target: { x, z } }); }
-  clearRally(provinceId: number) { return this.send({ type: 'setRally', provinceId, target: null }); }
+  setRally(provinceId: number, x: number, z: number, onAccepted?: () => void) {
+    return this.send({ type: 'setRally', provinceId, target: { x, z } }, onAccepted);
+  }
+  clearRally(provinceId: number, onAccepted?: () => void) {
+    return this.send({ type: 'setRally', provinceId, target: null }, onAccepted);
+  }
   rallyPoint(provinceId: number): { x: number; z: number; route?: Array<{ x: number; z: number }> } | null {
     return this.state.rallyPoints[provinceId] ?? null;
   }

@@ -38,17 +38,22 @@ import { wrappedDistance, wrappedDeltaX } from './game/geometry';
 
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'fields' | 'quarry' | 'mine' | 'oilPump';
 
+type CostItem = { resource: 'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil'; amount: number };
+const costItemsFrom = (cost: Record<string, number>): CostItem[] => Object.entries(cost)
+  .filter(([, amount]) => amount > 0)
+  .map(([resource, amount]) => ({ resource: resource as CostItem['resource'], amount }));
+const costLabelFrom = (items: readonly CostItem[]): string => items.map((item) => `${item.amount} ${item.resource}`).join(' · ');
+
 const gameUnit = (typeId: string): Record<string, unknown> => activeSession?.unit(typeId) ?? { id: typeId, name: typeId, cost: {} };
 const gameUnitLabel = (typeId: string): string => String(gameUnit(typeId).name ?? typeId);
-const unitCostLabel = (typeId: string): string => Object.entries((gameUnit(typeId).buildCost ?? gameUnit(typeId).cost ?? {}) as Record<string, number>)
-  .map(([k, v]) => `${v} ${k}`).join(' · ');
+const unitCostItems = (typeId: string): CostItem[] =>
+  costItemsFrom((gameUnit(typeId).buildCost ?? gameUnit(typeId).cost ?? {}) as Record<string, number>);
 const buildingLabel = (id: BuildingId): string => String(activeSession?.building(id)?.label ?? id);
-const buildingCostLabel = (id: BuildingId, tier = 1): string => {
+const buildingCostItems = (id: BuildingId, tier = 1): CostItem[] => {
   const definition = activeSession?.building(id);
   const tiers = definition?.tiers as Array<{ cost?: Record<string, number> }> | undefined;
   const cost = tiers?.[tier - 1]?.cost ?? definition?.cost ?? {};
-  return Object.entries(cost as Record<string, number>)
-  .map(([k, v]) => `${v} ${k}`).join(' · ');
+  return costItemsFrom(cost as Record<string, number>);
 };
 type WorkOrderView = { progressWork?: number; totalWork?: number; progressHours?: number; totalHours?: number; workRate?: number };
 const orderPercent = (o: WorkOrderView): number => {
@@ -87,20 +92,6 @@ function handleProduce(provinceId: number, unitTypeId: string): void {
   }
   pushNotification('information', `${gameUnitLabel(unitTypeId)} queued`, 'Now in the build queue.');
   if (selectedProvinceId === provinceId) refreshSelectedProvince(session);
-}
-
-/** Arm / clear the selected production city's rally point. */
-function handleRally(provinceId: number, action: 'arm' | 'clear'): void {
-  const session = activeSession;
-  if (!session || selectedProvinceId !== provinceId) return;
-  if (action === 'clear') {
-    session.clearRally(provinceId);
-    awaitingRallyTarget = false;
-    pushNotification('information', 'Rally point cleared');
-  } else {
-    awaitingRallyTarget = !awaitingRallyTarget;
-  }
-  refreshSelectedProvince(session);
 }
 
 /** Player starts a building from the selected-province BUILD panel. */
@@ -286,8 +277,6 @@ let pendingSplitGroups: Array<{ typeId: string; count: number }> | null = null;
 let selectedProvinceId: number | null = null;
 let selectedProvinceName = '';
 let selectedProvinceTerrain = '';
-/** True while the next map click places the selected province's rally point. */
-let awaitingRallyTarget = false;
 // Shift-click waypoint queue (client-side only — the server has no notion of
 // a multi-leg order). Each army's queued destinations wait until the army
 // reports 'idle' (its current order finished) before the next one is issued.
@@ -618,9 +607,10 @@ async function startGame(token: number): Promise<void> {
   // map position can now receive an attack order.
   const updateWorldCursor = (clientX: number, clientY: number): void => {
     const session = activeSession;
-    // Rally-point placement is province-scoped, not army-scoped: 0 A.D. rally
-    // cursor while it is armed.
-    if (session && awaitingRallyTarget && selectedProvinceId !== null
+    // Rally-point placement is province-scoped, not army-scoped: right-click
+    // on the map sets it directly (right-click on the city itself clears it)
+    // whenever an own city is selected and no army is armed for an order.
+    if (session && selectedProvinceId !== null && (!selectedArmyId || !session.ownsArmy(selectedArmyId))
       && session.ownsProvince(selectedProvinceId)) {
       canvas.style.cursor = 'url(/cursors/cursor-rally.png) 5 31, crosshair';
       return;
@@ -772,7 +762,6 @@ async function startGame(token: number): Promise<void> {
     armyCommand: (command) => handleArmyCommand(command),
     produceUnit: (provinceId, unitTypeId) => handleProduce(provinceId, unitTypeId),
     buildStructure: (provinceId, buildingId) => handleBuild(provinceId, buildingId),
-    rallyPoint: (provinceId, action) => handleRally(provinceId, action),
   };
   const gameUi = mountGameUi(uiStore, gameUiActions);
   const destroyGameUiOnPagehide = (event: PageTransitionEvent): void => {
@@ -827,7 +816,6 @@ async function startGame(token: number): Promise<void> {
   renderer.onProvinceSelected = (info) => {
     if (!info) {
       selectedProvinceId = null;
-      awaitingRallyTarget = false;
       uiStore.patch({ selectedProvince: null });
       return;
     }
@@ -835,7 +823,6 @@ async function startGame(token: number): Promise<void> {
     const session = activeSession;
     const isNewProvinceSelection = info.id !== selectedProvinceId;
     if (session) {
-      if (isNewProvinceSelection) awaitingRallyTarget = false;
       if (isNewProvinceSelection) void audio.playUiCue('select');
       selectedProvinceId = info.id;
       selectedProvinceName = info.name;
@@ -2139,18 +2126,6 @@ function handleMapClick(
       return true;
     }
   }
-  // 1b. Armed rally placement -> set the selected province's rally point.
-  if (awaitingRallyTarget && selectedProvinceId !== null && session.ownsProvince(selectedProvinceId)) {
-    const ground = renderer.groundPointAt(clientX, clientY);
-    if (ground) {
-      session.setRally(selectedProvinceId, ground[0], ground[1]);
-      void audio.playUiCue('move');
-      awaitingRallyTarget = false;
-      pushNotification('information', 'Rally point set', 'New units from here will march to it.');
-      refreshSelectedProvince(session);
-      return true;
-    }
-  }
   // 2. Army pick. Clicking a different army selects it. Clicking the army that
   //    is already selected drops it and falls through to the province beneath —
   //    so a city with a garrison sitting on it is still selectable to queue
@@ -2182,7 +2157,25 @@ function handleMapClick(
 function handleMapCommand(
   renderer: WorldRenderer, session: RemoteGameSession, clientX: number, clientY: number,
 ): boolean {
-  if (!selectedArmyId || !session.ownsArmy(selectedArmyId)) return false;
+  // A selected army takes right-click as an order (attack/move); otherwise, a
+  // selected own city takes it as a rally-point placement — right-clicking the
+  // city itself clears the rally rather than setting one on top of it.
+  if (!selectedArmyId || !session.ownsArmy(selectedArmyId)) {
+    if (selectedProvinceId === null || !session.ownsProvince(selectedProvinceId)) return false;
+    const clickedProvinceId = renderer.provinceIdAt(clientX, clientY);
+    if (clickedProvinceId === selectedProvinceId) {
+      session.clearRally(selectedProvinceId, () => refreshSelectedProvince(session));
+      refreshSelectedProvince(session);
+      return true;
+    }
+    const ground = renderer.groundPointAt(clientX, clientY);
+    if (!ground) return true;
+    session.setRally(selectedProvinceId, ground[0], ground[1], () => {
+      void audio.playUiCue('move');
+      refreshSelectedProvince(session);
+    });
+    return true;
+  }
   // A direct order supersedes any armed targeting mode.
   targetingMode = null;
   awaitingMoveTarget = false;
@@ -2224,7 +2217,6 @@ function selectArmy(session: RemoteGameSession, armyId: string): void {
   awaitingMoveTarget = false;
   targetingMode = null;
   pendingSplitGroups = null;
-  awaitingRallyTarget = false;
   renderer_clearProvince();
   refreshSelectedArmy(session);
   if (activeRenderer) syncArmyMarkers(session, activeRenderer);
@@ -2403,10 +2395,14 @@ function projectSelectedProvince(
       ? { controlled: summary.controlled, extracting: summary.extracting }
       : null,
     producible: summary.isOwn
-      ? session.productionOptions(provinceId).map((option) => ({
-          id: option.unitTypeId, name: gameUnitLabel(option.unitTypeId), costLabel: unitCostLabel(option.unitTypeId),
-          affordable: option.affordable, available: option.available, reason: option.reason,
-        }))
+      ? session.productionOptions(provinceId).map((option) => {
+          const costItems = unitCostItems(option.unitTypeId);
+          return {
+            id: option.unitTypeId, name: gameUnitLabel(option.unitTypeId),
+            costItems, costLabel: costLabelFrom(costItems),
+            affordable: option.affordable, available: option.available, reason: option.reason,
+          };
+        })
       : [],
     // Only the head order is being worked; it carries live progress/eta.
     queue: summary.isOwn
@@ -2418,8 +2414,9 @@ function projectSelectedProvince(
     buildable: summary.isOwn
       ? session.buildable(provinceId).map(({ id, available, affordable, reason, targetTier }) => {
           const tier = targetTier ?? 1;
+          const costItems = buildingCostItems(id, tier);
           return { id, name: `${buildingLabel(id)}${tier > 1 ? ` Level ${tier}` : ''}`,
-            costLabel: buildingCostLabel(id, tier), affordable, available, reason };
+            costItems, costLabel: costLabelFrom(costItems), affordable, available, reason };
         })
       : [],
     construction: summary.isOwn
@@ -2431,7 +2428,6 @@ function projectSelectedProvince(
     rally: summary.isOwn ? session.rallyPoint(provinceId) : null,
     commandPending: session.pendingForProvince(provinceId),
     canSetRally: summary.isOwn && session.canSetRally(provinceId),
-    awaitingRallyTarget: summary.isOwn && awaitingRallyTarget && selectedProvinceId === provinceId,
   };
 }
 
