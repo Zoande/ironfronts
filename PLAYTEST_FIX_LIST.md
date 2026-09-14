@@ -14,6 +14,7 @@ This began as a prioritized backlog from the live browser playtest. On 2026-09-1
 - [x] **Make World Inspector access discoverable without making it insecure.** Eligible QA users get a `World Inspector` command-dock button plus a `System → World Inspector` entry. The old Ctrl+D then E shortcut remains useful after unlock.
 - [x] **Put the debug password on the server, not in this public repository.** Enabling QA controls now requires `IRONFRONTS_DEBUG_PASSWORD`; the password is never shipped in source or a browser bundle.
 - [x] **Restore account-specific debug authorization.** Only the authenticated `DimaTest1` account (case-insensitive username match) receives a signed debug entitlement. Deployment gate + entitlement + password are all required before the server exposes debug state or accepts cheat/debug commands.
+- [x] **Preserve Technology prerequisites when loading pre-Technology saves.** If an old save has no technology ledger, migration now infers floors from already-owned military/resource building tiers and leveled units. Existing Missile Sites imply the current Hybrid VIII prerequisite. Modern saves with an explicit technology ledger are left unchanged.
 
 ### Economy / resource model to re-playtest
 
@@ -41,7 +42,7 @@ This began as a prioritized backlog from the live browser playtest. On 2026-09-1
   - **Training:** higher military-building tiers, which increase facility throughput and gate higher unit levels.
   - **Hybrid:** armored cars, artillery and the strategic/nuclear path; Missile Site Level I additionally requires Hybrid VIII.
   - **Armored:** light and medium tank levels.
-- [ ] **Verify one-project-at-a-time behavior and persistence.** Starting a second branch while one is active must fail cleanly; active branch, target level and progress must survive save/reload and reconnect without resetting or double-advancing.
+- [ ] **Verify one-project-at-a-time behavior and persistence.** Starting a second branch while one is active must fail cleanly; active branch, target level and progress must survive save/reload and reconnect without resetting or double-advancing. Also browser-test one pre-Technology save to confirm inferred migration floors match its existing buildings/units.
 - [ ] **Balance-test research duration.** Level II→VIII projects take `6, 10, 16, 24, 32, 40, 48 h` respectively: `176 h` to take one branch I→VIII and `880 h` (~36.7 days at normal 1×) to max all five sequentially. Decide whether free research with these durations is the intended strategic tradeoff.
 - [ ] **Decide whether research needs cancel/switch behavior.** There is intentionally only one active project now, but the player has no cancellation/change path. If that is deliberate, explain it before confirmation; otherwise add a safe cancel/switch rule.
 - [ ] **Verify AI technology choices.** AI automatically starts research. Confirm it does not get stuck at a branch cap, chooses branches appropriate to what it can build, and does not receive impossible unit/building advantages.
