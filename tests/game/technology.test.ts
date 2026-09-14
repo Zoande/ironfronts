@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { startResearch, stepTechnology, TECHNOLOGY_HOURS_BY_LEVEL } from '../../src/game/technology';
+import { inferLegacyTechnologyLevels, startResearch, stepTechnology, TECHNOLOGY_HOURS_BY_LEVEL } from '../../src/game/technology';
 import { producibleUnits, queueUnit } from '../../src/game/production';
 import { UNIT_TYPE_BY_ID } from '../../src/game/units/unit-catalog';
-import { fixture } from '../helpers/simulation';
+import { parseGameState } from '../../src/game/state-schema';
+import { emptyStockpile } from '../../src/game/game-state';
+import { army, fixture } from '../helpers/simulation';
 
 describe('technology progression', () => {
   it('starts every branch at level I and permits only one project', () => {
@@ -44,5 +46,44 @@ describe('technology progression', () => {
     expect(eighth.maxHp).toBeGreaterThan(first.maxHp * 2);
     expect(eighth.attack.heavy).toBeGreaterThan(first.attack.heavy * 2);
     expect(eighth.buildCost.funds).toBeGreaterThan(first.buildCost.funds! * 7);
+  });
+
+
+  it('infers legacy technology floors from buildings, resources, units, and missile prerequisites', () => {
+    const ctx = fixture();
+    ctx.state.provinceBuildings[10] = { barracks: 5, tankPlant: 3, ordnance: 2, missileSite: 1 };
+    ctx.state.provinceEconomies = {
+      10: {
+        resourcePotential: { food: 1, stone: 1, metal: 1, oil: 1 },
+        baseProduction: emptyStockpile(),
+        resourceBuildings: { fields: 2, quarry: 4, mine: 3, oilPump: 1 },
+        productionCapacity: 1,
+        constructionCapacity: 1,
+      },
+    };
+    ctx.state.armies.legacyArmor = army('legacyArmor', 1, 100, 100, 0, 'medium-tank-l6', 1);
+
+    expect(inferLegacyTechnologyLevels(ctx.state, 1)).toEqual({
+      infantry: 1,
+      resources: 4,
+      training: 5,
+      hybrid: 8,
+      armored: 6,
+    });
+  });
+
+  it('uses inferred floors only when an old save has no technology ledger', () => {
+    const ctx = fixture();
+    ctx.state.provinceBuildings[10] = { barracks: 4, tankPlant: 0, ordnance: 0, missileSite: 0 };
+    delete ctx.state.countries[1].technologies;
+
+    const migrated = parseGameState(structuredClone(ctx.state));
+    expect(migrated.countries[1].technologies?.training).toBe(4);
+
+    ctx.state.countries[1].technologies = {
+      infantry: 2, resources: 2, training: 2, hybrid: 2, armored: 2,
+    };
+    const existingLedger = parseGameState(structuredClone(ctx.state));
+    expect(existingLedger.countries[1].technologies?.training).toBe(2);
   });
 });
