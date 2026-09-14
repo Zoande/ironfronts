@@ -201,6 +201,32 @@ describe('gameplay vertical slice', () => {
     expect(s2.state.armies[a2.id]).toBeDefined();
   }, 30_000);
 
+  it('a stack still merges into a resident one a few world units off the same node', () => {
+    const s = spainSession();
+    const mover = Object.values(s.state.armies).find((a) => a.ownerCountryId === SPAIN)!;
+    const restNode = s.graph.adjacency[mover.graphNodeId][0];
+    expect(restNode).toBeGreaterThanOrEqual(0);
+    // Deliberately mismatched graphNodeId so only proximity, not node
+    // equality, can trigger the merge — resident sits a few world units off
+    // the node the mover will land exactly on.
+    s.state.armies['sp-rest'] = {
+      id: 'sp-rest', ownerCountryId: SPAIN, name: 'Garrison',
+      x: s.graph.nodeX[restNode] + 8, z: s.graph.nodeZ[restNode] + 8, graphNodeId: restNode + 1_000_000,
+      units: [{ typeId: 'infantry', count: 3, hp: 300, experience: 0 }],
+      status: 'idle', order: null, extractingNodeId: null,
+    };
+    const moverUnits = stackUnitCount(mover);
+    const res = s.orderMove(SPAIN, mover.id, s.graph.nodeX[restNode], s.graph.nodeZ[restNode], 'move');
+    expect(res.ok).toBe(true);
+
+    for (let i = 0; i < 120 && s.state.armies[mover.id]; i += 1) s.tick(6 / 1800);
+
+    expect(s.state.armies[mover.id]).toBeUndefined();
+    const survivor = s.state.armies['sp-rest'];
+    expect(survivor).toBeDefined();
+    expect(stackUnitCount(survivor)).toBe(3 + moverUnits);
+  }, 30_000);
+
   it('a move order revalidation leaves no stack marching in place with an empty path', () => {
     const s = spainSession();
     const army = Object.values(s.state.armies).find((a) => a.ownerCountryId === SPAIN)!;

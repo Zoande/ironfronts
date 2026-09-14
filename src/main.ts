@@ -1335,6 +1335,25 @@ function packRgb(hex: string): number {
   return value & 0xffffff;
 }
 
+/**
+ * Nudges a foreign country's map colour toward red (at war) or blue (allied)
+ * so an army's standing reads at a glance without losing which country it
+ * belongs to — own armies and neutral-relation ones keep their plain colour.
+ */
+function relationTintedColor(hex: string, relation: 'neutral' | 'allied' | 'war'): string {
+  if (relation === 'neutral') return hex;
+  const accent = relation === 'war' ? [214, 64, 48] : [66, 133, 244];
+  const blend = 0.4;
+  const value = Number.parseInt(hex.replace('#', ''), 16);
+  if (!Number.isFinite(value)) return hex;
+  const r = (value >> 16) & 0xff;
+  const g = (value >> 8) & 0xff;
+  const b = value & 0xff;
+  const mix = (channel: number, target: number): number => Math.round(channel * (1 - blend) + target * blend);
+  const packed = (mix(r, accent[0]) << 16) | (mix(g, accent[1]) << 8) | mix(b, accent[2]);
+  return `#${packed.toString(16).padStart(6, '0')}`;
+}
+
 /** Deterministic 0..1 from a string — used for stable per-unit formation jitter. */
 function hashUnit(key: string): number {
   let h = 2166136261;
@@ -1506,6 +1525,8 @@ function syncArmyMarkers(
   for (const army of Object.values(session.state.armies)) {
     if (count >= 1_024) break;
     const identified = army.contact === 'visible';
+    const markerColor = army.own ? army.ownerColor
+      : relationTintedColor(army.ownerColor, diplomacyRelation(session, army.ownerCountryId));
     activeArmyIds.add(army.id);
     if (clusterSuppressed.has(army.id)) continue; // folded into a cluster marker
     const armyMotionRaw = armyMotionInterpolator.sample(
@@ -1638,7 +1659,7 @@ function syncArmyMarkers(
     armyMarkerScratch.fill(0, cursor, cursor + 28);
     armyMarkerScratch[cursor] = armyMotion.x;
     armyMarkerScratch[cursor + 1] = armyMotion.z;
-    armyMarkerScratch[cursor + 2] = packRgb(army.ownerColor);
+    armyMarkerScratch[cursor + 2] = packRgb(markerColor);
     armyMarkerScratch[cursor + 3] = identified ? 1 : 2;
     // Contact markers render as '?'; don't ship the real strength/health.
     const clusterSum = clusterAggregate.get(army.id);
@@ -1672,7 +1693,7 @@ function syncArmyMarkers(
       armyMarkerScratch.fill(0, cursor, cursor + 28);
       armyMarkerScratch[cursor] = armyMotion.x;
       armyMarkerScratch[cursor + 1] = armyMotion.z;
-      armyMarkerScratch[cursor + 2] = packRgb(army.ownerColor);
+      armyMarkerScratch[cursor + 2] = packRgb(markerColor);
       armyMarkerScratch[cursor + 3] = 3;
       armyMarkerScratch[cursor + 4] = army.artillery.range;
       armyMarkerScratch[cursor + 5] = 0;
@@ -1739,7 +1760,7 @@ function syncArmyMarkers(
         else if (x - previousX > worldWidth / 2) previousX += worldWidth;
         armyModelScratch[modelCursor] = x;
         armyModelScratch[modelCursor + 1] = z;
-        armyModelScratch[modelCursor + 2] = packRgb(army.ownerColor);
+        armyModelScratch[modelCursor + 2] = packRgb(markerColor);
         armyModelScratch[modelCursor + 3] = group.kind;
         armyModelScratch[modelCursor + 4] = group.count;
         armyModelScratch[modelCursor + 5] = group.health;

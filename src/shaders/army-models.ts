@@ -149,15 +149,19 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // stationary unit is perfectly still. Applied in model space (before the
   // heading rotation) so the step cycle rides the facing: infantry get a leg
   // swing, forward body bob and a counter-swinging arm; vehicles a faint bounce.
+  // Deliberately slow cadences (halved from the original 8.5 / 3.4 rad/s) —
+  // this is a strategic-tempo WW2 campaign, not a real-time skirmish, and a
+  // brisk real-life walking pace read as constant background fidgeting at
+  // the zoom levels the map is actually played at.
   let moveAmt = clamp(distance(model.a.xy, model.c.xy) / 3.0, 0.0, 1.0);
-  let gait = uniforms.sunTime.w * 8.5 + model.c.x * 0.15;
+  let gait = uniforms.sunTime.w * 4.2 + model.c.x * 0.15;
   if (kind == 0u) {
     local.y += abs(sin(gait)) * 0.13 * scale * moveAmt;
     if (partIndex == 2u) { local.z += sin(gait) * 0.22 * scale * moveAmt; }
     if (partIndex == 3u) { local.z += sin(gait + 3.14159265) * 0.22 * scale * moveAmt; }
     if (partIndex == 4u || partIndex == 5u) { local.z += sin(gait + 3.14159265) * 0.12 * scale * moveAmt; }
   } else if (kind == 1u || kind == 2u || kind == 4u) {
-    local.y += sin(uniforms.sunTime.w * 3.4 + model.c.y * 0.2) * 0.05 * scale * moveAmt;
+    local.y += sin(uniforms.sunTime.w * 1.7 + model.c.y * 0.2) * 0.05 * scale * moveAmt;
   }
 
   let rotated = vec3f(local.x * cosine - local.z * sine, local.y, local.x * sine + local.z * cosine);
