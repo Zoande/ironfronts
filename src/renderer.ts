@@ -240,7 +240,10 @@ export class WorldRenderer {
    *  and keep running. */
   private renderingSuspended = typeof document !== 'undefined' && document.hidden;
   private quality: QualityLevel = DEFAULT_QUALITY;
-  /** 0 = uncapped. Battery-saving opt-in independent of graphics quality. */
+  /** 0 = uncapped. Battery-saving opt-in independent of graphics quality.
+   *  A frame skipped for the cap must not advance `previousTime` — the next
+   *  rendered frame's elapsed time needs to reflect the real gap so
+   *  time-of-day/rain/gait animation don't run slow. */
   private frameRateCap: FrameRateCap = 0;
   private readonly environment = new EnvironmentController();
   private reportedClock = '';
@@ -1603,12 +1606,6 @@ export class WorldRenderer {
       this.frameHandle = requestAnimationFrame(this.frame);
       return;
     }
-    // Battery saver: skip the frame body entirely above the capped rate.
-    // previousTime is deliberately left untouched on a skipped frame — the
-    // next rendered frame's frameMs/deltaMs must reflect the true elapsed
-    // time (still clamped below) so time-of-day/rain/gait animation don't
-    // run slow. Only 30/60fps caps are offered; both stay under the 50ms
-    // deltaMs clamp below, so this never itself causes slow-motion.
     if (this.frameRateCap > 0 && time - this.previousTime < 1_000 / this.frameRateCap) {
       this.frameHandle = requestAnimationFrame(this.frame);
       return;
