@@ -156,7 +156,10 @@
      is what absorbs the leftover space instead. */
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
+  /* Below the compacting breakpoints, scroll rather than silently clip —
+     every resource stays reachable instead of vanishing with no affordance. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .ifg-res { display: inline-flex; align-items: center; gap: 7px; }
 .ifg-res__icon {
