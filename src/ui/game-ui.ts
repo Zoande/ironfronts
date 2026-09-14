@@ -39,6 +39,7 @@ export interface GameUiActions {
   dismissNotification(id: string): void;
   togglePause(open: boolean): void;
   returnToMenu(): void;
+  requestDebugAccess(): void;
   /** Arm map-click targeting for a strategic strike (the Warheads chip / N key). */
   armStrike?: () => void;
   focusSelected?: () => void;
@@ -784,6 +785,15 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     row.append(b, el('small', 'ifg-overlay__link-reason', reason));
     secondary.append(row);
   }
+  const debugRow = el('div', 'ifg-overlay__link-row');
+  debugRow.hidden = true;
+  const debugButton = el('button', 'ifg-overlay__link', 'Unlock World Inspector');
+  debugButton.type = 'button';
+  const debugReason = el('small', 'ifg-overlay__link-reason', 'Restricted QA controls.');
+  debugButton.addEventListener('click', () => actions.requestDebugAccess());
+  debugRow.append(debugButton, debugReason);
+  secondary.append(debugRow);
+
   const diagLine = el('p', 'ifg-overlay__diag', '');
   overlayCard.append(resumeButton, qualityGroup, secondary, diagLine);
   overlay.append(overlayCard);
@@ -1193,6 +1203,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     // This overlay only blocks local input; the authoritative simulation continues.
     overlay.hidden = !state.paused;
+    const debugVisible = state.debugUnlockAvailable || state.debugEnabled;
+    debugRow.hidden = !debugVisible;
+    debugButton.textContent = state.debugEnabled ? 'Open World Inspector' : 'Unlock World Inspector';
+    debugReason.textContent = state.debugEnabled
+      ? 'QA controls are unlocked for this session.'
+      : 'Restricted QA controls — password required.';
     for (const [level, button] of qualityButtons) {
       const active = level === state.quality;
       button.classList.toggle('is-selected', active);
