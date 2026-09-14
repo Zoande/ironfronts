@@ -413,7 +413,7 @@ kbd { padding: 2px 5px; border: 1px solid rgba(255,255,255,.24); border-radius: 
 /* ===== Now Playing — tiny soundtrack readout, bottom-left ===== */
 .now-playing {
   position: fixed;
-  right: 14px;
+  right: 76px;
   bottom: 12px;
   z-index: 4;
   display: inline-flex;
