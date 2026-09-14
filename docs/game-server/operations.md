@@ -103,7 +103,7 @@ Transport validation failures are sent to the relevant socket and are not curren
 
 The process is single-threaded. Simulation, projection construction, JSON serialization, HTTP, and WebSocket callbacks share the Node event loop. Projection work is deduplicated by country per publish pass, but all connected sockets and all visible state still affect cost.
 
-There is no offline catch-up. When the process stops, simulation ticks, game-time economy, movement, and combat cooldowns stop. The persisted civil start epoch is retained, but it does not advance gameplay while offline.
+Offline downtime is replayed once at normal 1× simulation time when the server restores a compatible save. Economy, movement, production, construction, research and combat therefore catch up through the same authoritative tick path; pending presentation/event queues are cleared after catch-up so clients do not receive a burst of stale completion events.
 
 ## Graceful shutdown
 
