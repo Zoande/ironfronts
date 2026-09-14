@@ -19,6 +19,14 @@ import { createDiplomacyPanel } from './diplomacy-panel';
 import { createTradePanel, type MarketResource } from './trade-panel';
 import { buildNotification } from './notifications';
 import { groupQueueItems, type QueueGroup } from './queue-presentation';
+import {
+  TECHNOLOGY_BRANCH_PRESENTATION,
+  buildTechnologyPanelModel,
+  defaultTechnologyInspectionLevel,
+  technologyLevelUnlockText,
+  technologyTabAfterKey,
+  type TechnologyLevelVisualState,
+} from './technology-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import { createCatalogDossier, BUILDING_ICON } from './catalog-dossier';
@@ -137,35 +145,6 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
     { id: 'bombers', label: 'Bomber Command', shortLabel: 'Bombers', icon: 'tech-airforce', description: 'Future strategic and tactical strike aircraft.', unlocks: 'Planned air line', comingSoon: true },
   ] },
 ];
-
-/**
- * What reaching a given level actually unlocks, mirroring the real gating in
- * game/production.ts (unit tier = min(tech level, building tier)) and
- * game/construction.ts (building tier capped by tech level) — kept as a local
- * mirror rather than importing game-core, matching COUNTRY_PHASE_LABELS above.
- * Level 1 is the always-available baseline for every branch.
- */
-function technologyLevelUnlockText(branch: TechnologyBranch, level: number): string {
-  if (level === 1) return 'Baseline — always available.';
-  switch (branch) {
-    case 'infantry':
-      return `Infantry Level ${level} (more health and firepower) — also needs Barracks Tier ${level}.`;
-    case 'resources':
-      return level >= 3
-        ? `Engineer Level ${level} — also needs Barracks Tier ${level} and Resource Infrastructure Level ${level - 1}.`
-        : `Engineer Level ${level} — also needs Barracks Tier ${level}.`;
-    case 'resourceBuildings':
-      return `Tier ${level} fields, quarries, mines and oil pumps where local resource potential supports it.`;
-    case 'training':
-      return `Tier ${level} Barracks, Tank Plant and Ordnance Works.`;
-    case 'hybrid':
-      return level === 8
-        ? 'Armored Car & Artillery Level 8, and the Missile Site (strategic warheads).'
-        : `Armored Car & Artillery Level ${level} — also needs Tank Plant/Ordnance Tier ${level}.`;
-    case 'armored':
-      return `Light & Medium Tank Level ${level} — also needs Tank Plant Tier ${level}.`;
-  }
-}
 
 type TechnologyUnlock = { readonly kind: 'unit' | 'building'; readonly id: string; readonly level: number; readonly label: string };
 const leveledUnitId = (family: string, level: number): string => level === 1 ? family : `${family}-l${level}`;
@@ -459,8 +438,13 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (available) {
       b.title = section.label;
       b.setAttribute('aria-label', section.label);
-      b.setAttribute('aria-controls', section.id === 'research' ? 'ifg-technology-panel'
-        : section.id === 'trade' ? 'ifg-trade-panel' : 'ifg-diplomacy-panel');
+      if (section.id === 'research') {
+        b.setAttribute('aria-controls', 'ifg-technology-panel');
+      } else if (section.id === 'trade') {
+        b.setAttribute('aria-controls', 'ifg-trade-panel');
+      } else {
+        b.setAttribute('aria-controls', 'ifg-diplomacy-panel');
+      }
       b.setAttribute('aria-expanded', 'false');
     }
     b.append(createIcon(section.icon), el('span', 'ifg-dock__tip', section.label));
@@ -496,7 +480,9 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   technologyPanel.setAttribute('aria-modal', 'false');
   technologyPanel.setAttribute('aria-label', 'Technology');
   const techHead = el('header', 'ifg-tech__head');
-  techHead.append(el('span', 'ifg-tech__eyebrow', 'National development'), el('h2', undefined, 'Technology'));
+  const techHeadCopy = el('span', 'ifg-tech__head-copy');
+  techHeadCopy.append(el('span', 'ifg-tech__eyebrow', 'Directorate of technical development'), el('h2', undefined, 'Technology dossiers'));
+  techHead.append(techHeadCopy, el('span', 'ifg-tech__stamp', 'Restricted'));
   const techClose = el('button', 'ifg-tech__close');
   techClose.type = 'button';
   techClose.setAttribute('aria-label', 'Close technology');
@@ -506,12 +492,46 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const techTabs = el('div', 'ifg-tech__tabs');
   techTabs.setAttribute('role', 'tablist');
   const techBody = el('div', 'ifg-tech__body');
+  techBody.id = 'ifg-technology-dossier';
+  techBody.setAttribute('role', 'tabpanel');
   technologyPanel.append(techHead, techTabs, techBody);
   let selectedTechTab: TechnologyCategory = 'infantry';
   let selectedTechnology: TechnologyBranch = 'infantry';
   let selectedTechnologyLevel = 0;
   let techRenderKey = '';
+  type TechnologyFocusTarget =
+    | { readonly kind: 'tab'; readonly category: TechnologyCategory }
+    | { readonly kind: 'level'; readonly branch: TechnologyBranch; readonly level: number };
+  let requestedTechnologyFocus: TechnologyFocusTarget | null = null;
+  const technologyFocusTarget = (element: Element | null): TechnologyFocusTarget | null => {
+    if (!(element instanceof HTMLElement) || !technologyPanel.contains(element)) return null;
+    const category = element.dataset.techCategory as TechnologyCategory | undefined;
+    if (category) return { kind: 'tab', category };
+    const branch = element.dataset.techBranch as TechnologyBranch | undefined;
+    const level = Number(element.dataset.techLevel);
+    return branch && Number.isInteger(level) ? { kind: 'level', branch, level } : null;
+  };
+  const restoreTechnologyFocus = (target: TechnologyFocusTarget | null): void => {
+    if (!target) return;
+    const selector = target.kind === 'tab'
+      ? `[data-tech-category="${target.category}"]`
+      : `[data-tech-branch="${target.branch}"][data-tech-level="${target.level}"]`;
+    technologyPanel.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+  };
+  const romanLevel = (level: number): string => ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][level - 1] ?? String(level);
+  const technologyArtwork = (url: string, className: string): HTMLImageElement => {
+    const image = document.createElement('img');
+    image.className = className;
+    image.src = url;
+    image.alt = '';
+    image.draggable = false;
+    image.decoding = 'async';
+    image.loading = 'lazy';
+    return image;
+  };
   const renderTechnology = (state: StrategicUiState): void => {
+    const focusTarget = requestedTechnologyFocus ?? technologyFocusTarget(document.activeElement);
+    requestedTechnologyFocus = null;
     const activeKey = state.technology.slots.map((active) => active
       ? `${active.branch}:${active.targetLevel}:${Math.round(active.progress * 1000)}:${Math.round(active.etaSeconds)}` : '-').join('|');
     const quoteKey = Object.values(state.technology.levelQuotes).flat().map((quote) =>
@@ -519,38 +539,85 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     const nextKey = `${selectedTechTab}|${selectedTechnology}:${selectedTechnologyLevel}|${Object.values(state.technology.levels).join(',')}|${activeKey}|${quoteKey}|${state.technology.pending}`;
     if (nextKey === techRenderKey) return;
     techRenderKey = nextKey;
+
     const current = TECHNOLOGY_CATEGORIES.find((category) => category.id === selectedTechTab)!;
-    const allLines = TECHNOLOGY_CATEGORIES.flatMap((category) => [...category.lines]);
-    const definitionFor = (branch: TechnologyBranch): TechnologyLineDefinition =>
-      allLines.find((line) => line.technology === branch)!;
+    const futureCategory = current.lines.every((line) => line.comingSoon);
     if (selectedTechnologyLevel === 0) {
-      selectedTechnologyLevel = Math.min(8, state.technology.levels[selectedTechnology] + 1);
+      selectedTechnologyLevel = defaultTechnologyInspectionLevel(state.technology.levels[selectedTechnology]);
     }
+    const model = buildTechnologyPanelModel(state.technology, selectedTechnology, selectedTechnologyLevel);
+    techBody.setAttribute('aria-labelledby', `ifg-tech-tab-${selectedTechTab}`);
+    if (futureCategory) technologyPanel.style.removeProperty('--ifg-tech-dossier');
+    else technologyPanel.style.setProperty('--ifg-tech-dossier', `url("${model.branch.backdropUrl}")`);
+
     techTabs.replaceChildren(...TECHNOLOGY_CATEGORIES.map((category) => {
       const tab = el('button', 'ifg-tech__tab');
       tab.type = 'button';
+      tab.id = `ifg-tech-tab-${category.id}`;
+      tab.dataset.techCategory = category.id;
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(category.id === selectedTechTab));
+      tab.setAttribute('aria-controls', 'ifg-technology-dossier');
+      tab.tabIndex = category.id === selectedTechTab ? 0 : -1;
       tab.classList.toggle('is-active', category.id === selectedTechTab);
       const liveLines = category.lines.filter((line) => line.technology);
       const categoryLevel = liveLines.length ? Math.min(...liveLines.map((line) => state.technology.levels[line.technology!])) : null;
-      tab.append(createIcon(category.icon), el('span', undefined, category.label), el('b', undefined, categoryLevel === null ? 'Soon' : `L${categoryLevel}`));
+      const tabIcon = el('span', 'ifg-tech__tab-icon');
+      if (liveLines.length) {
+        const representative = category.id === selectedTechTab
+          ? TECHNOLOGY_BRANCH_PRESENTATION[selectedTechnology]
+          : TECHNOLOGY_BRANCH_PRESENTATION[liveLines[0].technology!];
+        tabIcon.append(technologyArtwork(representative.iconUrl, ''));
+      } else {
+        tabIcon.append(createIcon(category.icon));
+      }
+      const tabCopy = el('span', 'ifg-tech__tab-copy');
+      tabCopy.append(el('span', undefined, category.label), el('small', undefined,
+        liveLines.length ? `${liveLines.length} active ${liveLines.length === 1 ? 'program' : 'programs'}` : 'Future service'));
+      tab.append(tabIcon, tabCopy, el('b', undefined, categoryLevel === null ? 'Soon' : romanLevel(categoryLevel)));
       tab.onclick = () => {
         selectedTechTab = category.id;
         const first = category.lines.find((line) => line.technology)?.technology;
         if (first) {
           selectedTechnology = first;
-          selectedTechnologyLevel = Math.min(8, state.technology.levels[first] + 1);
+          selectedTechnologyLevel = defaultTechnologyInspectionLevel(state.technology.levels[first]);
         }
+        requestedTechnologyFocus = { kind: 'tab', category: category.id };
         techRenderKey = '';
         renderTechnology(store.get());
       };
+      tab.addEventListener('keydown', (event) => {
+        const nextCategory = technologyTabAfterKey(category.id, event.key);
+        if (!nextCategory) return;
+        event.preventDefault();
+        selectedTechTab = nextCategory;
+        const nextDefinition = TECHNOLOGY_CATEGORIES.find((entry) => entry.id === nextCategory)!;
+        const first = nextDefinition.lines.find((line) => line.technology)?.technology;
+        if (first) {
+          selectedTechnology = first;
+          selectedTechnologyLevel = defaultTechnologyInspectionLevel(state.technology.levels[first]);
+        }
+        requestedTechnologyFocus = { kind: 'tab', category: nextCategory };
+        techRenderKey = '';
+        renderTechnology(store.get());
+      });
       return tab;
     }));
+
     const workspace = el('div', 'ifg-tech__workspace');
     const tree = el('div', 'ifg-tech__tree');
-    const futureCategory = current.lines.every((line) => line.comingSoon);
     tree.classList.toggle('is-future-category', futureCategory);
+    if (!futureCategory) {
+      const hero = el('section', 'ifg-tech__branch');
+      const branchIcon = el('span', 'ifg-tech__branch-icon');
+      branchIcon.append(technologyArtwork(model.branch.iconUrl, ''));
+      const branchCopy = el('div', 'ifg-tech__branch-copy');
+      const filing = el('span', 'ifg-tech__filing');
+      filing.append(el('span', undefined, model.branch.fileCode), el('span', undefined, `Current standard ${romanLevel(model.currentLevel)}`));
+      branchCopy.append(filing, el('h3', undefined, model.branch.title), el('p', undefined, model.branch.summary), el('small', undefined, model.branch.discipline));
+      hero.append(branchIcon, branchCopy);
+      tree.append(hero);
+    }
     const timeline = el('div', 'ifg-tech__timeline');
     timeline.append(el('span', undefined, 'Available technology'));
     for (let level = 1; level <= 8; level += 1) timeline.append(el('b', undefined, `Level ${level}`));
@@ -560,25 +627,45 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const row = el('section', `ifg-tech__line${line.comingSoon ? ' is-coming-soon' : ''}`);
       const label = el('header', 'ifg-tech__line-label');
       label.append(createIcon(line.icon), el('strong', undefined, line.shortLabel));
-      if (line.comingSoon) label.append(el('small', undefined, 'Future troop line'));
+      label.append(el('small', undefined, line.comingSoon ? 'Future troop line' : line.description));
       row.append(label);
       const track = el('div', 'ifg-tech__track');
       const branch = line.technology;
+      const lineModel = branch ? buildTechnologyPanelModel(state.technology, branch) : undefined;
       const currentLevel = branch ? state.technology.levels[branch] : 0;
+      track.setAttribute('aria-label', `${line.label} development levels`);
       for (let candidate = 1; candidate <= 8; candidate += 1) {
         const cell = el('div', 'ifg-tech__cell');
-        const node = el('button', 'ifg-tech__node');
+        const level = lineModel?.levels[candidate - 1];
+        const visualState = level?.state ?? 'locked';
+        const node = el('button', `ifg-tech__node is-${visualState}`);
         node.type = 'button';
         node.disabled = !branch;
+        if (branch) {
+          node.dataset.techBranch = branch;
+          node.dataset.techLevel = String(candidate);
+        }
+        node.dataset.state = visualState;
         node.classList.toggle('is-complete', Boolean(branch && candidate <= currentLevel));
         node.classList.toggle('is-next', Boolean(branch && candidate === currentLevel + 1));
         node.classList.toggle('is-selected', Boolean(branch === selectedTechnology && candidate === selectedTechnologyLevel));
         node.classList.toggle('is-researching', state.technology.slots.some((slot) =>
           slot !== null && slot.branch === branch && slot.targetLevel === candidate));
-        const nodeIcon = el('span', 'ifg-tech__node-visual');
-        nodeIcon.append(createIcon(line.icon));
-        if (candidate > 1 && branch && branch !== 'resourceBuildings' && branch !== 'training') nodeIcon.append(createRankInsignia(candidate, 'ifg-tech__node-rank'));
-        node.append(nodeIcon, el('small', undefined, `Lvl. ${candidate}`));
+        node.setAttribute('aria-pressed', String(branch === selectedTechnology && candidate === selectedTechnologyLevel));
+        node.setAttribute('aria-label', branch && level
+          ? `${line.label}, Level ${romanLevel(candidate)}, ${level.name}, ${visualState}`
+          : `${line.label}, Level ${romanLevel(candidate)}, coming soon`);
+        if (level) {
+          const nodeVisual = el('span', 'ifg-tech__node-visual');
+          nodeVisual.append(technologyArtwork(level.visualUrl, ''));
+          if (candidate > 1 && branch !== 'resourceBuildings' && branch !== 'training') {
+            nodeVisual.append(createRankInsignia(candidate, 'ifg-tech__node-rank'));
+          }
+          node.append(nodeVisual, el('strong', undefined, romanLevel(candidate)), el('span', 'ifg-tech__node-name', level.name),
+            el('small', undefined, level.hours === 0 ? 'Baseline' : `${level.hours}h`));
+        } else {
+          node.append(createIcon(line.icon), el('strong', undefined, romanLevel(candidate)), el('small', undefined, 'Planned'));
+        }
         if (branch === 'resourceBuildings' && candidate < 8) {
           cell.append(el('i', 'ifg-tech__dependency'));
         }
@@ -594,6 +681,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         if (branch) node.onclick = () => {
           selectedTechnology = branch;
           selectedTechnologyLevel = candidate;
+          requestedTechnologyFocus = { kind: 'level', branch, level: candidate };
           techRenderKey = '';
           renderTechnology(store.get());
         };
@@ -606,6 +694,37 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
     if (futureCategory) tree.append(el('div', 'ifg-tech__future-veil', `${current.label} technology coming soon`));
 
+    if (!futureCategory) {
+      const detail = el('section', 'ifg-tech__detail');
+      const detailVisual = el('figure', 'ifg-tech__visual');
+      detailVisual.append(
+        technologyArtwork(model.inspected.visualUrl, ''),
+        el('figcaption', undefined, `${model.branch.fileCode} / field plate ${romanLevel(model.inspected.level)}`),
+      );
+      const detailCopy = el('div', 'ifg-tech__briefing');
+      const stateLabels: Record<TechnologyLevelVisualState, string> = {
+        completed: 'Established doctrine',
+        current: 'Current national standard',
+        available: 'Available for development',
+        researching: 'Development in progress',
+        locked: 'Preceding level required',
+      };
+      const detailLead = el('span', 'ifg-tech__detail-lead');
+      detailLead.append(el('span', undefined, `Level ${romanLevel(model.inspected.level)}`), el('span', undefined, stateLabels[model.inspected.state]));
+      detailCopy.append(detailLead, el('h4', undefined, model.inspected.name), el('p', undefined, model.inspected.summary));
+      const facts = document.createElement('dl');
+      facts.className = 'ifg-tech__facts';
+      facts.append(
+        el('dt', undefined, 'Authorization'), el('dd', undefined, model.inspected.authorization),
+        el('dt', undefined, 'Unlocks'), el('dd', undefined, technologyLevelUnlockText(model.branch.id, model.inspected.level)),
+        el('dt', undefined, 'Measured effect'), el('dd', undefined, model.inspected.effect),
+        el('dt', undefined, 'Development time'), el('dd', undefined, model.inspected.hours === 0 ? 'Established at campaign start' : `${model.inspected.hours} campaign hours`),
+      );
+      detailCopy.append(facts);
+      detail.append(detailVisual, detailCopy);
+      tree.append(detail);
+    }
+
     const rail = el('aside', 'ifg-tech__rail');
     const researchPanel = el('section', 'ifg-tech__rail-section ifg-tech__research');
     researchPanel.append(el('h3', undefined, 'Current research'));
@@ -613,17 +732,23 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const active = state.technology.slots[slotIndex] ?? null;
       const slot = el('article', `ifg-tech__slot${active ? ' is-active' : ''}`);
       if (active) {
-        const activeDef = definitionFor(active.branch);
-        slot.append(createIcon(activeDef.icon, 'ifg-tech__slot-icon'));
-        const copy = el('span');
-        copy.append(el('b', undefined, `${activeDef.label} · Level ${active.targetLevel}`),
+        const activeBranch = TECHNOLOGY_BRANCH_PRESENTATION[active.branch];
+        const activeIcon = el('span', 'ifg-tech__slot-icon');
+        activeIcon.append(technologyArtwork(activeBranch.iconUrl, ''));
+        const slotCopy = el('span');
+        slotCopy.append(el('b', undefined, `${activeBranch.title} · Level ${romanLevel(active.targetLevel)}`),
           el('small', undefined, `${Math.round(active.progress * 100)}% · ${formatEta(active.etaSeconds)} remaining`));
         const bar = el('span', 'ifg-tech__bar');
-        const fill = el('i'); fill.style.width = `${Math.round(active.progress * 100)}%`; bar.append(fill);
-        copy.append(bar); slot.append(copy);
+        const fill = el('i');
+        fill.style.width = `${Math.round(active.progress * 100)}%`;
+        bar.append(fill);
+        slotCopy.append(bar);
+        slot.append(activeIcon, slotCopy);
       } else {
-        slot.append(createIcon('objectives', 'ifg-tech__slot-icon'),
-          el('span', undefined, `<b>Free research slot #${slotIndex + 1}</b><small>Select an available technology</small>`));
+        slot.append(createIcon('objectives', 'ifg-tech__slot-icon'));
+        const slotCopy = el('span');
+        slotCopy.append(el('b', undefined, `Free research slot #${slotIndex + 1}`), el('small', undefined, 'Select an available technology'));
+        slot.append(slotCopy);
       }
       researchPanel.append(slot);
     }
@@ -635,31 +760,26 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       rail.append(researchPanel, futureDetails);
       workspace.append(tree, rail);
       techBody.replaceChildren(workspace);
+      restoreTechnologyFocus(focusTarget);
       return;
     }
 
-    const selectedDef = definitionFor(selectedTechnology);
-    const selectedLevel = state.technology.levels[selectedTechnology];
     const quote = state.technology.levelQuotes[selectedTechnology][selectedTechnologyLevel - 1]
       ?? state.technology.quotes[selectedTechnology];
-    const selectedActive = state.technology.slots.find((slot) =>
-      slot !== null && slot.branch === selectedTechnology && slot.targetLevel === selectedTechnologyLevel);
-    const isComplete = selectedTechnologyLevel <= selectedLevel;
-    const isNext = selectedTechnologyLevel === selectedLevel + 1;
-    const slotsFull = state.technology.slots.every(Boolean);
     const details = el('section', 'ifg-tech__rail-section ifg-tech__details');
-    details.append(el('h3', undefined, 'Research details'));
+    details.append(el('h3', undefined, 'Authorization order'));
     const detailHero = el('div', 'ifg-tech__detail-hero');
     const selectedVisual = el('span', 'ifg-tech__detail-visual');
-    selectedVisual.append(createIcon(selectedDef.icon));
+    selectedVisual.append(technologyArtwork(model.branch.iconUrl, ''));
     if (selectedTechnologyLevel > 1 && selectedTechnology !== 'resourceBuildings' && selectedTechnology !== 'training') selectedVisual.append(createRankInsignia(selectedTechnologyLevel, 'ifg-tech__detail-rank'));
     detailHero.append(selectedVisual);
     const detailCopy = el('span');
-    detailCopy.append(el('b', undefined, `${selectedDef.label} · Level ${selectedTechnologyLevel}`),
-      el('small', undefined, selectedDef.description));
+    detailCopy.append(el('b', undefined, `${model.branch.title} · Level ${romanLevel(model.inspected.level)}`),
+      el('small', undefined, model.inspected.authorization));
     detailHero.append(detailCopy); details.append(detailHero);
     const unlocks = el('div', 'ifg-tech__unlocks');
-    unlocks.append(el('small', undefined, 'Unlocks'));
+    unlocks.append(el('small', undefined, 'Operational effect'), el('strong', undefined, model.inspected.effect),
+      el('small', undefined, 'Unlocks'));
     const unlockGrid = el('div', 'ifg-tech__unlock-grid');
     for (const unlock of technologyUnlocks(selectedTechnology, selectedTechnologyLevel)) {
       const tile = el('button', 'ifg-tech__unlock'); tile.type = 'button';
@@ -682,24 +802,19 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
     const duration = el('span');
     duration.append(createIcon('objectives'), el('b', undefined, `${quote.hours} game h`));
-    costRow.append(duration); details.append(costRow);
+    costRow.append(duration);
+    details.append(costRow);
     const action = el('button', 'ifg-tech__start');
     action.type = 'button';
-    let disabledReason = '';
-    if (isComplete) disabledReason = 'Technology already unlocked';
-    else if (!isNext) disabledReason = `Develop Level ${selectedLevel + 1} first`;
-    else if (selectedActive) disabledReason = 'Research already in progress';
-    else if (quote.lockedReason) disabledReason = quote.lockedReason;
-    else if (slotsFull) disabledReason = 'Both research slots are occupied';
-    else if (!quote.affordable) disabledReason = 'Insufficient resources';
-    else if (state.technology.pending) disabledReason = 'Awaiting server confirmation';
-    action.disabled = Boolean(disabledReason);
-    action.textContent = disabledReason || `Research Level ${selectedTechnologyLevel}`;
+    action.disabled = !model.canResearch;
+    action.textContent = model.canResearch ? `Authorize Level ${romanLevel(model.inspected.level)}` : (model.blockedReason ?? 'Unavailable');
     action.onclick = () => actions.researchTechnology(selectedTechnology);
     details.append(action);
+    if (model.blockedReason) details.append(el('small', 'ifg-tech__blocked', model.blockedReason));
     rail.append(researchPanel, details);
     workspace.append(tree, rail);
     techBody.replaceChildren(workspace);
+    restoreTechnologyFocus(focusTarget);
   };
 
   // ---------------- map-mode cluster (top-right) ----------------
@@ -1113,6 +1228,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
     tradePanel.render(tradeOpen, state.resources, state.market.busy, state.market.feedback);
     const technologyOpen = state.activeSidePanel === 'research';
+    const technologyDockButton = dockButtons.get('research');
+    if (technologyDockButton) {
+      technologyDockButton.classList.toggle('is-on', technologyOpen);
+      technologyDockButton.setAttribute('aria-expanded', String(technologyOpen));
+      technologyDockButton.setAttribute('aria-pressed', String(technologyOpen));
+    }
     technologyPanel.hidden = !technologyOpen;
     if (technologyOpen) renderTechnology(state);
     if (renderedSidePanel === 'diplomacy' && state.activeSidePanel === null) {
@@ -1120,6 +1241,9 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
     if (renderedSidePanel === 'trade' && state.activeSidePanel === null) {
       tradeDockButton?.focus({ preventScroll: true });
+    }
+    if (renderedSidePanel === 'research' && state.activeSidePanel === null) {
+      technologyDockButton?.focus({ preventScroll: true });
     }
     renderedSidePanel = state.activeSidePanel;
     for (const [id, button] of dockButtons) {
