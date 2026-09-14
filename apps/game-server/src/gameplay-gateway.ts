@@ -15,6 +15,8 @@ const DEBUG_MESSAGE_TYPES = new Set([
   'devSetSimSpeed', 'devSetClock', 'devLinkClockTimezone', 'devSetWeather',
   'devCheatBuild', 'devCheatSpawnUnit', 'devCheatGiveResource',
 ]);
+const BACKPRESSURE_SOFT_LIMIT_BYTES = 8 * 1024 * 1024;
+const BACKPRESSURE_GRACE_MILLISECONDS = 10_000;
 
 function requestedMessageType(value: unknown): string | null {
   if (!value || typeof value !== 'object' || !('type' in value)) return null;
@@ -62,6 +64,9 @@ export class GameplayGateway {
   private readonly sockets = new WebSocketServer({ noServer: true, maxPayload: 32_768 });
   private readonly usedNonces = new TicketNonceStore();
   private readonly recentCommands = new Map<string, Map<string, ServerMessage>>();
+  private readonly socketIds = new WeakMap<WebSocket, number>();
+  private readonly backpressureStartedAt = new WeakMap<WebSocket, number>();
+  private readonly skippedSendLogged = new WeakSet<WebSocket>();
   private nextSocketId = 1;
 
   constructor(private readonly options: GameplayGatewayOptions) {
@@ -114,27 +119,66 @@ export class GameplayGateway {
 
   private sendSocket(socket: WebSocket, message: ServerMessage): boolean {
     if (socket.readyState !== WebSocket.OPEN) {
-      this.options.log('warn', 'websocket_send_skipped', {
-        messageType: message.type, readyState: socket.readyState, bufferedAmount: socket.bufferedAmount,
-      });
+      if (!this.skippedSendLogged.has(socket)) {
+        this.skippedSendLogged.add(socket);
+        this.options.log('warn', 'websocket_send_skipped', {
+          socketId: this.socketIds.get(socket) ?? null,
+          messageType: message.type, readyState: socket.readyState, bufferedAmount: socket.bufferedAmount,
+        });
+      }
       return false;
     }
-    if (socket.bufferedAmount > 2_000_000) {
-      this.options.log('warn', 'websocket_backpressure_close', {
-        messageType: message.type, bufferedAmount: socket.bufferedAmount,
-      });
-      socket.close(1013, 'Resynchronize slow connection'); return false;
+    const now = performance.now();
+    if (socket.bufferedAmount > BACKPRESSURE_SOFT_LIMIT_BYTES) {
+      const startedAt = this.backpressureStartedAt.get(socket);
+      if (startedAt === undefined) {
+        this.backpressureStartedAt.set(socket, now);
+        this.options.log('warn', 'websocket_backpressure_started', {
+          socketId: this.socketIds.get(socket) ?? null,
+          messageType: message.type, bufferedAmount: socket.bufferedAmount,
+          softLimitBytes: BACKPRESSURE_SOFT_LIMIT_BYTES,
+        });
+      } else if (now - startedAt >= BACKPRESSURE_GRACE_MILLISECONDS) {
+        this.options.log('warn', 'websocket_backpressure_close', {
+          socketId: this.socketIds.get(socket) ?? null,
+          messageType: message.type, bufferedAmount: socket.bufferedAmount,
+          durationMilliseconds: now - startedAt,
+        });
+        socket.close(1013, 'Resynchronize slow connection');
+      }
+      // Do not add more data while the transport drains. ProjectionPublisher
+      // retains the connection's old projection and will send one catch-up
+      // delta after recovery.
+      return false;
     }
-    socket.send(JSON.stringify(message), (error) => {
+    const backpressureAt = this.backpressureStartedAt.get(socket);
+    if (backpressureAt !== undefined) {
+      this.backpressureStartedAt.delete(socket);
+      this.options.log('info', 'websocket_backpressure_recovered', {
+        socketId: this.socketIds.get(socket) ?? null,
+        durationMilliseconds: now - backpressureAt,
+      });
+    }
+    const payload = JSON.stringify(message);
+    const bufferedBefore = socket.bufferedAmount;
+    socket.send(payload, (error) => {
       if (error) this.options.log('warn', 'websocket_send_error', {
+        socketId: this.socketIds.get(socket) ?? null,
         messageType: message.type, message: error.message, bufferedAmount: socket.bufferedAmount,
       });
     });
+    if (message.type === 'hello' || message.type === 'baseline') {
+      this.options.log('info', 'websocket_handshake_sent', {
+        socketId: this.socketIds.get(socket) ?? null, messageType: message.type,
+        payloadBytes: Buffer.byteLength(payload), bufferedBefore, bufferedAfter: socket.bufferedAmount,
+      });
+    }
     return true;
   }
 
   private handleConnection(socket: WebSocket, request?: IncomingMessage): void {
     const socketId = this.nextSocketId++;
+    this.socketIds.set(socket, socketId);
     const openedAt = performance.now();
     let receivedMessages = 0;
     let receivedBytes = 0;
