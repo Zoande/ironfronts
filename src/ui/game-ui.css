@@ -37,7 +37,9 @@
   position: fixed;
   inset: 0;
   z-index: 30;
-  pointer-events: auto;
+  /* The HUD spans the viewport but only its visible children are interactive.
+     Keep the transparent root click-through so canvas input still works. */
+  pointer-events: none;
   font-family: var(--ifg-sans);
   color: var(--ifg-text);
   font-size: 14px;

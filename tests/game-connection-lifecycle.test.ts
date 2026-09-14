@@ -90,4 +90,15 @@ describe('connection handshake cleanup',()=>{
     expect(Socket.instances[0].close).toHaveBeenCalledWith(4000,'Resync timeout');
     connection.close();
   });
+  it('accepts commands during a brief inbound lull while the authenticated socket remains open',async()=>{
+    const opened=GameConnection.open(); await Promise.resolve(); handshake(Socket.instances[0],2);
+    const connection=await opened;
+    const result=vi.fn();
+    await vi.advanceTimersByTimeAsync(3_000);
+    connection.command({type:'stopArmy',armyId:'a'},result);
+    expect(Socket.instances[0].sent.some((message) =>
+      message && (message as {type?:string}).type === 'command')).toBe(true);
+    expect(result).not.toHaveBeenCalled();
+    connection.close();
+  });
 });

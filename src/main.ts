@@ -542,15 +542,15 @@ async function startGame(token: number): Promise<void> {
   // silently — an unstable link just looked like a frozen game. Surface it, and
   // confirm when the stream recovers.
   let connectionDropped = false;
-  connection.addEventListener('connection-error', () => {
-    if (connectionDropped) return;
-    connectionDropped = true;
-    pushNotification('warning', 'Connection lost', 'Reconnecting to the command server…');
-  }, attemptListener);
-  connection.addEventListener('state', () => {
-    if (!connectionDropped) return;
-    connectionDropped = false;
-    pushNotification('information', 'Reconnected', 'Live command stream restored.');
+  connection.addEventListener('connection-status', () => {
+    const connected = connection.status === 'ready';
+    if (!connected && !connectionDropped) {
+      connectionDropped = true;
+      pushNotification('warning', 'Connection lost', 'Reconnecting to the command server…');
+    } else if (connected && connectionDropped) {
+      connectionDropped = false;
+      pushNotification('information', 'Reconnected', 'Live command stream restored.');
+    }
   }, attemptListener);
 
   const disposeRendererOnPagehide = (event: PageTransitionEvent): void => {

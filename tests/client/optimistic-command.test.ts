@@ -56,6 +56,17 @@ describe('authoritative command lifecycle', () => {
     expect(failed).toHaveBeenCalledWith('No route.');
   });
 
+  it('does not flood order-failure notifications during a connection outage', () => {
+    const connection = new FakeConnection();
+    const failed = vi.fn();
+    const session = new RemoteGameSession(connection as unknown as GameConnection, failed);
+    session.orderMove('a', 50, 70);
+    connection.settle?.(false, 'Connection unavailable.');
+    session.orderMove('a', 60, 80);
+    connection.settle?.(false, 'Connection unavailable.');
+    expect(failed).not.toHaveBeenCalled();
+  });
+
   it('waits for war confirmation, then re-sends the same order with consent', () => {
     const connection = new FakeConnection();
     const session = new RemoteGameSession(connection as unknown as GameConnection, vi.fn());

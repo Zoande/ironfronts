@@ -9,6 +9,10 @@ type PhysicalResource = 'food' | 'stone' | 'metal' | 'oil';
 type ArmyStance = 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
 export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
 
+function isConnectionFailure(reason: string): boolean {
+  return /connection (?:unavailable|lost|closed)|command outcome unknown/i.test(reason);
+}
+
 interface Stockpile { funds: number; manpower: number; food: number; stone: number; metal: number; oil: number }
 interface OwnCountry {
   id: number; name: string; color: string; controller: string;
@@ -184,7 +188,10 @@ export class RemoteGameSession extends EventTarget {
       } else {
         this.pendingCommands.delete(id);
         this.rebuild();
-        this.commandFailed(reason ?? 'Command failed.');
+        const failure = reason ?? 'Command failed.';
+        // Connection status is surfaced once per outage by the lifecycle UI;
+        // do not turn every click while reconnecting into another warning.
+        if (!isConnectionFailure(failure)) this.commandFailed(failure);
       }
     });
     this.pendingCommands.set(id, { command });
@@ -202,7 +209,10 @@ export class RemoteGameSession extends EventTarget {
     command: CommandPayload, onResult?: (ok: boolean) => void,
   ): { ok: true } {
     this.connection.command(command, (ok, reason) => {
-      if (!ok) this.commandFailed(reason ?? 'Diplomacy command failed.');
+      if (!ok) {
+        const failure = reason ?? 'Diplomacy command failed.';
+        if (!isConnectionFailure(failure)) this.commandFailed(failure);
+      }
       onResult?.(ok);
     });
     return { ok: true };

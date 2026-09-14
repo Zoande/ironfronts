@@ -25,6 +25,12 @@ describe('map behavior regressions', () => {
     expect(css).toMatch(/\.diagnostics\s*\{[^}]*z-index:\s*50/s);
   });
 
+  it('keeps the transparent full-screen HUD root from blocking canvas input', () => {
+    const css = readFileSync(path.join(root, 'src/ui/game-ui.css'), 'utf8');
+    expect(css).toMatch(/\.ifg\s*\{[^}]*pointer-events:\s*none/s);
+    expect(css).toMatch(/\.ifg\s*>\s*\*\s*\{\s*pointer-events:\s*auto/);
+  });
+
   it('does not expose or upload resource-node map icons', () => {
     const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
     const ui = readFileSync(path.join(root, 'src/ui/game-ui.ts'), 'utf8');
