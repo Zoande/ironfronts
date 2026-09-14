@@ -11,7 +11,7 @@ This began as a prioritized backlog from the live browser playtest. On 2026-09-1
 
 - [x] **Expose Technology in the normal command dock.** The Technology panel and server command already existed, but the dock only enabled Diplomacy, making research effectively unreachable in normal play. Technology is now enabled and linked to the real `research` panel.
 - [x] **Correct stale resource help text.** Stone, metal and oil are no longer described as extraction-only. The current economy produces them through province/resource-building output with engineer boosts.
-- [x] **Make World Inspector access discoverable without making it insecure.** Eligible QA users get a `System → World Inspector` entry. The old Ctrl+D then E shortcut remains useful after unlock.
+- [x] **Make World Inspector access discoverable without making it insecure.** Eligible QA users get a `World Inspector` command-dock button plus a `System → World Inspector` entry. The old Ctrl+D then E shortcut remains useful after unlock.
 - [x] **Put the debug password on the server, not in this public repository.** Enabling QA controls now requires `IRONFRONTS_DEBUG_PASSWORD`; the password is never shipped in source or a browser bundle.
 - [x] **Restore account-specific debug authorization.** Only the authenticated `DimaTest1` account (case-insensitive username match) receives a signed debug entitlement. Deployment gate + entitlement + password are all required before the server exposes debug state or accepts cheat/debug commands.
 
@@ -54,7 +54,7 @@ This began as a prioritized backlog from the live browser playtest. On 2026-09-1
 
 - [ ] **Finish stale-save recovery UX — previously Verified crash, now Code-audited as hardened.** The current server catches restore/invariant failures, archives the incompatible save and starts a fresh runtime instead of crashing. Re-test the original `Invalid resource node` case and add a player-facing explanation that the old save was archived rather than silently presenting a fresh campaign.
 - [x] **Account + password gated debug authorization — Implemented on this branch; browser/deployment verification still required.** Only `DimaTest1` (case-insensitive) receives the signed entitlement. `IRONFRONTS_DEBUG_CONTROLS_ENABLED=true` and a non-empty server-side `IRONFRONTS_DEBUG_PASSWORD` are also required. Ordinary/unauthenticated clients cannot unlock or send debug mutations.
-  - [ ] Deploy to QA with a strong environment password and verify the System-menu unlock, wrong-password response, reconnect behavior, Ctrl+D→E shortcut after unlock, and every cheat/time/weather action.
+  - [ ] Deploy to QA with a strong environment password and verify the command-dock/System-menu unlock, wrong-password response, reconnect behavior, Ctrl+D→E shortcut after unlock, and every cheat/time/weather action.
   - [ ] Confirm production keeps `IRONFRONTS_DEBUG_CONTROLS_ENABLED=false` unless explicitly running an approved QA deployment.
 - [x] **Replace raw validation output on account creation — Code-audited as fixed.** Auth now maps credential validation failures to short field-specific messages instead of returning raw Zod JSON. Recheck visually during the next login pass.
 
