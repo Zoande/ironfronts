@@ -1,6 +1,5 @@
 <!-- Source: https://commons.wikimedia.org/wiki/File:Flag_of_Ethiopia_(1897-1974).svg
      Public domain (PD-old): flag of the Ethiopian Empire. Vendored verbatim for Ironfronts. -->
-<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 384 256">
   <path d="M0 0h384v256H0V0z" fill="#fcdd09"/>
   <path d="M0 170.667h384V256H0v-85.333z" fill="#da121a"/>

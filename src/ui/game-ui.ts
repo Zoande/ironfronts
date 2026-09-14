@@ -96,6 +96,31 @@ const TECHNOLOGY_UI: ReadonlyArray<{
   { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', description: 'Improved armor, engines and guns for tank formations.', unlocks: 'Light and medium tanks' },
 ];
 
+/**
+ * What reaching a given level actually unlocks, mirroring the real gating in
+ * game/production.ts (unit tier = min(tech level, building tier)) and
+ * game/construction.ts (building tier capped by tech level) — kept as a local
+ * mirror rather than importing game-core, matching COUNTRY_PHASE_LABELS above.
+ * Level 1 is the always-available baseline for every branch.
+ */
+function technologyLevelUnlockText(branch: TechnologyBranch, level: number): string {
+  if (level === 1) return 'Baseline — always available.';
+  switch (branch) {
+    case 'infantry':
+      return `Infantry Level ${level} (more health and firepower) — also needs Barracks Tier ${level}.`;
+    case 'resources':
+      return `Engineers Level ${level}, and Tier ${level} fields, quarries, mines and oil pumps.`;
+    case 'training':
+      return `Tier ${level} Barracks, Tank Plant and Ordnance Works.`;
+    case 'hybrid':
+      return level === 8
+        ? 'Armored Car & Artillery Level 8, and the Missile Site (strategic warheads).'
+        : `Armored Car & Artillery Level ${level} — also needs Tank Plant/Ordnance Tier ${level}.`;
+    case 'armored':
+      return `Light & Medium Tank Level ${level} — also needs Tank Plant Tier ${level}.`;
+  }
+}
+
 /** Real, always-available province fields (populated per selection). */
 const PROVINCE_FIELDS = ['Allegiance', 'Terrain', 'Deposits', 'Extraction'] as const;
 type ProvinceFieldKey = (typeof PROVINCE_FIELDS)[number];
@@ -444,6 +469,11 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       node.classList.toggle('is-complete', candidate <= level);
       node.classList.toggle('is-next', candidate === level + 1);
       node.append(el('strong', undefined, String(candidate)), el('small', undefined, candidate === 1 ? 'Available' : `${[0, 0, 6, 10, 16, 24, 32, 40, 48][candidate]}h`));
+      bindTooltip(node, () => ({
+        title: `Level ${candidate}`,
+        description: technologyLevelUnlockText(current.id, candidate),
+        status: candidate <= level ? 'Unlocked' : candidate === level + 1 ? 'Next' : 'Locked',
+      }));
       track.append(node);
     }
     const action = el('div', 'ifg-tech__action');
