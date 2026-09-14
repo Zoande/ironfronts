@@ -346,8 +346,10 @@ export interface StrategicUiState {
   readonly paused: boolean;
   /** Resource-deposit marker overlay toggle (off by default). */
   readonly resourceOverlay: boolean;
-  /** Whether the debug/world-inspector affordances are exposed at all. */
+  /** Whether the debug/world-inspector is currently unlocked on this connection. */
   readonly debugEnabled: boolean;
+  /** Entitled account + deployment gate: show the password unlock entry in System. */
+  readonly debugUnlockAvailable: boolean;
   /** Progression tier — 1, 2, or 3. See game/phase.ts. Not to be confused
    *  with `phase` above (lobby/loading/in-game) — named distinctly for that
    *  reason. */
@@ -391,6 +393,7 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
     paused: false,
     resourceOverlay: false,
     debugEnabled: false,
+    debugUnlockAvailable: false,
     technology: { levels: { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1 } },
     ...overrides,
   };
