@@ -14,6 +14,7 @@ import { buildWaterways } from './world/waterways.mjs';
 import { buildTerrainAwareWaterways } from './world/terrain-aware-waterways.mjs';
 import { fbm } from './world/noise.mjs';
 import { buildVisualRiverField } from './world/visual-rivers.mjs';
+import { alignBordersToRivers } from './world/border-river-alignment.mjs';
 import { carveRiverTerrain, buildTerrainTopology, promoteRiverChannelsToTerrain } from './world/river-overlay-terrain.mjs';
 import { buildBakedTerrainAlbedo, buildNavigationField, buildTerrainNormals } from './world/terrain-precompute.mjs';
 import { fillProvincePolygon, readMaterialJson } from './world/source-data.mjs';
@@ -252,6 +253,17 @@ async function main() {
   for (let index = 0; index < riverMask.length; index += 1) {
     riverMask[index] = preliminaryWaterways.mask[index] > 127 || visualRivers.mask[index] > 127 ? 1 : 0;
   }
+  // Cosmetic only: nudges the *rendered* border line onto a river it already
+  // runs close beside. Never touches provinceIds/heights/terrain, so it
+  // cannot desync border ownership from anything gameplay actually reads.
+  console.log('Aligning land border segments to nearby rivers...');
+  const riverAlignedBorderData = alignBordersToRivers(borderData, riverMask, {
+    idWidth: ID_WIDTH, idHeight: ID_HEIGHT, worldWidth: WORLD_WIDTH, worldHeight: WORLD_HEIGHT,
+  });
+  console.log(`Border alignment: ${riverAlignedBorderData.report.snappedVertices} / ${riverAlignedBorderData.report.totalVertices} vertices nudged toward a river (max ${riverAlignedBorderData.report.maxSnapWorld.toFixed(1)} world units).`);
+  if (process.env.BORDER_ALIGN_DEBUG) {
+    console.log(JSON.stringify(riverAlignedBorderData.report.largestSnaps, null, 2));
+  }
   const bankField = buildBankField(
     provinceIds, ID_WIDTH, ID_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, terrainTopology, riverMask,
   );
@@ -309,7 +321,7 @@ async function main() {
   const signChunks = chunkInstanceRecords(infrastructure.signs);
   const trees = treeChunks.data;
   const buildings = buildingChunks.data;
-  const borderChunks = chunkLineRecords(buildBorders(borderData, heights));
+  const borderChunks = chunkLineRecords(buildBorders(riverAlignedBorderData, heights));
   const borders = borderChunks.data;
   console.log('Precomputing terrain normals, navigation channels, material albedo, and prop occlusion...');
   const terrainNormals = buildTerrainNormals({
