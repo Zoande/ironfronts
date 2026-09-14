@@ -80,6 +80,25 @@ describe('1939 flag resolver', () => {
     }
   });
 
+  it('every vendored SVG decodes as a real image, not a blank swatch', () => {
+    // Regression: a leading `<!-- comment -->` before an `<?xml ?>` declaration,
+    // or a stray BOM anywhere but byte 0, makes Chrome's <img>-decoder silently
+    // reject the file (naturalWidth 0) even though it fetches fine and looks
+    // like valid SVG — file-existence and licence-comment checks above never
+    // caught this. de-1935-1945 (Germany), su-1936-1955, et-empire,
+    // eg-1922-1958 and cn-roc all shipped broken this way.
+    for (const file of flagFiles) {
+      const raw = readFileSync(path.join(flagsDir, file), 'utf8');
+      expect(raw.indexOf('﻿'), `${file}: stray BOM`).toBe(-1);
+      const commentEnd = raw.indexOf('-->');
+      const declarationStart = raw.indexOf('<?xml');
+      if (commentEnd !== -1 && declarationStart !== -1) {
+        expect(declarationStart, `${file}: <?xml declaration must not follow a leading comment`)
+          .toBeLessThan(commentEnd);
+      }
+    }
+  });
+
   it('documents provenance and complete scenario coverage in docs/flags.md', () => {
     const doc = readFileSync(path.join(root, 'docs/flags.md'), 'utf8');
     expect(doc).toMatch(/de-1935-1945/);
