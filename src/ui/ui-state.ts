@@ -167,7 +167,8 @@ export type NavId =
 
 export type SidePanelId = 'diplomacy' | 'research' | 'trade';
 export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
-export type TechnologyCategory = Exclude<TechnologyBranch, 'resourceBuildings'>;
+/** Tabs include future presentation-only services that have no server branch yet. */
+export type TechnologyCategory = Exclude<TechnologyBranch, 'resourceBuildings'> | 'navy' | 'airforce';
 
 export interface TechnologyView {
   readonly levels: Record<TechnologyBranch, number>;

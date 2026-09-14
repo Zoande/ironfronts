@@ -128,6 +128,14 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
   { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', lines: [
     { id: 'armored', technology: 'armored', label: 'Armored Warfare', shortLabel: 'Armor', icon: 'unit-medium-tank', description: 'Improves tank protection, engines and heavy firepower.', unlocks: 'Light and medium tank levels' },
   ] },
+  { id: 'navy', label: 'Navy', icon: 'tech-navy', lines: [
+    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future naval vessels and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
+    { id: 'submarines', label: 'Submarine Service', shortLabel: 'Submarines', icon: 'tech-navy', description: 'Future undersea warfare capabilities.', unlocks: 'Planned naval line', comingSoon: true },
+  ] },
+  { id: 'airforce', label: 'Air Force', icon: 'tech-airforce', lines: [
+    { id: 'fighters', label: 'Fighter Command', shortLabel: 'Fighters', icon: 'tech-airforce', description: 'Future air-superiority aircraft and doctrine.', unlocks: 'Planned air line', comingSoon: true },
+    { id: 'bombers', label: 'Bomber Command', shortLabel: 'Bombers', icon: 'tech-airforce', description: 'Future strategic and tactical strike aircraft.', unlocks: 'Planned air line', comingSoon: true },
+  ] },
 ];
 
 /**
@@ -525,8 +533,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       tab.setAttribute('aria-selected', String(category.id === selectedTechTab));
       tab.classList.toggle('is-active', category.id === selectedTechTab);
       const liveLines = category.lines.filter((line) => line.technology);
-      const categoryLevel = Math.min(...liveLines.map((line) => state.technology.levels[line.technology!]));
-      tab.append(createIcon(category.icon), el('span', undefined, category.label), el('b', undefined, `L${categoryLevel}`));
+      const categoryLevel = liveLines.length ? Math.min(...liveLines.map((line) => state.technology.levels[line.technology!])) : null;
+      tab.append(createIcon(category.icon), el('span', undefined, category.label), el('b', undefined, categoryLevel === null ? 'Soon' : `L${categoryLevel}`));
       tab.onclick = () => {
         selectedTechTab = category.id;
         const first = category.lines.find((line) => line.technology)?.technology;
@@ -541,6 +549,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }));
     const workspace = el('div', 'ifg-tech__workspace');
     const tree = el('div', 'ifg-tech__tree');
+    const futureCategory = current.lines.every((line) => line.comingSoon);
+    tree.classList.toggle('is-future-category', futureCategory);
     const timeline = el('div', 'ifg-tech__timeline');
     timeline.append(el('span', undefined, 'Available technology'));
     for (let level = 1; level <= 8; level += 1) timeline.append(el('b', undefined, `Level ${level}`));
@@ -594,6 +604,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       if (line.comingSoon) row.append(el('div', 'ifg-tech__coming-soon', 'Coming soon'));
       tree.append(row);
     }
+    if (futureCategory) tree.append(el('div', 'ifg-tech__future-veil', `${current.label} technology coming soon`));
 
     const rail = el('aside', 'ifg-tech__rail');
     const researchPanel = el('section', 'ifg-tech__rail-section ifg-tech__research');
@@ -615,6 +626,16 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           el('span', undefined, `<b>Free research slot #${slotIndex + 1}</b><small>Select an available technology</small>`));
       }
       researchPanel.append(slot);
+    }
+
+    if (futureCategory) {
+      const futureDetails = el('section', 'ifg-tech__rail-section ifg-tech__details ifg-tech__future-details');
+      futureDetails.append(el('h3', undefined, `${current.label} development`), createIcon(current.icon),
+        el('strong', undefined, 'Coming soon'), el('p', undefined, 'This service branch is reserved for a future expansion. Its technology, units and costs are not yet active.'));
+      rail.append(researchPanel, futureDetails);
+      workspace.append(tree, rail);
+      techBody.replaceChildren(workspace);
+      return;
     }
 
     const selectedDef = definitionFor(selectedTechnology);

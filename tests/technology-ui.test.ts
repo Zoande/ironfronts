@@ -36,7 +36,7 @@ describe('technology tree presentation', () => {
   it('ships placeholder infantry lines and a wired resource dependency branch', () => {
     expect(ui).toContain("id: 'militia'");
     expect(ui).toContain("id: 'commandos'");
-    expect(ui.match(/comingSoon: true/g)).toHaveLength(2);
+    expect(ui.match(/comingSoon: true/g)).toHaveLength(6);
     expect(ui).toContain("technology: 'resourceBuildings'");
     expect(ui).toContain("el('i', 'ifg-tech__dependency')");
     expect(css).toContain('.ifg-tech__coming-soon');
