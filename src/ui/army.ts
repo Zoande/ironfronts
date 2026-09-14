@@ -303,10 +303,19 @@ export function renderSelectedArmyPanel(
     const attackActive = army.targetingMode === 'attack';
     const retreatActive = army.targetingMode === 'retreat';
     const splitActive = army.targetingMode === 'split';
+    const moveDisabledReason = army.combat === 'engaged'
+      ? 'This formation is currently locked in close combat.'
+      : army.combat === 'retreating'
+        ? 'This formation is withdrawing and cannot receive a new move order.'
+        : /sea|embark|disembark/i.test(army.activity)
+          ? 'This formation is in transit and cannot receive a land move order.'
+          : /reconnect|pending/i.test(army.activity)
+            ? 'Waiting for authoritative confirmation from the game server.'
+            : 'Movement is unavailable in the current state.';
     commands.append(
       command('Move', 'cmd-move', 'move', army.canMove === true, moveActive, {
         description: 'Move this army to a chosen destination in your territory or discovered ground.',
-        disabledReason: 'This formation is currently locked in combat.',
+        disabledReason: moveDisabledReason,
       }),
       command('Attack', 'cmd-attack', 'attack', army.canAttack === true, attackActive, {
         description: 'Advance to contact against a visible hostile force or province.',

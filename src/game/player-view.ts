@@ -175,6 +175,7 @@ export function projectArmyView(
   const fronts = fullyVisible ? (army.battleFrontIds ?? []).flatMap((frontId) => {
     const front = state.battleFronts?.[frontId];
     if (!front) return [];
+    if (!front.sideA.armyIds.includes(army.id) && !front.sideB.armyIds.includes(army.id)) return [];
     const friendly = front.sideA.countryId === army.ownerCountryId ? front.sideA : front.sideB;
     const enemy = friendly === front.sideA ? front.sideB : front.sideA;
     const hp = (ids: readonly string[]): number => ids.reduce(
