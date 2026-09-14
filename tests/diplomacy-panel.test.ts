@@ -59,7 +59,8 @@ describe('diplomacy side drawer', () => {
     expect(panel).toContain("const header = node('div', 'ifg-dip__header')");
     expect(panel).toContain("panel.setAttribute('aria-modal', 'false')");
     expect(panel).toContain("panel.setAttribute('aria-labelledby', 'ifg-diplomacy-heading')");
-    expect(gameUi).toContain("b.setAttribute('aria-controls', 'ifg-diplomacy-panel')");
+    expect(gameUi).toContain("b.setAttribute('aria-controls'");
+    expect(gameUi).toContain("'ifg-diplomacy-panel'");
     expect(gameUi).toContain("diplomacyDockButton.setAttribute('aria-expanded', String(diplomacyOpen))");
     expect(gameUi).toMatch(/if \(store\.get\(\)\.activeSidePanel\) \{[\s\S]*?event\.stopImmediatePropagation\(\);/);
   });

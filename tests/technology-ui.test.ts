@@ -12,6 +12,8 @@ describe('technology tree presentation', () => {
     expect(ui).toContain("el('div', 'ifg-tech__track')");
     expect(ui).toContain('for (let slotIndex = 0; slotIndex < 2; slotIndex += 1)');
     expect(ui).toContain("el('section', 'ifg-tech__rail-section ifg-tech__details')");
+    expect(ui).toContain('technologyLevelUnlockText(branch, candidate)');
+    expect(ui).toContain('bindTooltip(node');
     expect(ui).toContain("for (const resource of ['funds', 'food', 'metal', 'oil'] as const)");
     expect(css).toMatch(/\.ifg-tech__track\s*\{[^}]*grid-template-columns:\s*repeat\(8/s);
   });
