@@ -418,7 +418,7 @@ async function teardownPartialLaunch(): Promise<void> {
   lastAppliedWeather = null;
   debugEnabled = false;
   diagnostics.hidden = true;
-  uiStore.patch({ debugEnabled: false });
+  uiStore.patch({ debugEnabled: false, debugUnlockAvailable: false });
   setDebugHandles(window as unknown as Record<string, unknown>, false, {});
   activeStopQuotes?.();
   activeStopQuotes = null;
@@ -521,9 +521,14 @@ async function startGame(token: number): Promise<void> {
   activeRenderer = renderer;
 
   const syncDebugAccess = (): void => {
+    const newlyUnlocked = !debugEnabled && session.debugEnabled;
     debugEnabled = session.debugEnabled;
     if (!debugEnabled) diagnostics.hidden = true;
-    uiStore.patch({ debugEnabled });
+    if (newlyUnlocked) {
+      diagnostics.hidden = false;
+      uiStore.patch({ paused: false });
+    }
+    uiStore.patch({ debugEnabled, debugUnlockAvailable: session.debugUnlockAvailable });
     setDebugHandles(window as unknown as Record<string, unknown>, debugEnabled, {
       renderer, combatEffects, session,
     });
@@ -537,6 +542,11 @@ async function startGame(token: number): Promise<void> {
   const attemptListener = { signal: attemptEvents.signal } as const;
   launchDisposers.push(() => attemptEvents.abort());
   connection.addEventListener('debug-access', syncDebugAccess, attemptListener);
+  connection.addEventListener('debug-unlock-result', (event) => {
+    const detail = (event as CustomEvent<{ enabled: boolean; message: string }>).detail;
+    pushNotification(detail.enabled ? 'information' : 'warning',
+      detail.enabled ? 'World Inspector unlocked' : 'Debug access denied', detail.message);
+  }, attemptListener);
 
   // The connection reconnects on its own (1s, then every 2.5s) but did so
   // silently — an unstable link just looked like a frozen game. Surface it, and
@@ -689,6 +699,20 @@ async function startGame(token: number): Promise<void> {
     },
     dismissNotification: (id) => removeNotification(id),
     togglePause: (open) => uiStore.patch({ paused: open }),
+    requestDebugAccess: () => {
+      if (session.debugEnabled) {
+        diagnostics.hidden = false;
+        uiStore.patch({ paused: false });
+        return;
+      }
+      if (!session.debugUnlockAvailable) {
+        pushNotification('warning', 'Debug unavailable', 'This account is not authorized for the World Inspector.');
+        return;
+      }
+      const password = window.prompt('World Inspector password');
+      if (!password) return;
+      session.unlockDebug(password);
+    },
     returnToMenu: () => {
       void (async () => {
         const confirmed = await showGameConfirmation(

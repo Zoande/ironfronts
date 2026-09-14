@@ -39,6 +39,7 @@ export interface GameUiActions {
   dismissNotification(id: string): void;
   togglePause(open: boolean): void;
   returnToMenu(): void;
+  requestDebugAccess(): void;
   /** Arm map-click targeting for a strategic strike (the Warheads chip / N key). */
   armStrike?: () => void;
   focusSelected?: () => void;
@@ -319,9 +320,9 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     money: 'Funds war spending; passive income from owned territory.',
     manpower: 'Fuels recruitment; passive income from population.',
     food: 'Feeds your population; passive income from territory.',
-    stone: 'Builds structures; only while a stack extracts a deposit.',
-    metal: 'Arms production; only while a stack extracts a deposit.',
-    oil: 'Fuels vehicles; only while a stack extracts a deposit.',
+    stone: 'Builds structures; produced by quarries and boosted by assigned engineers.',
+    metal: 'Arms production; produced by mines and boosted by assigned engineers.',
+    oil: 'Fuels vehicles; produced by oil pumps and boosted by assigned engineers.',
     warheads: 'Strike ordnance; accrues from Ordnance Workshops/Missile Sites.',
   };
 
@@ -372,7 +373,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   for (const section of DOCK_SECTIONS) {
     const b = el('button', 'ifg-dock__btn');
     b.type = 'button';
-    const available = section.id === 'diplomacy';
+    const available = section.id === 'diplomacy' || section.id === 'research';
     b.disabled = !available;
     b.dataset.nav = section.id;
     b.title = `${section.label} — not available yet`;
@@ -380,7 +381,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (available) {
       b.title = section.label;
       b.setAttribute('aria-label', section.label);
-      b.setAttribute('aria-controls', 'ifg-diplomacy-panel');
+      if (section.id === 'diplomacy') b.setAttribute('aria-controls', 'ifg-diplomacy-panel');
+      if (section.id === 'research') b.setAttribute('aria-controls', 'ifg-technology-panel');
       b.setAttribute('aria-expanded', 'false');
     }
     b.append(createIcon(section.icon), el('span', 'ifg-dock__tip', section.label));
@@ -388,6 +390,15 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     dockButtons.set(section.id, b);
     dockMore.append(b);
   }
+  const debugDockButton = el('button', 'ifg-dock__btn');
+  debugDockButton.type = 'button';
+  debugDockButton.hidden = true;
+  debugDockButton.title = 'World Inspector';
+  debugDockButton.setAttribute('aria-label', 'World Inspector');
+  debugDockButton.append(createIcon('system'), el('span', 'ifg-dock__tip', 'World Inspector'));
+  debugDockButton.addEventListener('click', () => actions.requestDebugAccess());
+  dockMore.append(debugDockButton);
+
   expandBtn.addEventListener('click', () => {
     const open = dockMore.hidden;
     dockMore.hidden = !open;
@@ -410,6 +421,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   // ---------------- technology: one active no-cost project ----------------
   const technologyPanel = el('section', 'ifg-tech');
   technologyPanel.hidden = true;
+  technologyPanel.id = 'ifg-technology-panel';
   technologyPanel.setAttribute('role', 'dialog');
   technologyPanel.setAttribute('aria-modal', 'false');
   technologyPanel.setAttribute('aria-label', 'Technology');
@@ -782,6 +794,15 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     row.append(b, el('small', 'ifg-overlay__link-reason', reason));
     secondary.append(row);
   }
+  const debugRow = el('div', 'ifg-overlay__link-row');
+  debugRow.hidden = true;
+  const debugButton = el('button', 'ifg-overlay__link', 'Unlock World Inspector');
+  debugButton.type = 'button';
+  const debugReason = el('small', 'ifg-overlay__link-reason', 'Restricted QA controls.');
+  debugButton.addEventListener('click', () => actions.requestDebugAccess());
+  debugRow.append(debugButton, debugReason);
+  secondary.append(debugRow);
+
   const diagLine = el('p', 'ifg-overlay__diag', '');
   overlayCard.append(resumeButton, qualityGroup, secondary, diagLine);
   overlay.append(overlayCard);
@@ -1191,6 +1212,13 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     // This overlay only blocks local input; the authoritative simulation continues.
     overlay.hidden = !state.paused;
+    const debugVisible = state.debugUnlockAvailable || state.debugEnabled;
+    debugRow.hidden = !debugVisible;
+    debugDockButton.hidden = !debugVisible;
+    debugButton.textContent = state.debugEnabled ? 'Open World Inspector' : 'Unlock World Inspector';
+    debugReason.textContent = state.debugEnabled
+      ? 'QA controls are unlocked for this session.'
+      : 'Restricted QA controls — password required.';
     for (const [level, button] of qualityButtons) {
       const active = level === state.quality;
       button.classList.toggle('is-selected', active);

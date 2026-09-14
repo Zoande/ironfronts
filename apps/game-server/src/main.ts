@@ -137,6 +137,7 @@ const gateway: GameplayGateway = new GameplayGateway({
   clientOrigin: config.clientOrigin,
   ticketSecret: config.ticketSecret,
   debugControlsEnabled: config.debugControlsEnabled,
+  debugPassword: config.debugPassword,
   world: { version: loaded.version, hash: loaded.hash, artifactHashes: loaded.artifactHashes, assetBaseUrl: config.worldPublicUrl },
   clock: gameClock,
   revision: () => publisher.revision,

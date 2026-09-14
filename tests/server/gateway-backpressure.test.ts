@@ -9,7 +9,7 @@ describe('gameplay gateway backpressure', () => {
     const server = createServer();
     const gateway = new GameplayGateway({
       server, runtime: {} as never, clientOrigin: 'http://client', ticketSecret: 'x'.repeat(32),
-      debugControlsEnabled: false,
+      debugControlsEnabled: false, debugPassword: '',
       world: { version: '1', hash: 'a'.repeat(64), assetBaseUrl: 'http://world', artifactHashes: {} },
       clock: {} as never, revision: () => 0, publishNow: vi.fn(), beforeDebugChange: vi.fn(),
       saveGameInBackground: vi.fn(), devSimSpeed: { get: () => 1, set: vi.fn(), enabled: false }, log: vi.fn(),
@@ -17,7 +17,7 @@ describe('gameplay gateway backpressure', () => {
         lastPumpSteps: 1, lastPumpMilliseconds: 0, overloaded: false }) },
     });
     const socket = { readyState: WebSocket.OPEN, bufferedAmount: 2_000_001, close: vi.fn(), send: vi.fn() };
-    const connection = { socket, accountId: 'a', countryId: 1, debugEnabled: false, projection: {} as never, revision: 0 } as unknown as GameplayConnection;
+    const connection = { socket, accountId: 'a', countryId: 1, debugEntitled: false, debugEnabled: false, projection: {} as never, revision: 0 } as unknown as GameplayConnection;
     expect(gateway.send(connection, { type: 'error', code: 'test', message: 'test' })).toBe(false);
     expect(socket.close).toHaveBeenCalledWith(1013, 'Resynchronize slow connection');
     expect(socket.send).not.toHaveBeenCalled();

@@ -8,6 +8,7 @@ import { signGameTicket } from '@ironfronts/protocol/ticket';
 import { config } from './config';
 import { AuthStore, type Account } from './auth-store';
 import { RateLimiter } from './rate-limit';
+import { isDebugEntitledUsername } from './debug-entitlement';
 
 await mkdir(path.dirname(config.authDatabasePath), { recursive: true });
 const store = new AuthStore(config.authDatabasePath);
@@ -161,7 +162,8 @@ const server = createServer(async (request, response) => {
       const assigned = await assignment(account.id);
       if (!assigned) { sendJson(response, 409, { error: 'Choose a country before connecting.' }); return; }
       const ticket = signGameTicket({
-        accountId: account.id, gameId: assigned.gameId, countryId: assigned.countryId,
+        accountId: account.id, debugEntitled: isDebugEntitledUsername(account.username),
+        gameId: assigned.gameId, countryId: assigned.countryId,
         audience: 'game-server', protocolVersion: PROTOCOL_VERSION,
         expiresAt: Date.now() + 30_000, nonce: randomUUID(),
       }, config.ticketSecret);

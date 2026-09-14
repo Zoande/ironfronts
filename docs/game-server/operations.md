@@ -34,7 +34,8 @@ The root `npm run check` covers every workspace, architecture checks, script lin
 | `DATA_DIRECTORY` | `data` | Default state directory when `GAME_DATA_PATH` is absent. |
 | `TICKET_SECRET` | local development value | HMAC secret used to verify gameplay tickets. Required to differ from the fallback in production. Must match the issuer. |
 | `INTERNAL_SERVICE_SECRET` | local development value | Bearer secret protecting `/internal/v2/*`. Required to differ from the fallback in production. Must match callers. |
-| `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Explicit deployment gate for hidden debug controls and cheat commands. Authenticated clients open the inspector with Ctrl+D+E. |
+| `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Deployment gate for debug controls. Access additionally requires the signed `DimaTest1` entitlement and a successful password unlock. |
+| `IRONFRONTS_DEBUG_PASSWORD` | none | Required whenever debug controls are enabled. Kept server-side; unlock from System → World Inspector. |
 | `NODE_ENV` | unset | When equal to `production`, startup rejects either fallback secret. |
 
 Paths are resolved against `process.cwd()`. Start the process from the repository root unless explicit absolute paths are supplied.
@@ -50,6 +51,8 @@ WORLD_DIRECTORY=/srv/ironfronts/world-at-war-2
 GAME_DATA_PATH=/var/lib/ironfronts/game.json
 TICKET_SECRET=replace-with-a-long-random-shared-secret
 INTERNAL_SERVICE_SECRET=replace-with-a-different-long-random-secret
+IRONFRONTS_DEBUG_CONTROLS_ENABLED=false
+# IRONFRONTS_DEBUG_PASSWORD=only-set-on-approved-qa-deployments
 ```
 
 ## Network exposure
@@ -100,7 +103,7 @@ Transport validation failures are sent to the relevant socket and are not curren
 
 The process is single-threaded. Simulation, projection construction, JSON serialization, HTTP, and WebSocket callbacks share the Node event loop. Projection work is deduplicated by country per publish pass, but all connected sockets and all visible state still affect cost.
 
-There is no offline catch-up. When the process stops, simulation ticks, game-time economy, movement, and combat cooldowns stop. The persisted civil start epoch is retained, but it does not advance gameplay while offline.
+Offline downtime is replayed once at normal 1× simulation time when the server restores a compatible save. Economy, movement, production, construction, research and combat therefore catch up through the same authoritative tick path; pending presentation/event queues are cleared after catch-up so clients do not receive a burst of stale completion events.
 
 ## Graceful shutdown
 
