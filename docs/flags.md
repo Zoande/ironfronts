@@ -16,6 +16,11 @@ The game partitions the 1939 world into 200 selectable countries. Only some are 
 | Gameplay subdivision | Flag of its historical sovereign or administering power |
 | Unknown input (not a country in this scenario) | Colour standard |
 
+**Deliberate exception: Germany.** Every other sovereign belligerent gets its
+1939-era flag, but Germany maps to `de.svg` — the modern black-red-gold
+flag-icons flag, not the period (swastika) one — since displaying the
+historical Nazi flag as ordinary in-game UI chrome serves no purpose here.
+
 ## Vendored period flags
 
 All files below are in the **public domain** (PD-old: pre-1929 designs and/or
@@ -25,7 +30,6 @@ the file. Retrieved 2026-08-30 via `commons.wikimedia.org/wiki/Special:FilePath/
 
 | File | Entity | Design / era | Commons source |
 |---|---|---|---|
-| `de-1935-1945.svg` | Germany | National flag 1935–1945 (red field, white disc, black swastika) | `File:Flag of Germany (1935–1945).svg` |
 | `it-1861-1946.svg` | Italy, Libya | Kingdom of Italy tricolour with Savoy arms | `File:Flag of Italy (1861–1946).svg` |
 | `su-1936-1955.svg` | (Soviet-territory entities, if mapped) | USSR state flag 1936–1955 | `File:Flag of the Soviet Union (1936–1955).svg` |
 | `gr-1935-1970.svg` | Greece | Royalist land flag (blue field, white cross), restored 1935 | `File:Flag of Greece (1822–1978).svg` |
