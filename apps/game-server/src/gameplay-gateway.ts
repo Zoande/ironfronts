@@ -1,6 +1,7 @@
 /** Gameplay WebSocket transport: upgrades, authentication, commands, and connections. */
 
 import type { Server as HttpServer } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import {
   GAME_ID, GAME_VERSION, PROTOCOL_VERSION, clientMessageSchema,
@@ -21,11 +22,18 @@ function requestedMessageType(value: unknown): string | null {
   return typeof value.type === 'string' ? value.type : null;
 }
 
+function passwordMatches(supplied: string, expected: string): boolean {
+  const a = Buffer.from(supplied, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export interface GameplayConnection {
   readonly socket: WebSocket;
   readonly accountId: string;
   readonly countryId: number;
-  readonly debugEnabled: boolean;
+  readonly debugEntitled: boolean;
+  debugEnabled: boolean;
   projection: PlayerProjection;
   revision: number;
 }
@@ -35,8 +43,9 @@ export interface GameplayGatewayOptions {
   readonly runtime: GameRuntime;
   readonly clientOrigin: string;
   readonly ticketSecret: string;
-  /** Explicit deployment gate. Debug access is intentionally account-agnostic. */
+  /** Deployment gate; a signed account entitlement and password are also required. */
   readonly debugControlsEnabled: boolean;
+  readonly debugPassword: string;
   readonly world: WorldDescriptor;
   readonly clock: AuthoritativeGameClock;
   readonly revision: () => number;
@@ -127,7 +136,7 @@ export class GameplayGateway {
       try {
         const raw: unknown = JSON.parse(data.toString());
         const requestedType = requestedMessageType(raw);
-        if (!connection && requestedType && DEBUG_MESSAGE_TYPES.has(requestedType)) {
+        if (!connection && requestedType && (requestedType === 'devUnlockDebug' || DEBUG_MESSAGE_TYPES.has(requestedType))) {
           this.sendSocket(socket, {
             type: 'error', code: 'authentication_required',
             message: 'Authenticate before using the game connection.',
@@ -154,14 +163,15 @@ export class GameplayGateway {
             throw new Error('Ticket does not match the authoritative seat.');
           }
           clearTimeout(authenticationTimeout);
-          const debugEnabled = this.options.debugControlsEnabled;
+          const debugEntitled = this.options.debugControlsEnabled && claims.debugEntitled === true;
+          const debugEnabled = false;
           const revision = this.options.revision();
           const projection = this.options.runtime.projection(
-            claims.countryId, this.options.devSimSpeed.get(), debugEnabled,
+            claims.countryId, this.options.devSimSpeed.get(), false,
           );
           connection = {
-            socket, accountId: claims.accountId, countryId: claims.countryId, debugEnabled,
-            projection, revision,
+            socket, accountId: claims.accountId, countryId: claims.countryId,
+            debugEntitled, debugEnabled, projection, revision,
           };
           this.connections.add(connection);
           this.sendSocket(socket, {
@@ -174,6 +184,7 @@ export class GameplayGateway {
             world: this.options.world,
             countryId: claims.countryId,
             debugEnabled,
+            debugUnlockAvailable: debugEntitled,
           });
           this.sendSocket(socket, {
             type: 'baseline', revision, state: projection,
@@ -192,6 +203,35 @@ export class GameplayGateway {
         }
         if (message.type === 'ping') {
           this.sendSocket(socket, { type: 'pong', sentAt: message.sentAt, serverEpochMs: Date.now() }); return;
+        }
+        if (message.type === 'devUnlockDebug') {
+          if (!connection.debugEntitled) {
+            this.sendSocket(socket, {
+              type: 'error', code: 'unauthorized_debug',
+              message: 'This account is not entitled to debug controls.',
+            });
+            return;
+          }
+          if (!passwordMatches(message.password, this.options.debugPassword)) {
+            this.options.log('warn', 'debug_unlock_failed', { accountId: connection.accountId, countryId: connection.countryId });
+            this.send(connection, { type: 'devDebugAccess', enabled: false, message: 'Incorrect debug password.' });
+            return;
+          }
+          if (!connection.debugEnabled) {
+            connection.debugEnabled = true;
+            connection.revision = this.options.revision();
+            connection.projection = this.options.runtime.projection(
+              connection.countryId, this.options.devSimSpeed.get(), true,
+            );
+            this.send(connection, {
+              type: 'baseline', revision: connection.revision, state: connection.projection,
+              catalogs: this.options.runtime.catalogs, clock: this.options.clock.snapshot(),
+            });
+            this.options.log('info', 'debug_unlocked', { accountId: connection.accountId, countryId: connection.countryId });
+          }
+          this.send(connection, { type: 'devDebugAccess', enabled: true, message: 'World Inspector unlocked.' });
+          this.sendDebugState(connection);
+          return;
         }
         if (message.type === 'devSetSimSpeed' || message.type === 'devSetClock' || message.type === 'devLinkClockTimezone') {
           if (!connection.debugEnabled) {
