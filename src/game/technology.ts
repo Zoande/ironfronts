@@ -1,7 +1,8 @@
 /** Country technology progression: one free, time-based project at a time. */
 import type { CommandResult } from './commands/types';
-import type { CountryState, TechnologyBranch, TechnologyLevels } from './game-state';
+import type { CountryState, GameState, TechnologyBranch, TechnologyLevels } from './game-state';
 import type { BuildingId, ResourceBuildingId } from './units/unit-types';
+import { UNIT_TYPE_BY_ID } from './units/unit-catalog';
 
 export const TECHNOLOGY_BRANCHES = ['infantry', 'resources', 'training', 'hybrid', 'armored'] as const;
 export const TECHNOLOGY_MAX_LEVEL = 8;
@@ -19,6 +20,57 @@ export const TECHNOLOGY_HOURS_BY_LEVEL = [0, 0, 6, 10, 16, 24, 32, 40, 48] as co
 
 export function initialTechnologyLevels(): TechnologyLevels {
   return { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1 };
+}
+
+/**
+ * Migration floor for saves created before Technology existed.
+ *
+ * Existing content is treated as evidence of prerequisites the country had
+ * already satisfied: military/resource building tiers preserve their
+ * corresponding technology floor, leveled units preserve their branch level,
+ * and a pre-technology Missile Site preserves today's Hybrid VIII prerequisite.
+ *
+ * This is only used when a save has no technology ledger at all; normal saves
+ * are never silently raised on load.
+ */
+export function inferLegacyTechnologyLevels(state: GameState, countryId: number): TechnologyLevels {
+  const levels = initialTechnologyLevels();
+
+  for (const [provinceIdText, buildings] of Object.entries(state.provinceBuildings)) {
+    const provinceId = Number(provinceIdText);
+    if (state.provinceOwners[provinceId] !== countryId) continue;
+    levels.training = Math.max(
+      levels.training,
+      buildings.barracks,
+      buildings.tankPlant,
+      buildings.ordnance,
+      buildings.missileSite,
+    );
+    if (buildings.missileSite > 0) levels.hybrid = TECHNOLOGY_MAX_LEVEL;
+  }
+
+  for (const [provinceIdText, economy] of Object.entries(state.provinceEconomies ?? {})) {
+    const provinceId = Number(provinceIdText);
+    if (state.provinceOwners[provinceId] !== countryId) continue;
+    levels.resources = Math.max(
+      levels.resources,
+      economy.resourceBuildings.fields,
+      economy.resourceBuildings.quarry,
+      economy.resourceBuildings.mine,
+      economy.resourceBuildings.oilPump,
+    );
+  }
+
+  for (const army of Object.values(state.armies)) {
+    if (army.ownerCountryId !== countryId) continue;
+    for (const group of army.units) {
+      const definition = UNIT_TYPE_BY_ID.get(group.typeId);
+      if (!definition) continue;
+      levels[definition.technology] = Math.max(levels[definition.technology], definition.level);
+    }
+  }
+
+  return levels;
 }
 
 export function technologyLevels(country: CountryState | undefined): TechnologyLevels {
