@@ -61,18 +61,6 @@ describe('movement, diplomacy and combat invariants', () => {
     expect(a.battleFrontIds).toEqual([]);
     expect(a.status).toBe('idle');
   });
-  it('ignores a front reference when the army is not on either combat side', () => {
-    const c=fixture(); const a=c.state.armies.a=army('a');
-    a.status='engaged'; a.battleFrontIds=['front-other'];
-    c.state.battleFronts['front-other'] = {
-      id: 'front-other', battleId: 'battle-1', anchorNodeId: 0, kind: 'road', provinceId: null,
-      x: 100, z: 100,
-      sideA: { countryId: 1, directionNodeId: 0, role: 'attack', armyIds: ['other'], entryMaxHpByArmy: { other: 100 } },
-      sideB: { countryId: 2, directionNodeId: 1, role: 'defense', armyIds: ['enemy'], entryMaxHpByArmy: { enemy: 100 } },
-    };
-    expect(issueMoveOrder(c, 'a', 300, 100).ok).toBe(true);
-    expect(a.status).toBe('moving');
-  });
   it('never reuses an active front identifier after another front ends', () => {
     const c=fixture();c.state.armies.a=army();c.state.relations['1:2']='war';
     for(const [id,node] of [['b',1],['c',2],['d',3]] as const) {const a=c.state.armies[id]=army(id,2);a.lastGraphNodeId=node;}

@@ -290,7 +290,7 @@
   opacity: 0;
   transform: translateX(-4px);
   transition: opacity 0.1s ease, transform 0.1s ease;
-  pointer-events: auto;
+  pointer-events: none;
 }
 .ifg-dock__btn:hover .ifg-dock__tip { opacity: 1; transform: translateX(0); }
 
@@ -1796,7 +1796,7 @@
   background: rgba(16, 24, 24, 0.94);
   box-shadow: 0 10px 34px rgba(4, 12, 12, 0.4);
   color: #d9d2be;
-  pointer-events: auto;
+  pointer-events: none;
   overflow-wrap: anywhere;
 }
 .ifg-tip.is-blocked { border-left-color: #c66; }
@@ -1937,7 +1937,8 @@
   .ifg-army-panel__activity-value,
   .ifg-army-panel__stat-meta > span,
   .ifg-battle-side,
-  .ifg-dip__summary-stat
+  .ifg-dip__summary-stat,
+  .ifg-tip
 ) {
   background-color: transparent !important;
   background-image: none !important;

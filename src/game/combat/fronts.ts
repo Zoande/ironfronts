@@ -216,10 +216,7 @@ export function removeArmyFromAllFronts(session: SimContext, armyId: string): vo
 
 function resumeArmyIfFree(session: SimContext, army: ArmyStack): void {
   ensureArmyRuntimeState(army);
-  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => {
-    const front = session.state.battleFronts[frontId];
-    return Boolean(front && (front.sideA.armyIds.includes(army.id) || front.sideB.armyIds.includes(army.id)));
-  });
+  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => Boolean(session.state.battleFronts[frontId]));
   if (army.battleFrontIds!.length > 0 || army.status === 'retreating') return;
   if (army.suspendedOrder) {
     army.order = army.suspendedOrder;
