@@ -105,7 +105,7 @@ const clock = z.object({
 export const serverMessageSchema: z.ZodType<ServerMessage> = z.discriminatedUnion('type', [
   z.object({ type: z.literal('hello'), gameId: z.string(), gameVersion: z.string(), protocolVersion: z.literal(4), capabilities: z.array(z.string()),
     world: z.object({ version: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/), assetBaseUrl: z.url(),
-      artifactHashes: record(z.string().regex(/^[a-f0-9]{64}$/)) }), countryId: integer, debugEnabled: z.boolean() }),
+      artifactHashes: record(z.string().regex(/^[a-f0-9]{64}$/)) }), countryId: integer, debugEnabled: z.boolean(), debugUnlockAvailable: z.boolean().optional() }),
   z.object({ type: z.literal('baseline'), revision: integer, state: projectionSchema, catalogs, clock }),
   z.object({ type: z.literal('delta'), fromRevision: integer, revision: integer, delta, events: z.array(event) }),
   z.object({ type: z.literal('clockSync'), clock }),
@@ -113,6 +113,7 @@ export const serverMessageSchema: z.ZodType<ServerMessage> = z.discriminatedUnio
   z.object({ type: z.literal('event'), event }),
   z.object({ type: z.literal('pong'), sentAt: finite, serverEpochMs: finite }),
   z.object({ type: z.literal('error'), code: z.string(), message: z.string(), retryable: z.boolean().optional() }),
+  z.object({ type: z.literal('devDebugAccess'), enabled: z.boolean(), message: z.string() }),
   z.object({ type: z.literal('devSimSpeed'), multiplier: finite.min(1).max(10_000), devControlsEnabled: z.boolean() }),
   z.object({ type: z.literal('devDiagnostics'), requestedSpeed: finite.min(1).max(10_000), effectiveSpeed: nonnegative,
     pendingSimulationSeconds: nonnegative, lastPumpSteps: integer, lastPumpMilliseconds: nonnegative,
