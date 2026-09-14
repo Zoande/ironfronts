@@ -13,10 +13,29 @@ import {
 import { GamePersistence, type PersistedGame } from './persistence';
 import { createInternalApiServer } from './internal-api';
 import { GameplayGateway } from './gameplay-gateway';
+import { DiagnosticLog, type DiagnosticLevel } from './diagnostic-log';
 
+const diagnosticLog = new DiagnosticLog(config.diagnosticsPath);
 function log(level: 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown> = {}): void {
-  console.log(JSON.stringify({ timestamp: new Date().toISOString(), level, service: 'game-server', event, ...fields }));
+  const record = { ...fields, timestamp: new Date().toISOString(), level, service: 'game-server', event };
+  console.log(JSON.stringify(record));
+  diagnosticLog.write(level, 'game-server', event, fields);
 }
+function clientLog(level: DiagnosticLevel, event: string, fields: Record<string, unknown> = {}): void {
+  if (level !== 'debug') console.log(JSON.stringify({
+    ...fields, timestamp: new Date().toISOString(), level, service: 'browser', event,
+  }));
+  diagnosticLog.write(level, 'browser', event, fields);
+}
+
+process.on('uncaughtExceptionMonitor', (error, origin) => log('error', 'uncaught_exception', {
+  origin, message: error.message, stack: error.stack ?? null,
+}));
+process.on('unhandledRejection', (reason) => log('error', 'unhandled_rejection', {
+  message: reason instanceof Error ? reason.message : String(reason),
+  stack: reason instanceof Error ? reason.stack ?? null : null,
+}));
+log('info', 'diagnostics_started', { path: config.diagnosticsPath, pid: process.pid, node: process.version });
 
 const loaded = await loadWorld(config.worldDirectory);
 const gamePersistence = new GamePersistence(config.gameDataPath);
@@ -141,7 +160,7 @@ const gateway: GameplayGateway = new GameplayGateway({
   clock: gameClock,
   revision: () => publisher.revision,
   saveGameInBackground,
-  publishNow: () => publisher.publish(),
+  publishNow: publishProjection,
   beforeDebugChange: pumpSimulation,
   devSimSpeed: { get: () => simSpeedMultiplier, set: setDevSimSpeed, enabled: devControlsEnabled },
   devDiagnostics: { get: () => ({
@@ -150,10 +169,23 @@ const gateway: GameplayGateway = new GameplayGateway({
     overloaded: scheduler.pendingSeconds > 1,
   }) },
   log,
+  clientLog,
 });
 
 const publisher: ProjectionPublisher = new ProjectionPublisher(runtime, () => gateway.connections,
   (connection, message) => gateway.send(connection, message), () => simSpeedMultiplier);
+let lastPublishMilliseconds = 0;
+let maximumPublishMilliseconds = 0;
+function publishProjection(): void {
+  const started = performance.now();
+  publisher.publish();
+  lastPublishMilliseconds = performance.now() - started;
+  maximumPublishMilliseconds = Math.max(maximumPublishMilliseconds, lastPublishMilliseconds);
+  if (lastPublishMilliseconds >= 250) log('warn', 'slow_projection_publish', {
+    milliseconds: lastPublishMilliseconds, revision: publisher.revision,
+    connections: gateway.connections.size,
+  });
+}
 const simulationTimer = setInterval(
   pumpSimulation,
   SIMULATION_INTERVAL_MS,
@@ -165,13 +197,35 @@ const clockSyncTimer = setInterval(() => {
   const clock = gameClock.snapshot();
   gateway.broadcast({ type: 'clockSync', clock });
 }, CLOCK_SYNC_INTERVAL_MS);
-const publishTimer = setInterval(() => publisher.publish(), 250);
+const publishTimer = setInterval(publishProjection, 250);
 const weatherTimer = setInterval(() => {
   if (!runtime.updateWeather()) return;
-  publisher.publish();
+  publishProjection();
   saveGameInBackground();
 }, 60_000);
 const debugDiagnosticsTimer = setInterval(() => gateway.broadcastDebugState(), 1_000);
+let previousHealthAt = performance.now();
+const healthTimer = setInterval(() => {
+  const now = performance.now();
+  const intervalMilliseconds = now - previousHealthAt;
+  previousHealthAt = now;
+  const memory = process.memoryUsage();
+  log(intervalMilliseconds >= 7_500 || lastPumpMilliseconds >= 250 ? 'warn' : 'info', 'server_health', {
+    eventLoopDelayMilliseconds: Math.max(0, intervalMilliseconds - 5_000),
+    simulationSpeed: simSpeedMultiplier,
+    effectiveSpeed,
+    pendingSimulationSeconds: scheduler.pendingSeconds,
+    lastPumpSteps,
+    lastPumpMilliseconds,
+    lastPublishMilliseconds,
+    maximumPublishMilliseconds,
+    revision: publisher.revision,
+    connections: gateway.connections.size,
+    rssBytes: memory.rss,
+    heapUsedBytes: memory.heapUsed,
+  });
+  maximumPublishMilliseconds = 0;
+}, 5_000);
 
 server.listen(config.port, '127.0.0.1', () => log('info', 'listening', { port: config.port, gameId: GAME_ID }));
 
@@ -186,8 +240,9 @@ function shutdown(signal: string): void {
   clearInterval(publishTimer);
   clearInterval(weatherTimer);
   clearInterval(debugDiagnosticsTimer);
+  clearInterval(healthTimer);
   gateway.closeAll();
-  void saveGame().then(() => gamePersistence.flush()).then(() => {
+  void saveGame().then(() => gamePersistence.flush()).then(() => diagnosticLog.flush()).then(() => {
     server.close(() => process.exit(0));
   }).catch((error) => {
     log('error', 'final_game_save_failed', { message: error instanceof Error ? error.message : String(error) });

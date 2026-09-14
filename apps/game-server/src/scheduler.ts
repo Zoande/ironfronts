@@ -9,7 +9,10 @@ export class SimulationScheduler {
   constructor(
     private readonly step: (hours: number) => void,
     private readonly now: () => number = () => performance.now(),
-    private readonly maxStepsPerPump = 100,
+    // One bounded integration slice per timer turn keeps the HTTP/WebSocket
+    // event loop responsive under extreme fast-forward. Any remainder stays
+    // as debt and is processed by later turns instead of monopolising Node.
+    private readonly maxStepsPerPump = 1,
   ) { this.previousMs = now(); }
 
   pump(speed: number): number {

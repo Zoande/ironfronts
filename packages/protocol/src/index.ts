@@ -66,6 +66,15 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   // never wrapped in the commandId-acked command envelope above.
   z.object({ type: z.literal('devSetClock'), epochMs: z.number().finite().min(-8.64e15).max(8.64e15) }),
   z.object({ type: z.literal('ping'), sentAt: z.number().finite() }),
+  z.object({
+    type: z.literal('clientDiagnostic'),
+    level: z.enum(['debug', 'info', 'warn', 'error']),
+    event: z.string().min(1).max(80),
+    clientEpochMs: z.number().finite(),
+    fields: z.record(z.string().max(80), z.union([
+      z.string().max(1_000), z.number().finite(), z.boolean(), z.null(),
+    ])).optional(),
+  }),
   z.object({ type: z.literal('devSetSimSpeed'), multiplier: z.number().finite().min(1).max(10_000) }),
   z.object({ type: z.literal('devLinkClockTimezone'), timeZone: z.string().min(1).max(100) }),
   z.object({ type: z.literal('devSetWeather'), mode: z.enum(['automatic', 'forced-clear', 'forced-rain']) }),

@@ -91,7 +91,7 @@ describe('authoritative command lifecycle', () => {
     expect(session.pendingForArmy('a')).toBe(true);
   });
 
-  it('fails an unacknowledged command after five seconds', () => {
+  it('fails an unacknowledged command after the network-stall grace period', () => {
     vi.useFakeTimers();
     vi.stubGlobal('window', globalThis);
     vi.stubGlobal('WebSocket', { OPEN: 1 });
@@ -101,7 +101,7 @@ describe('authoritative command lifecycle', () => {
     Object.assign(connection, { lastMessageMs: performance.now() });
     const settled = vi.fn();
     connection.command({ type: 'stopArmy', armyId: 'a' }, settled);
-    vi.advanceTimersByTime(4_999);
+    vi.advanceTimersByTime(14_999);
     expect(settled).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(settled).toHaveBeenCalledWith(false, 'Command outcome unknown; synchronizing with the server.');

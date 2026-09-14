@@ -13,9 +13,9 @@ class Socket extends EventTarget {
 }
 const state = () => ({ simulationTick:0,viewerCountryId:1,startCamera:{x:0,z:0,distance:1},countries:{1:{id:1,name:'A',color:'#fff',controller:'player',alive:true}},
   provinceOwners:{},provinceBuildings:{},provinceActions:{},productionQueues:{},constructionQueues:{},rallyPoints:{},armies:{},resourceNodes:{},ownCountry:null,relations:{} });
-function handshake(socket: Socket, revision=0, debugEnabled=false) {
+function handshake(socket: Socket, revision=0, debugEnabled=false, capabilities: string[] = []) {
   socket.open();
-  socket.message({type:'hello',gameId:'world-at-war-2',gameVersion:'world-at-war@4',protocolVersion:4,capabilities:[],
+  socket.message({type:'hello',gameId:'world-at-war-2',gameVersion:'world-at-war@4',protocolVersion:4,capabilities,
     world:{version:'12',hash:'a'.repeat(64),assetBaseUrl:'http://world',artifactHashes:{}},countryId:1,debugEnabled});
   socket.message({type:'baseline',revision,state:state(),catalogs:{units:[],buildings:[]},clock:{gameStartedAtEpochMs:0,gameEpochMs:0,serverEpochMs:0,speed:1,generation:0,utcOffsetMinutes:120}});
 }
@@ -94,11 +94,22 @@ describe('connection handshake cleanup',()=>{
     const opened=GameConnection.open(); await Promise.resolve(); handshake(Socket.instances[0],2);
     const connection=await opened;
     const result=vi.fn();
-    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(6_000);
     connection.command({type:'stopArmy',armyId:'a'},result);
     expect(Socket.instances[0].sent.some((message) =>
       message && (message as {type?:string}).type === 'command')).toBe(true);
     expect(result).not.toHaveBeenCalled();
+    connection.close();
+  });
+  it('uploads queued and live diagnostics only when the server advertises support',async()=>{
+    const opened=GameConnection.open(); await Promise.resolve();
+    handshake(Socket.instances[0],2,false,['client-diagnostics']);
+    const connection=await opened;
+    connection.reportDiagnostic('warn','test_browser_warning',{revision:2});
+    const diagnostics=Socket.instances[0].sent.filter((message)=>
+      message && (message as {type?:string}).type==='clientDiagnostic') as Array<{event?:string}>;
+    expect(diagnostics.some((message)=>message.event==='connection_attempt_started')).toBe(true);
+    expect(diagnostics.some((message)=>message.event==='test_browser_warning')).toBe(true);
     connection.close();
   });
 });

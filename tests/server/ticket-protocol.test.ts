@@ -79,6 +79,17 @@ describe('game tickets and command wire schema', () => {
       .toMatchObject({ type: 'devCheatBuild', level: 5 });
   });
 
+  it('accepts bounded browser diagnostics and rejects structured payload injection', () => {
+    expect(clientMessageSchema.parse({
+      type: 'clientDiagnostic', level: 'warn', event: 'revision_mismatch',
+      clientEpochMs: 123, fields: { localRevision: 4, online: true, reason: null },
+    })).toMatchObject({ type: 'clientDiagnostic', event: 'revision_mismatch' });
+    expect(clientMessageSchema.safeParse({
+      type: 'clientDiagnostic', level: 'info', event: 'bad', clientEpochMs: 123,
+      fields: { nested: { secret: 'not accepted' } },
+    }).success).toBe(false);
+  });
+
   it('requires kind-specific event identity and ownership fields', () => {
     const envelope = (event: unknown) => ({ type: 'delta', fromRevision: 0, revision: 1,
       delta: { changed: {}, upserts: {}, removals: {}, redactions: [] }, events: [event] });
