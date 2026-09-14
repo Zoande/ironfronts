@@ -3,7 +3,7 @@ function mapCountries(stem, names) {
 }
 
 export const COUNTRY_FLAG = {
-  ...mapCountries("de-1935-1945", ["Germany"]),
+  ...mapCountries("de", ["Germany"]),
   ...mapCountries("it-1861-1946", ["Italy","Libya","Somalia","Eritrea"]),
   ...mapCountries("es-1938-1945", ["Spain","Río de Oro"]),
   ...mapCountries("gr-1935-1970", ["Greece"]),

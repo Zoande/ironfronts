@@ -26,13 +26,24 @@ export { NAVAL_DWELL_HOURS } from '../movement/naval';
 // will never use.
 const EMPTY_VISIBILITY: ReturnType<typeof computeArmyVisibility> = new Map();
 
+// Same graph node is the common case, but a stack that just finished moving
+// can land a few world units short of/past the exact node position (the last
+// movement step snaps to distance, not to the node) while another idle stack
+// sits right on it — visually on top of each other but on technically
+// different nodes, and previously never merging. MERGE_RADIUS matches
+// COMBAT_SNAP's "close enough to be the same spot" scale.
+const MERGE_RADIUS = 26;
+
 function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>): void {
+  const worldWidth = session.world.width;
   for (const armyId of arrivedIds) {
     const army = session.state.armies[armyId];
     if (!army || army.status !== 'idle' || army.order || army.battleFrontIds?.length) continue;
     const target = Object.values(session.state.armies).find((other) => other !== army
-      && other.ownerCountryId === army.ownerCountryId && other.graphNodeId === army.graphNodeId
-      && other.status === 'idle' && !other.order && !other.battleFrontIds?.length);
+      && other.ownerCountryId === army.ownerCountryId
+      && other.status === 'idle' && !other.order && !other.battleFrontIds?.length
+      && (other.graphNodeId === army.graphNodeId
+        || wrappedDistance(other.x, other.z, army.x, army.z, worldWidth) < MERGE_RADIUS));
     if (target) {
       mergeStacks(target, army);
       delete session.state.armies[army.id];

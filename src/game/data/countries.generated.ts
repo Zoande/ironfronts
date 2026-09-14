@@ -31,7 +31,7 @@ export const CATALOG_COUNTRIES: readonly CatalogCountry[] = [
   {"id":12,"name":"Czechoslovakia","color":"#738F80","colorFamily":3,"capitalProvinceId":169,"provinceCount":10,"cityCount":1,"flag":"cz"},
   {"id":13,"name":"Austria","color":"#818B70","colorFamily":2,"capitalProvinceId":158,"provinceCount":5,"cityCount":1,"flag":"at"},
   {"id":14,"name":"Switzerland","color":"#8D9E6D","colorFamily":2,"capitalProvinceId":149,"provinceCount":5,"cityCount":1,"flag":"ch"},
-  {"id":15,"name":"Germany","color":"#B79D8E","colorFamily":1,"capitalProvinceId":116,"provinceCount":29,"cityCount":5,"flag":"de-1935-1945"},
+  {"id":15,"name":"Germany","color":"#B79D8E","colorFamily":1,"capitalProvinceId":116,"provinceCount":29,"cityCount":5,"flag":"de"},
   {"id":16,"name":"Italy","color":"#AE94C1","colorFamily":5,"capitalProvinceId":245,"provinceCount":26,"cityCount":5,"flag":"it-1861-1946"},
   {"id":17,"name":"Yugoslavia","color":"#A97778","colorFamily":0,"capitalProvinceId":358,"provinceCount":24,"cityCount":5,"flag":"yu-1918-1941"},
   {"id":18,"name":"France","color":"#7E9D92","colorFamily":3,"capitalProvinceId":267,"provinceCount":27,"cityCount":5,"flag":"fr"},
