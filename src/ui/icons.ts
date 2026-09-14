@@ -12,6 +12,8 @@
  * No Unicode / emoji glyphs anywhere in the player HUD.
  */
 
+import infantryTechUrl from './assets/units/infantry.png?url';
+
 const pngUrls = import.meta.glob('./assets/icons/0ad/**/*.png', {
   eager: true, query: '?url', import: 'default',
 }) as Record<string, string>;
@@ -40,7 +42,7 @@ export type IconName =
   | 'node-stone' | 'node-metal' | 'node-oil' | 'resource-water'
   | 'cmd-move' | 'cmd-attack' | 'cmd-retreat' | 'cmd-split' | 'cmd-stop' | 'cmd-extract'
   | 'cmd-patrol' | 'cmd-garrison'
-  | 'unit-engineer' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank'
+  | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank'
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
   | 'tech-militia' | 'tech-commandos'
@@ -99,6 +101,7 @@ const ICONS: Record<IconName, IconDef> = {
   'cmd-patrol': { kind: 'img', value: png('patrol') },
   'cmd-garrison': { kind: 'img', value: png('garrison') },
   'unit-engineer': { kind: 'img', value: ironfrontsPng('unit-engineer-icon') },
+  'unit-infantry': { kind: 'img', value: infantryTechUrl },
   'unit-armored-car': { kind: 'img', value: ironfrontsPng('unit-armored-car-icon') },
   'unit-light-tank': { kind: 'img', value: ironfrontsPng('unit-light-tank-icon') },
   'unit-medium-tank': { kind: 'img', value: ironfrontsPng('unit-medium-tank-icon') },

@@ -105,8 +105,8 @@ interface TechnologyLineDefinition {
 const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
   id: TechnologyCategory; label: string; icon: IconName; lines: readonly TechnologyLineDefinition[];
 }> = [
-  { id: 'infantry', label: 'Infantry', icon: 'marker-infantry', lines: [
-    { id: 'infantry', technology: 'infantry', label: 'Line Infantry', shortLabel: 'Infantry', icon: 'marker-infantry', description: 'Modernises the line battalions that hold and contest territory.', unlocks: 'Stronger infantry variants at every level' },
+  { id: 'infantry', label: 'Infantry', icon: 'unit-infantry', lines: [
+    { id: 'infantry', technology: 'infantry', label: 'Line Infantry', shortLabel: 'Infantry', icon: 'unit-infantry', description: 'Modernises the line battalions that hold and contest territory.', unlocks: 'Stronger infantry variants at every level' },
     { id: 'militia', label: 'Territorial Militia', shortLabel: 'Militia', icon: 'tech-militia', description: 'A future low-cost defensive troop family.', unlocks: 'Planned troop line', comingSoon: true },
     { id: 'commandos', label: 'Commandos', shortLabel: 'Commandos', icon: 'tech-commandos', description: 'A future elite infiltration and raiding troop family.', unlocks: 'Planned troop line', comingSoon: true },
   ] },
@@ -118,7 +118,7 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
     { id: 'training', technology: 'training', label: 'Training & Industry', shortLabel: 'Facilities', icon: 'structure-barracks', description: 'Expands military training and production methods.', unlocks: 'Barracks · tank plants · ordnance workshops' },
   ] },
   { id: 'hybrid', label: 'Support', icon: 'unit-armored-car', lines: [
-    { id: 'hybrid', technology: 'hybrid', label: 'Mobile Support', shortLabel: 'Mobile Support', icon: 'marker-armored-car', description: 'Coordinates reconnaissance vehicles and artillery support.', unlocks: 'Armored cars · artillery · strategic systems at VIII' },
+    { id: 'hybrid', technology: 'hybrid', label: 'Mobile Support', shortLabel: 'Mobile Support', icon: 'unit-armored-car', description: 'Coordinates reconnaissance vehicles and artillery support.', unlocks: 'Armored cars · artillery · strategic systems at VIII' },
   ] },
   { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', lines: [
     { id: 'armored', technology: 'armored', label: 'Armored Warfare', shortLabel: 'Armor', icon: 'unit-medium-tank', description: 'Improves tank protection, engines and heavy firepower.', unlocks: 'Light and medium tank levels' },
@@ -536,6 +536,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const branch = line.technology;
       const currentLevel = branch ? state.technology.levels[branch] : 0;
       for (let candidate = 1; candidate <= 8; candidate += 1) {
+        const cell = el('div', 'ifg-tech__cell');
         const node = el('button', 'ifg-tech__node');
         node.type = 'button';
         node.disabled = !branch;
@@ -546,7 +547,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           slot !== null && slot.branch === branch && slot.targetLevel === candidate));
         node.append(createIcon(line.icon), el('small', undefined, `Lvl. ${candidate}`));
         if (branch === 'resourceBuildings' && candidate < 8) {
-          node.append(el('i', 'ifg-tech__dependency'));
+          cell.append(el('i', 'ifg-tech__dependency'));
         }
         bindTooltip(node, () => ({
           title: `${line.label} · Level ${candidate}`,
@@ -563,7 +564,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           techRenderKey = '';
           renderTechnology(store.get());
         };
-        track.append(node);
+        cell.append(node);
+        track.append(cell);
       }
       row.append(track);
       if (line.comingSoon) row.append(el('div', 'ifg-tech__coming-soon', 'Coming soon'));
