@@ -6,7 +6,7 @@ import { StrategyCamera } from './camera';
 import { buildPropVisibility, buildTerrainVisibility, capVisibleInstances } from './chunk-visibility';
 import {
   DEFAULT_QUALITY, QUALITY_LEVELS, QUALITY_PRESETS, resolveRenderPixelRatio,
-  type QualityLevel, type QualityPreset,
+  type FrameRateCap, type QualityLevel, type QualityPreset,
 } from './graphics/quality';
 import { buildCountryColorBuffer, CountryLabelLayer } from './country-overlay';
 import { loadCountryLabelFont } from './country-labels/atlas';
@@ -240,6 +240,8 @@ export class WorldRenderer {
    *  and keep running. */
   private renderingSuspended = typeof document !== 'undefined' && document.hidden;
   private quality: QualityLevel = DEFAULT_QUALITY;
+  /** 0 = uncapped. Battery-saving opt-in independent of graphics quality. */
+  private frameRateCap: FrameRateCap = 0;
   private readonly environment = new EnvironmentController();
   private reportedClock = '';
   private performanceMonitor = new PerformanceMonitor(false);
@@ -394,6 +396,12 @@ export class WorldRenderer {
    * caches so the new draw distances and budgets take effect next frame.
    * No GPU pipelines or world buffers are recreated.
    */
+  /** 0 clears the cap (native refresh rate). Does not affect renderScale,
+   *  LOD, or any other quality-preset knob — purely a battery-saving throttle. */
+  setFrameRateCap(cap: FrameRateCap): void {
+    this.frameRateCap = cap;
+  }
+
   setQuality(level: QualityLevel): void {
     if (!QUALITY_PRESETS[level] || level === this.quality) return;
     this.quality = level;
@@ -1592,6 +1600,16 @@ export class WorldRenderer {
     // same camera/state and no reload, but skip all rendering and picking.
     if (this.renderingSuspended) {
       this.previousTime = time;
+      this.frameHandle = requestAnimationFrame(this.frame);
+      return;
+    }
+    // Battery saver: skip the frame body entirely above the capped rate.
+    // previousTime is deliberately left untouched on a skipped frame — the
+    // next rendered frame's frameMs/deltaMs must reflect the true elapsed
+    // time (still clamped below) so time-of-day/rain/gait animation don't
+    // run slow. Only 30/60fps caps are offered; both stay under the 50ms
+    // deltaMs clamp below, so this never itself causes slow-motion.
+    if (this.frameRateCap > 0 && time - this.previousTime < 1_000 / this.frameRateCap) {
       this.frameHandle = requestAnimationFrame(this.frame);
       return;
     }

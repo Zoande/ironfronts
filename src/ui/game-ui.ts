@@ -11,7 +11,7 @@
  */
 
 import './game-ui.css';
-import { QUALITY_LEVELS, QUALITY_PRESETS, type QualityLevel } from '../graphics/quality';
+import { FRAME_RATE_CAPS, QUALITY_LEVELS, QUALITY_PRESETS, type FrameRateCap, type QualityLevel } from '../graphics/quality';
 import { renderSelectedArmyPanel, type ArmyPanelCommand } from './army';
 import { createFlag } from './flags';
 import { createIcon, type IconName } from './icons';
@@ -28,6 +28,7 @@ export interface GameUiActions {
   setMapMode(mode: MapMode): void;
   clearSelection(): void;
   setQuality(level: QualityLevel): void;
+  setFrameRateCap(cap: FrameRateCap): void;
   navSelect(id: NavId): void;
   selectDiplomacyCountry(countryId: number): void;
   sendDiplomaticMessage(countryId: number, body: string): void;
@@ -753,6 +754,26 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     + 'same size at every setting.');
   qualityGroup.append(qualitySeg, qualityBlurb, qualityScope);
 
+  const frameRateGroup = el('div', 'ifg-overlay__group');
+  frameRateGroup.setAttribute('role', 'group');
+  frameRateGroup.setAttribute('aria-label', 'Frame rate limit');
+  frameRateGroup.append(el('small', undefined, 'Frame rate limit'));
+  const frameRateSeg = el('div', 'ifg-seg');
+  const frameRateButtons = new Map<FrameRateCap, HTMLButtonElement>();
+  for (const cap of FRAME_RATE_CAPS) {
+    const button = el('button', 'ifg-seg__item');
+    button.type = 'button';
+    button.dataset.frameRateCap = String(cap);
+    button.textContent = cap === 0 ? 'Uncapped' : `${cap} FPS`;
+    button.addEventListener('click', () => actions.setFrameRateCap(cap));
+    frameRateButtons.set(cap, button);
+    frameRateSeg.append(button);
+  }
+  const frameRateBlurb = el('p', 'ifg-overlay__blurb ifg-overlay__blurb--muted',
+    'Caps rendering below your screen’s refresh rate to save battery. Does not '
+    + 'change graphics quality — pick 30 FPS for the largest savings on a laptop.');
+  frameRateGroup.append(frameRateSeg, frameRateBlurb);
+
   const secondary = el('div', 'ifg-overlay__secondary');
   for (const [label, reason, enabled] of [
     ['More settings (main menu)', 'Full settings live in the main menu for now.', false],
@@ -769,7 +790,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     secondary.append(row);
   }
   const diagLine = el('p', 'ifg-overlay__diag', '');
-  overlayCard.append(resumeButton, qualityGroup, secondary, diagLine);
+  overlayCard.append(resumeButton, qualityGroup, frameRateGroup, secondary, diagLine);
   overlay.append(overlayCard);
   overlay.addEventListener('click', (event) => {
     if (event.target === overlay) actions.togglePause(false);
@@ -1183,6 +1204,11 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       button.setAttribute('aria-pressed', String(active));
     }
     qualityBlurb.textContent = QUALITY_PRESETS[state.quality].blurb;
+    for (const [cap, button] of frameRateButtons) {
+      const active = cap === state.frameRateCap;
+      button.classList.toggle('is-selected', active);
+      button.setAttribute('aria-pressed', String(active));
+    }
     diagLine.textContent =
       `Effective render scale ${state.effectiveRenderScale.toFixed(2)}x · ${state.quality.toUpperCase()}`;
   };

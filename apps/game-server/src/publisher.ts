@@ -16,11 +16,15 @@ export class ProjectionPublisher {
 
   publish(): void {
     const batch = collectPendingEvents(this.runtime, this.revision);
-    for (const country of Object.values(this.runtime.session.state.countries)) {
-      const additions = eventsForCountry(batch, country.id, this.revision + 1);
-      if (!additions.length) continue;
-      const backlog = [...(this.eventBacklog.get(country.id) ?? []), ...additions];
-      this.eventBacklog.set(country.id, backlog.slice(-512));
+    // eventsForCountry is a no-op for every country when the batch is empty
+    // (the common case, most ticks) — skip the ~200-country scan entirely.
+    if (batch.countryEvents.length || batch.combatEvents.length || batch.publicEvents.length) {
+      for (const country of Object.values(this.runtime.session.state.countries)) {
+        const additions = eventsForCountry(batch, country.id, this.revision + 1);
+        if (!additions.length) continue;
+        const backlog = [...(this.eventBacklog.get(country.id) ?? []), ...additions];
+        this.eventBacklog.set(country.id, backlog.slice(-512));
+      }
     }
     const connections = [...this.connections()];
     const projections = new Map<string, PlayerProjection>();
