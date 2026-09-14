@@ -54,16 +54,23 @@ export function projectFor(
         ),
       };
     }
+    // Cached so the identical (order, position) pathfinding call below isn't
+    // repeated for an own army — projectArmyView always mirrors x/z from
+    // state.armies, so army.x/z === source.x/z and the result is identical.
+    let ownOrderRoute: ReturnType<typeof orderRouteForClient> | undefined;
     if (graph && army.own) {
       const order = state.armies[army.id]?.order;
       const route = order && orderRouteForClient(order, graph, army.x, army.z);
+      ownOrderRoute = route || null;
       if (route) projected = { ...projected, moveRoute: route, moveIntent: order!.intent };
     }
     if (graph && army.status !== 'unknown' && gameHoursPerRealSecond > 0) {
       const source = state.armies[army.id];
       const leg = source ? currentMovementLeg({ state, world, graph }, source) : null;
       if (leg && leg.worldUnitsPerGameHour > 0) {
-        const route = source!.order ? orderRouteForClient(source!.order, graph, source!.x, source!.z) ?? undefined : undefined;
+        const route = !source!.order ? undefined
+          : army.own ? (ownOrderRoute ?? undefined)
+          : orderRouteForClient(source!.order, graph, source!.x, source!.z) ?? undefined;
         projected = {
           ...projected,
           motion: {

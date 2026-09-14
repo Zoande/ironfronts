@@ -9,7 +9,7 @@
  * underlying game state.
  */
 
-import type { QualityLevel } from '../graphics/quality';
+import type { FrameRateCap, QualityLevel } from '../graphics/quality';
 
 export type MapMode = 'balanced' | 'political' | 'diplomacy' | 'clear';
 
@@ -353,6 +353,8 @@ export interface StrategicUiState {
   readonly activeSidePanel: SidePanelId | null;
   readonly diplomacy: DiplomacyView;
   readonly quality: QualityLevel;
+  /** 0 = uncapped. Battery-saving opt-in, independent of graphics quality. */
+  readonly frameRateCap: FrameRateCap;
   /** Backing-store scale actually in use (diagnostics / verification). */
   readonly effectiveRenderScale: number;
   readonly paused: boolean;
@@ -399,6 +401,7 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
       feedback: null,
     },
     quality: 'high',
+    frameRateCap: 0,
     effectiveRenderScale: 1,
     paused: false,
     resourceOverlay: false,

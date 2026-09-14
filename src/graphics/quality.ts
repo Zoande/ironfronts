@@ -15,6 +15,17 @@ export const QUALITY_LEVELS: readonly QualityLevel[] = ['low', 'medium', 'high',
 export const DEFAULT_QUALITY: QualityLevel = 'high';
 
 const STORAGE_KEY = 'ironfronts:graphics-quality';
+const FRAME_RATE_CAP_STORAGE_KEY = 'ironfronts:frame-rate-cap';
+
+/** 0 = uncapped (native refresh rate). Independent of graphics quality — a
+ * capped frame rate does not change render scale, LOD, or any visual detail
+ * knob above. Defaults to 60: still fully smooth (the standard "smooth"
+ * frame rate), but saves real battery on 90/120/144/240Hz panels that a
+ * top-down strategy map has no visual use for. Players can still choose
+ * Uncapped or 30 explicitly. */
+export type FrameRateCap = 0 | 30 | 60;
+export const FRAME_RATE_CAPS: readonly FrameRateCap[] = [0, 60, 30];
+export const DEFAULT_FRAME_RATE_CAP: FrameRateCap = 60;
 
 export interface QualityPreset {
   /** Menu label. */
@@ -145,6 +156,29 @@ export function loadQuality(storage?: Storage): QualityLevel {
 export function saveQuality(level: QualityLevel, storage?: Storage): void {
   try {
     safeStorage(storage)?.setItem(STORAGE_KEY, level);
+  } catch {
+    // Nothing we can do; the in-memory choice still applies this session.
+  }
+}
+
+export function isFrameRateCap(value: unknown): value is FrameRateCap {
+  return typeof value === 'number' && (FRAME_RATE_CAPS as readonly number[]).includes(value);
+}
+
+export function loadFrameRateCap(storage?: Storage): FrameRateCap {
+  try {
+    const raw = safeStorage(storage)?.getItem(FRAME_RATE_CAP_STORAGE_KEY);
+    const parsed = raw === null || raw === undefined ? NaN : Number(raw);
+    if (isFrameRateCap(parsed)) return parsed;
+  } catch {
+    // Private mode / disabled storage: fall through to the default.
+  }
+  return DEFAULT_FRAME_RATE_CAP;
+}
+
+export function saveFrameRateCap(cap: FrameRateCap, storage?: Storage): void {
+  try {
+    safeStorage(storage)?.setItem(FRAME_RATE_CAP_STORAGE_KEY, String(cap));
   } catch {
     // Nothing we can do; the in-memory choice still applies this session.
   }

@@ -7,7 +7,7 @@ import '@fontsource/cinzel-decorative/latin-ext-700.css';
 import { AudioManager } from './audio/audio-manager';
 import { MusicDirector } from './audio/music-director';
 import { TRACK_BY_ID, trackSources } from './audio/music-catalog';
-import { loadQuality, saveQuality } from './graphics/quality';
+import { loadFrameRateCap, loadQuality, saveFrameRateCap, saveQuality } from './graphics/quality';
 import { mountMenu } from './menu/menu';
 import { mountGameUi, type GameUiActions } from './ui/game-ui';
 import {
@@ -201,7 +201,7 @@ const compactNumber = new Intl.NumberFormat('en', { notation: 'compact', maximum
 let debugEnabled = false;
 
 // The single typed channel between renderer/game systems and the player HUD.
-const uiStore = createUiStore(createInitialState({ quality: loadQuality() }));
+const uiStore = createUiStore(createInitialState({ quality: loadQuality(), frameRateCap: loadFrameRateCap() }));
 
 const audio = new AudioManager(safeLocalStorage());
 const music = new MusicDirector(audio, {
@@ -518,6 +518,7 @@ async function startGame(token: number): Promise<void> {
   const { WorldRenderer } = await withTimeout(import('./renderer'), 30_000, 'Loading the renderer');
   if (token !== launchToken) return;
   const renderer = new WorldRenderer(canvas, countryLabels, loadQuality());
+  renderer.setFrameRateCap(loadFrameRateCap());
   activeRenderer = renderer;
 
   const syncDebugAccess = (): void => {
@@ -635,6 +636,11 @@ async function startGame(token: number): Promise<void> {
       renderer.setQuality(level);
       saveQuality(level);
       uiStore.patch({ quality: level, effectiveRenderScale: renderer.effectiveRenderScale });
+    },
+    setFrameRateCap: (cap) => {
+      renderer.setFrameRateCap(cap);
+      saveFrameRateCap(cap);
+      uiStore.patch({ frameRateCap: cap });
     },
     navSelect: (id) => {
       if (id !== 'diplomacy' && id !== 'research') return;
