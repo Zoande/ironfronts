@@ -18,7 +18,7 @@ import {
 } from './ui/ui-state';
 import { autoDismissDelay, isSticky } from './ui/notification-lifecycle';
 import { DEMO_ARMY, type ArmyPanelCommand } from './ui/army';
-import { aggregateTroopStat, armyActivityLabel } from './ui/army-presentation';
+import { aggregateTroopStat, armyActivityLabel, summarizeBattleFronts } from './ui/army-presentation';
 import { iconMarkup } from './ui/icons';
 import type { WorldRenderer, MapMode, TimeOfDayState } from './renderer';
 import type { FrameStats, HoverInfo } from './types';
@@ -2344,6 +2344,39 @@ function refreshSelectedArmy(
   const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
     ? 0 : Math.max(0, Date.now() - view.motion.sampledAtEpochMs);
   const motionDurationMs = view.motion?.durationMs ?? 0;
+  const battle = inCloseCombat ? summarizeBattleFronts(view.battleFronts) : null;
+  const navalElapsedMs = view.navalPhase
+    ? Math.max(0, Date.now() - view.navalPhase.sampledAtEpochMs) : 0;
+  const navalRemainingMs = view.navalPhase
+    ? Math.max(0, view.navalPhase.remainingMs - navalElapsedMs) : 0;
+  const movementRemainingMs = view.motion
+    ? Math.max(0, motionDurationMs - motionElapsedMs) : 0;
+  const movementProgress = view.motion && motionDurationMs > 0
+    ? Math.min(1, (view.motion.progress ?? 0)
+      + motionElapsedMs / (motionDurationMs / Math.max(0.0001, 1 - (view.motion.progress ?? 0))))
+    : undefined;
+  const combatProgress = battle
+    ? Math.max(0, Math.min(1, Math.max(
+      battle.friendly.baselineHp > 0 ? 1 - battle.friendly.hp / battle.friendly.baselineHp : 0,
+      battle.enemy.baselineHp > 0 ? 1 - battle.enemy.hp / battle.enemy.baselineHp : 0,
+    ))) : undefined;
+  const activityKind = view.status === 'engaged' ? 'combat'
+    : view.status === 'retreating' ? 'retreating'
+    : view.status === 'embarking' ? 'embarking'
+    : view.status === 'atSea' ? 'atSea'
+    : view.status === 'disembarking' ? 'disembarking'
+    : view.status === 'moving' ? 'moving'
+    : view.status === 'extracting' ? 'extracting' : 'holding';
+  const activityRemainingSeconds = view.navalPhase ? navalRemainingMs / 1_000
+    : battle?.estimatedRealSeconds ?? (view.motion ? movementRemainingMs / 1_000 : undefined);
+  const activityProgress = view.navalPhase
+    ? Math.min(1, Math.max(0, 1 - navalRemainingMs / Math.max(1, view.navalPhase.durationMs)))
+    : battle ? combatProgress : movementProgress;
+  const activityDurationSeconds = view.navalPhase ? view.navalPhase.durationMs / 1_000
+    : battle?.estimatedRealSeconds !== null && battle?.estimatedRealSeconds !== undefined
+      ? battle.estimatedRealSeconds / Math.max(0.0001, 1 - (combatProgress ?? 0))
+      : view.motion && movementRemainingMs > 0
+        ? movementRemainingMs / 1_000 / Math.max(0.0001, 1 - (movementProgress ?? 0)) : undefined;
   const moveDisabledReason = !session.fresh
     ? 'Waiting for an authoritative update from the game server.'
     : inCloseCombat
@@ -2375,9 +2408,13 @@ function refreshSelectedArmy(
       attack: aggregateTroopStat(groups, 'attack', gameUnit),
       defense: aggregateTroopStat(groups, 'defense', gameUnit),
       activity,
+      activityKind,
+      activityRemainingSeconds,
+      activityDurationSeconds,
+      activityProgress,
+      activitySampledAtEpochMs: Date.now(),
       arrivalSeconds: view.motion ? Math.max(0, (motionDurationMs - motionElapsedMs) / 1_000) : undefined,
-      movementProgress: view.motion && motionDurationMs > 0
-        ? Math.min(1, motionElapsedMs / motionDurationMs) : undefined,
+      movementProgress,
       own: view.own,
       canExtract: session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
       extractableResources: view.actions?.extractableResources,

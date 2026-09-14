@@ -197,9 +197,17 @@ export interface ProjectedArmy {
   /** Next authoritative movement waypoint and wall-clock time remaining. */
   motion?: {
     targetX: number; targetZ: number; durationMs: number;
+    /** 0..1 progress through the current road/sea edge at sample time. */
+    progress?: number;
     /** Remaining authoritative road polyline, beginning at the sampled position. */
     route?: ReadonlyArray<{ x: number; z: number }>;
     sampledAtEpochMs?: number; generation?: number;
+  };
+  /** Authoritative timed port phase. The normal motion projection resumes
+   * while the army is at sea. */
+  navalPhase?: {
+    kind: 'embarking' | 'disembarking';
+    durationMs: number; remainingMs: number; sampledAtEpochMs: number;
   };
   actions?: { canExtract: boolean; extractionProvinceId: number | null; extractableResources: Array<'food' | 'stone' | 'metal' | 'oil'>; extractReason?: string };
   shortage?: {

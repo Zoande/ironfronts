@@ -82,12 +82,31 @@ describe('single authoritative game runtime', () => {
       edgeProgress: 0,
     };
     army.status = 'moving';
+    army.order.edgeProgress = 10;
     const normal = runtime.projection(1, 1).armies[army.id].motion!;
     const fast = runtime.projection(1, 2).armies[army.id].motion!;
     expect(normal.targetX).toBe(runtime.session.graph.nodeX[targetNode]);
     expect(normal.targetZ).toBe(runtime.session.graph.nodeZ[targetNode]);
     expect(normal.durationMs).toBeGreaterThan(0);
+    expect(normal.progress).toBeGreaterThan(0);
     expect(fast.durationMs).toBeCloseTo(normal.durationMs / 2);
+  });
+
+  it('projects authoritative embark timing at the active simulation speed', () => {
+    const runtime = new GameRuntime(tinyWorld());
+    const army = Object.values(runtime.session.state.armies).find((candidate) => candidate.ownerCountryId === 1)!;
+    const targetNode = runtime.session.graph.adjacency[army.graphNodeId][0];
+    army.order = {
+      path: [targetNode], destX: runtime.session.graph.nodeX[targetNode],
+      destZ: runtime.session.graph.nodeZ[targetNode], intent: 'move', edgeProgress: 0,
+    };
+    army.status = 'embarking';
+    army.navalCrossing = { fromNodeId: army.graphNodeId, toNodeId: targetNode, hoursRemaining: 0.25 };
+    const normal = runtime.projection(1, 1).armies[army.id].navalPhase!;
+    const fast = runtime.projection(1, 2).armies[army.id].navalPhase!;
+    expect(normal).toMatchObject({ kind: 'embarking', durationMs: 1_800_000, remainingMs: 900_000 });
+    expect(fast.durationMs).toBe(normal.durationMs / 2);
+    expect(fast.remainingMs).toBe(normal.remainingMs / 2);
   });
 
   it('projects detached authoritative province capabilities', () => {

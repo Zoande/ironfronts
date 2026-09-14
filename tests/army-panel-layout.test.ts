@@ -20,6 +20,15 @@ describe('selected army panel containment', () => {
     expect(armyUi).not.toContain('Retreat exit ${index + 1}');
   });
 
+  it('puts operational activity in the header and supply-safe metrics with composition', () => {
+    expect(armyUi).toContain('ifg-army-panel__header-activity');
+    expect(armyUi).toContain("createIcon('supply'");
+    expect(armyUi).toContain("'ifg-army-panel__composition-header'");
+    expect(armyUi).not.toContain("'Supply pressure'");
+    expect(css).toContain('.ifg-army-panel__naval-track');
+    expect(css).toContain('.ifg-army-panel__activity-time');
+  });
+
   it('floats illustrated wide commands above a compact health and combat-profile column', () => {
     expect(armyUi).toContain('host.replaceChildren(commands, header, body)');
     expect(armyUi).toContain('body.append(summary, center, report)');

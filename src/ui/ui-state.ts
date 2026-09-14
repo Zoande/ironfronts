@@ -262,6 +262,8 @@ export interface GameNotification {
 }
 
 export type CombatStatus = 'idle' | 'moving' | 'engaged' | 'retreating';
+export type ArmyActivityKind = 'holding' | 'moving' | 'embarking' | 'atSea'
+  | 'disembarking' | 'combat' | 'retreating' | 'extracting';
 
 export interface ArmyUnitGroupView {
   readonly typeId: string;
@@ -309,6 +311,15 @@ export interface ArmyStackView {
   readonly defense?: { readonly soft: number; readonly light: number; readonly heavy: number };
   /** Player-facing current activity, e.g. moving, extracting, or holding. */
   readonly activity: string;
+  /** Compact top-bar activity presentation derived from authoritative status. */
+  readonly activityKind?: ArmyActivityKind;
+  /** Predicted wall-clock time left at activitySampledAtEpochMs. */
+  readonly activityRemainingSeconds?: number;
+  /** Predicted total wall-clock duration for the displayed phase/leg. */
+  readonly activityDurationSeconds?: number;
+  /** 0..1 progress at activitySampledAtEpochMs. */
+  readonly activityProgress?: number;
+  readonly activitySampledAtEpochMs?: number;
   /** Current movement-leg estimate, when the army is marching. */
   readonly arrivalSeconds?: number;
   /** 0..1 progress through the current movement leg. */

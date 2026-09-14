@@ -11,7 +11,7 @@ import { createIcon, iconMarkup, type IconName } from './icons';
 import { roundDisplayedHp, summarizeBattleFronts, type BattleSidePresentation } from './army-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
-import type { ArmyStackView, CombatStatus } from './ui-state';
+import type { ArmyActivityKind, ArmyStackView, CombatStatus } from './ui-state';
 
 export type { ArmyStackView, CombatStatus } from './ui-state';
 
@@ -41,12 +41,6 @@ function formatRealDuration(seconds: number | null): string {
   if (seconds < 3_600) return `${Math.round(seconds / 60)} min real`;
   const hours = seconds / 3_600;
   return `${hours < 10 ? hours.toFixed(1) : Math.round(hours)} hr real`;
-}
-
-function formatCompactDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
-  const total = Math.max(0, Math.round(seconds));
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
 /**
@@ -114,6 +108,12 @@ const SUPPLY_RESOURCES = [
   { id: 'oil', label: 'Oil', color: '#6d9b8d' },
 ] as const;
 
+const ACTIVITY_ICON: Record<ArmyActivityKind, IconName> = {
+  holding: 'cmd-stop', moving: 'cmd-move', embarking: 'activity-embark',
+  atSea: 'activity-embark', disembarking: 'activity-disembark', combat: 'note-combat',
+  retreating: 'cmd-retreat', extracting: 'cmd-extract',
+};
+
 function node<K extends keyof HTMLElementTagNameMap>(
   tag: K, className?: string, text?: string,
 ): HTMLElementTagNameMap[K] {
@@ -121,6 +121,37 @@ function node<K extends keyof HTMLElementTagNameMap>(
   if (className) element.className = className;
   if (text !== undefined) element.textContent = text;
   return element;
+}
+
+function formatActivityDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '--:--:--';
+  const total = Math.max(0, Math.ceil(seconds));
+  const hours = Math.floor(total / 3_600);
+  const minutes = Math.floor(total % 3_600 / 60);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** Keep the compact operational clock live without rebuilding portrait cards. */
+function startActivityClock(
+  host: HTMLElement, time: HTMLElement, fills: readonly HTMLElement[],
+  remainingSeconds: number | undefined, durationSeconds: number | undefined,
+  initialProgress: number, sampledAtEpochMs: number,
+): void {
+  if (remainingSeconds === undefined) return;
+  let timer = 0;
+  const update = (): void => {
+    if (!host.isConnected || host.closest('[hidden]')) { window.clearInterval(timer); return; }
+    const elapsed = Math.max(0, (Date.now() - sampledAtEpochMs) / 1_000);
+    const remaining = Math.max(0, remainingSeconds - elapsed);
+    time.textContent = formatActivityDuration(remaining);
+    if (durationSeconds && durationSeconds > 0) {
+      const width = `${Math.min(100, Math.max(0, (initialProgress + elapsed / durationSeconds) * 100))}%`;
+      for (const fill of fills) fill.style.width = width;
+    }
+    if (remaining <= 0) window.clearInterval(timer);
+  };
+  timer = window.setInterval(update, 1_000);
+  update();
 }
 
 /** Populate the large centered selected-army command overlay. */
@@ -134,13 +165,46 @@ export function renderSelectedArmyPanel(
   const header = node('header', 'ifg-army-panel__header');
   const identity = node('span', 'ifg-army-panel__identity');
   identity.append(node('strong', undefined, army.name), node('small', undefined, army.country));
-  const headerStats = node('span', 'ifg-army-panel__header-stats');
+  const battle = army.combat === 'engaged' ? summarizeBattleFronts(army.battleFronts) : null;
+  const activityKind = army.activityKind ?? (army.combat === 'engaged' ? 'combat'
+    : army.combat === 'retreating' ? 'retreating' : army.combat === 'moving' ? 'moving' : 'holding');
+  const headerActivity = node('section', `ifg-army-panel__header-activity is-${activityKind}`);
+  headerActivity.append(createIcon(ACTIVITY_ICON[activityKind], 'ifg-army-panel__activity-icon'));
+  const operation = node('span', 'ifg-army-panel__operation');
+  operation.append(node('small', undefined, 'Activity'), node('strong', undefined, army.activity));
+  const operationTrack = node('span', 'ifg-army-panel__operation-track');
+  const operationFill = node('i');
+  const initialActivityProgress = Math.min(1, Math.max(0, army.activityProgress ?? 0));
+  operationFill.style.width = `${initialActivityProgress * 100}%`;
+  operationTrack.append(operationFill);
+  operation.append(operationTrack);
+  const liveFills = [operationFill];
+  if (activityKind === 'embarking' || activityKind === 'disembarking') {
+    const navalTrack = node('span', 'ifg-army-panel__naval-track');
+    const navalFill = node('i');
+    navalFill.style.width = `${initialActivityProgress * 100}%`;
+    navalTrack.append(navalFill);
+    operation.append(navalTrack);
+    liveFills.push(navalFill);
+  }
+  const activityTime = node('time', 'ifg-army-panel__activity-time',
+    formatActivityDuration(army.activityRemainingSeconds ?? Number.NaN));
+  headerActivity.append(operation, activityTime);
+  bindTooltip(headerActivity, () => ({
+    title: army.activity,
+    description: activityKind === 'combat'
+      ? 'Predicted time until the first active front resolves.'
+      : activityKind === 'embarking' || activityKind === 'disembarking'
+        ? 'Port handling takes 30 game minutes; the blue line tracks this phase.'
+        : 'Authoritative time remaining on the current movement leg.',
+  }));
   const headerMetric = (label: string, icon: IconName, value: string): HTMLElement => {
     const item = node('span');
     item.append(createIcon(icon, 'ifg-army-stat__icon'), node('small', undefined, label), node('b', undefined, value));
     return item;
   };
-  headerStats.append(
+  const compositionStats = node('span', 'ifg-army-panel__header-stats');
+  compositionStats.append(
     headerMetric('Speed', 'stat-speed', army.identified === false || army.speed === undefined ? '--' : String(Math.round(army.speed))),
     headerMetric('Troops', 'stat-troops', army.identified === false ? '--' : String(army.unitCount)),
   );
@@ -261,10 +325,12 @@ export function renderSelectedArmyPanel(
         } }] : []),
       ],
     }));
-    headerControls.append(supplyBar);
+    const supplyDisplay = node('span', 'ifg-army-panel__supply-display');
+    supplyDisplay.append(createIcon('supply', 'ifg-army-panel__supply-icon'), supplyBar);
+    headerControls.append(supplyDisplay);
   }
   headerControls.append(headerStances);
-  header.append(headerStats, identity, headerControls, close);
+  header.append(headerActivity, identity, headerControls, close);
   const summary = node('div', 'ifg-army-panel__summary');
   summary.append(health, stats);
 
@@ -335,7 +401,9 @@ export function renderSelectedArmyPanel(
   }
 
   const composition = node('section', 'ifg-army-panel__composition');
-  composition.append(node('small', 'ifg-army-panel__eyebrow', 'Composition'));
+  const compositionHeader = node('header', 'ifg-army-panel__composition-header');
+  compositionHeader.append(node('small', 'ifg-army-panel__eyebrow', 'Composition'), compositionStats);
+  composition.append(compositionHeader);
   const unitRow = node('div', 'ifg-army-panel__units');
   if (army.identified === false || !army.groups?.length) {
     unitRow.append(node('span', 'ifg-army-panel__intel', 'Composition unavailable'));
@@ -369,26 +437,9 @@ export function renderSelectedArmyPanel(
   }
   composition.append(unitRow);
 
-  if (army.own && army.shortage) {
-    const shortage = node('section', 'ifg-army-panel__shortage');
-    shortage.append(node('small', 'ifg-army-panel__eyebrow', 'Supply pressure'));
-    const active = Object.entries(army.shortage.severity).filter(([, value]) => value > 0.05);
-    shortage.append(node('span', 'ifg-army-panel__health-caption', active.length
-      ? active.map(([resource, value]) => `${resource} ${value.toFixed(1)}%`).join(' · ')
-      : 'No national shortages'));
-    const modifiers = army.shortage.modifiers;
-    const affected = Object.entries(modifiers).filter(([, value]) => value < 0.999);
-    if (affected.length) shortage.append(node('span', 'ifg-army-panel__health-caption', affected
-      .map(([stat, value]) => `${stat.replace(/([A-Z])/g, ' $1').toLowerCase()} ${Math.round(value * 100)}%`)
-      .join(' · ')));
-    composition.append(shortage);
-  }
-
   const report = node('section', 'ifg-army-panel__report');
 
   const activity = node('div', 'ifg-army-panel__activity');
-  const battle = army.combat === 'engaged'
-    ? summarizeBattleFronts(army.battleFronts) : null;
   {
     activity.classList.add('ifg-army-panel__activity--combat');
     const battleHeader = node('div', `ifg-battle__header${battle ? '' : ' is-inactive'}`);
@@ -463,29 +514,9 @@ export function renderSelectedArmyPanel(
       activity.append(battleLive, battleModifiers, battleMeta);
     }
   }
-  if (!battle) {
-    activity.append(node('small', 'ifg-army-panel__eyebrow', 'Activity'));
-    const activityValue = node('strong', 'ifg-army-panel__activity-value', army.activity);
-    activityValue.dataset.combat = army.combat;
-    activity.append(activityValue);
-    if (army.combat === 'moving') {
-      const movement = node('div', 'ifg-army-panel__movement');
-      const movementHeader = node('div', 'ifg-army-panel__movement-header');
-      movementHeader.append(
-        node('span', undefined, 'Arrival'),
-        node('b', undefined, formatCompactDuration(army.arrivalSeconds ?? Number.NaN)),
-      );
-      const movementTrack = node('span', 'ifg-army-panel__movement-track');
-      const movementFill = node('i');
-      movementFill.style.width = `${Math.round((army.movementProgress ?? 0) * 100)}%`;
-      movementTrack.append(movementFill);
-      movement.append(movementHeader, movementTrack);
-      activity.append(movement);
-    }
-    if (army.artillery?.targetArmyId) {
-      activity.append(node('span', undefined,
-        `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} continuous bombardment: ${army.artillery.targetArmyId}`));
-    }
+  if (army.artillery?.targetArmyId) {
+    activity.append(node('span', undefined,
+      `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} continuous bombardment: ${army.artillery.targetArmyId}`));
   }
   report.append(activity);
 
@@ -494,6 +525,8 @@ export function renderSelectedArmyPanel(
   center.append(composition);
   body.append(summary, center, report);
   host.replaceChildren(commands, header, body);
+  startActivityClock(headerActivity, activityTime, liveFills, army.activityRemainingSeconds,
+    army.activityDurationSeconds, initialActivityProgress, army.activitySampledAtEpochMs ?? Date.now());
 }
 
 /**

@@ -44,7 +44,8 @@ export type IconName =
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
   | 'tech-militia' | 'tech-commandos'
-  | 'stat-health' | 'stat-attack' | 'stat-defence' | 'stat-speed' | 'stat-troops'
+  | 'stat-health' | 'stat-attack' | 'stat-defence' | 'stat-speed' | 'stat-troops' | 'supply'
+  | 'activity-embark' | 'activity-disembark'
   | 'structure-barracks' | 'structure-plant' | 'structure-ordnance'
   | 'structure-fortress' | 'structure-city'
   | 'stance-attack' | 'stance-attack-defend' | 'stance-defend'
@@ -114,6 +115,9 @@ const ICONS: Record<IconName, IconDef> = {
   'stat-defence': { kind: 'svg', value: svg('shield') },
   'stat-speed': { kind: 'svg', value: svg('speed') },
   'stat-troops': { kind: 'svg', value: svg('troops') },
+  supply: { kind: 'svg', value: svg('supply') },
+  'activity-embark': { kind: 'svg', value: svg('activity-embark') },
+  'activity-disembark': { kind: 'svg', value: svg('activity-disembark') },
   'structure-barracks': { kind: 'img', value: ironfrontsPng('structure-barracks-icon') },
   'structure-plant': { kind: 'img', value: ironfrontsPng('structure-tank-plant-icon') },
   'structure-ordnance': { kind: 'img', value: ironfrontsPng('structure-ordnance-icon') },

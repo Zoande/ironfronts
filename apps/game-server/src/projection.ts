@@ -5,6 +5,7 @@ import {
   provinceResourceOutputBreakdown,
   buildEngineerAssignmentIndex, engineerAssignmentKey,
   unitProductionWorkRate,
+  GAME_PACE,
   type GameState, type LandGraph, type WorldData,
 } from '@ironfronts/game-core';
 import type { PlayerProjection, ProjectionDelta, PublicCountry } from '@ironfronts/protocol';
@@ -66,6 +67,18 @@ export function projectFor(
     }
     if (graph && army.status !== 'unknown' && gameHoursPerRealSecond > 0) {
       const source = state.armies[army.id];
+      if (source?.navalCrossing
+        && (source.status === 'embarking' || source.status === 'disembarking')) {
+        projected = {
+          ...projected,
+          navalPhase: {
+            kind: source.status,
+            durationMs: GAME_PACE.movement.navalDwellHours / gameHoursPerRealSecond * 1_000,
+            remainingMs: Math.max(0, source.navalCrossing.hoursRemaining / gameHoursPerRealSecond * 1_000),
+            sampledAtEpochMs,
+          },
+        };
+      }
       const leg = source ? currentMovementLeg({ state, world, graph }, source) : null;
       if (leg && leg.worldUnitsPerGameHour > 0) {
         const route = !source!.order ? undefined
@@ -77,6 +90,10 @@ export function projectFor(
             sampledAtEpochMs, generation: state.clock.generation ?? 0,
             targetX: leg.targetX,
             targetZ: leg.targetZ,
+            progress: (source!.order?.edgeProgress ?? 0) + leg.distance > 0
+              ? Math.min(1, Math.max(0,
+                (source!.order?.edgeProgress ?? 0) / ((source!.order?.edgeProgress ?? 0) + leg.distance),
+              )) : 1,
             route,
             durationMs: leg.distance / (leg.worldUnitsPerGameHour * gameHoursPerRealSecond) * 1_000,
           },
