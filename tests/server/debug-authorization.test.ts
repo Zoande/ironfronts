@@ -26,7 +26,7 @@ function projection() {
     constructionQueues: {}, rallyPoints: {}, armies: {}, resourceNodes: {}, ownCountry: null, relations: {} } as never;
 }
 
-function setup(deploymentEnabled = true) {
+function setup(deploymentEnabled = true, diagnosticsEnabled = true) {
   const server = createServer();
   const setSpeed = vi.fn();
   const clientLog = vi.fn();
@@ -43,7 +43,8 @@ function setup(deploymentEnabled = true) {
     debugControlsEnabled: deploymentEnabled,
     devSimSpeed: { get: () => 1, set: setSpeed, enabled: deploymentEnabled },
     devDiagnostics: { get: () => ({ requestedSpeed: 1, effectiveSpeed: 1, pendingSimulationSeconds: 0,
-      lastPumpSteps: 1, lastPumpMilliseconds: 0, overloaded: false }) }, log: vi.fn(), clientLog });
+      lastPumpSteps: 1, lastPumpMilliseconds: 0, overloaded: false }) }, log: vi.fn(),
+    clientLog: diagnosticsEnabled ? clientLog : undefined });
   openGateways.push({ gateway, server });
   const connect = (nonce: string) => {
     const socket = new FakeSocket();
@@ -60,6 +61,14 @@ function setup(deploymentEnabled = true) {
 afterEach(() => { for (const { gateway, server } of openGateways.splice(0)) { gateway.closeAll(); server.close(); } });
 
 describe('deployment-gated debug authorization', () => {
+  it('advertises browser diagnostic uploads only when a sink is configured', () => {
+    const enabled = setup(false, true).connect('diagnostics-enabled');
+    const disabled = setup(false, false).connect('diagnostics-disabled');
+    expect(enabled.sent.find((message) => message.type === 'hello')?.capabilities).toContain('client-diagnostics');
+    expect(disabled.sent.find((message) => message.type === 'hello')?.capabilities).not.toContain('client-diagnostics');
+    enabled.close(); disabled.close();
+  });
+
   it('disables debug when the deployment gate is off', () => {
     const socket = setup(false).connect('disabled');
     expect(socket.sent.find((message) => message.type === 'hello')).toMatchObject({ debugEnabled: false });

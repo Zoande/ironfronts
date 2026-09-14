@@ -252,7 +252,8 @@ export class GameplayGateway {
             protocolVersion: PROTOCOL_VERSION,
             capabilities: [
               'filtered-baseline', 'change-only-deltas', 'resync',
-              'pending-commands', 'authoritative-timeline', 'client-diagnostics',
+              'pending-commands', 'authoritative-timeline',
+              ...(this.options.clientLog ? ['client-diagnostics'] : []),
             ],
             world: this.options.world,
             countryId: claims.countryId,

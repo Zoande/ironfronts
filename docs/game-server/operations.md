@@ -32,6 +32,7 @@ The root `npm run check` covers every workspace, architecture checks, script lin
 | `WORLD_DIRECTORY` | `public/world` | Local authoritative world package, resolved from the process working directory. |
 | `GAME_DATA_PATH` | `${DATA_DIRECTORY}/game.json` | Save path. Overrides `DATA_DIRECTORY`. |
 | `DATA_DIRECTORY` | `data` | Default state directory when `GAME_DATA_PATH` is absent. |
+| `DIAGNOSTICS_PATH` | unset | Optional JSONL diagnostics path. No diagnostics file or browser telemetry upload when unset. |
 | `TICKET_SECRET` | local development value | HMAC secret used to verify gameplay tickets. Required to differ from the fallback in production. Must match the issuer. |
 | `INTERNAL_SERVICE_SECRET` | local development value | Bearer secret protecting `/internal/v2/*`. Required to differ from the fallback in production. Must match callers. |
 | `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Explicit deployment gate for hidden debug controls and cheat commands. Authenticated clients open the inspector with Ctrl+D+E. |

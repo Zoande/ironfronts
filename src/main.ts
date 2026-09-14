@@ -1318,10 +1318,6 @@ async function bootstrapGameSession(
     window.removeEventListener('pagehide', teardownSessionOnPagehide);
     teardownSession();
   });
-
-  console.info(
-    `[game] ${player.name} connected — camera @ ${Math.round(x)},${Math.round(z)}`,
-  );
 }
 
 const armyMarkerScratch = new Float32Array(28 * 1_024);

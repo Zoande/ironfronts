@@ -16,15 +16,16 @@ import { GameplayGateway } from './gameplay-gateway';
 import { DiagnosticLog, type DiagnosticLevel } from './diagnostic-log';
 
 const diagnosticLog = new DiagnosticLog(config.diagnosticsPath);
+const consoleInfoEvents = new Set(['listening', 'diagnostics_file_enabled']);
+const fileOnlyEvents = new Set(['server_health', 'slow_projection_publish']);
 function log(level: 'info' | 'warn' | 'error', event: string, fields: Record<string, unknown> = {}): void {
   const record = { ...fields, timestamp: new Date().toISOString(), level, service: 'game-server', event };
-  console.log(JSON.stringify(record));
+  if (!fileOnlyEvents.has(event) && (level !== 'info' || consoleInfoEvents.has(event))) {
+    console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](JSON.stringify(record));
+  }
   diagnosticLog.write(level, 'game-server', event, fields);
 }
 function clientLog(level: DiagnosticLevel, event: string, fields: Record<string, unknown> = {}): void {
-  if (level !== 'debug') console.log(JSON.stringify({
-    ...fields, timestamp: new Date().toISOString(), level, service: 'browser', event,
-  }));
   diagnosticLog.write(level, 'browser', event, fields);
 }
 
@@ -35,7 +36,9 @@ process.on('unhandledRejection', (reason) => log('error', 'unhandled_rejection',
   message: reason instanceof Error ? reason.message : String(reason),
   stack: reason instanceof Error ? reason.stack ?? null : null,
 }));
-log('info', 'diagnostics_started', { path: config.diagnosticsPath, pid: process.pid, node: process.version });
+if (config.diagnosticsPath) {
+  log('info', 'diagnostics_file_enabled', { path: config.diagnosticsPath });
+}
 
 const loaded = await loadWorld(config.worldDirectory);
 const gamePersistence = new GamePersistence(config.gameDataPath);
@@ -169,7 +172,7 @@ const gateway: GameplayGateway = new GameplayGateway({
     overloaded: scheduler.pendingSeconds > 1,
   }) },
   log,
-  clientLog,
+  clientLog: config.diagnosticsPath ? clientLog : undefined,
 });
 
 const publisher: ProjectionPublisher = new ProjectionPublisher(runtime, () => gateway.connections,
