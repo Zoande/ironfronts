@@ -107,6 +107,12 @@ const STANCE_OPTIONS: ReadonlyArray<{ command: ArmyPanelCommand; icon: IconName;
   { command: 'stance-defend-retreat', icon: 'stance-defend-retreat', label: 'Defensive', description: 'Some defensive bonus, but pulls back early to preserve the force.' },
   { command: 'stance-retreat', icon: 'stance-retreat', label: 'Cautious', description: 'No combat bonus; breaks off at the first real pressure.' },
 ];
+const SUPPLY_RESOURCES = [
+  { id: 'funds', label: 'Funds', color: '#d1b56a' },
+  { id: 'food', label: 'Food', color: '#d6a24f' },
+  { id: 'metal', label: 'Metal', color: '#91a0a5' },
+  { id: 'oil', label: 'Oil', color: '#6d9b8d' },
+] as const;
 
 function node<K extends keyof HTMLElementTagNameMap>(
   tag: K, className?: string, text?: string,
@@ -222,7 +228,43 @@ export function renderSelectedArmyPanel(
       headerStances.append(btn);
     }
   }
-  header.append(headerStats, identity, headerStances, close);
+  const headerControls = node('span', 'ifg-army-panel__header-controls');
+  if (army.supply) {
+    const supplyBar = node('span', 'ifg-army-panel__supply-bar');
+    supplyBar.setAttribute('role', 'img');
+    supplyBar.setAttribute('aria-label', army.supply.connected ? 'Supply connected' : 'Supply stores');
+    const children = SUPPLY_RESOURCES.filter((resource) => (army.supply!.allocation[resource.id] ?? 0) > 0).map((resource) => {
+      const maximum = army.supply!.allocation[resource.id] ?? 0;
+      const current = Math.max(0, army.supply!.stores[resource.id] ?? 0);
+      const segment = node('i', 'ifg-army-panel__supply-segment');
+      segment.style.width = `${army.supply!.capacity > 0 ? current / army.supply!.capacity * 100 : 0}%`;
+      segment.style.backgroundColor = resource.color;
+      supplyBar.append(segment);
+      const depleted = current <= 0;
+      const debuff = depleted
+        ? 'Store empty: this resource’s unit-specific shortages are active.'
+        : army.shortage?.modifiers && Object.values(army.shortage.modifiers).some((value) => value < 0.999)
+          ? 'A shortage effect is active on this army.' : 'No shortage effect active.';
+      return { label: resource.label, value: `${Math.round(current)} / ${Math.round(maximum)}`, content: {
+        title: resource.label, description: debuff, status: army.supply!.connected ? 'Connected' : 'Depleting',
+      } };
+    });
+    const activeDebuffs = Object.entries(army.shortage?.modifiers ?? {}).filter(([, value]) => value < 0.999);
+    bindTooltip(supplyBar, () => ({
+      title: 'Supply stores',
+      description: army.supply!.connected ? 'Connected to the capital or a nearby ocean route.' : 'Disconnected: stores are being consumed.',
+      children: [
+        ...children,
+        ...(activeDebuffs.length ? [{ label: 'Active debuffs', value: `${activeDebuffs.length}`, content: {
+          title: 'Active shortage effects',
+          children: activeDebuffs.map(([stat, value]) => ({ label: stat.replace(/([A-Z])/g, ' $1'), value: `${Math.round(value * 100)}%` })),
+        } }] : []),
+      ],
+    }));
+    headerControls.append(supplyBar);
+  }
+  headerControls.append(headerStances);
+  header.append(headerStats, identity, headerControls, close);
   const summary = node('div', 'ifg-army-panel__summary');
   summary.append(health, stats);
 
@@ -430,17 +472,6 @@ export function renderSelectedArmyPanel(
       movementTrack.append(movementFill);
       movement.append(movementHeader, movementTrack);
       activity.append(movement);
-    }
-    if (army.own && army.shortage) {
-      const shortage = node('div', 'ifg-army-panel__shortage');
-      const pressure = Math.round(Math.max(...Object.values(army.shortage.severity)) * 100);
-      shortage.append(node('small', 'ifg-army-panel__eyebrow', 'Supply pressure'));
-      const pressureTrack = node('span', 'ifg-army-panel__pressure-track');
-      const pressureFill = node('i');
-      pressureFill.style.width = `${pressure}%`;
-      pressureTrack.append(pressureFill);
-      shortage.append(pressureTrack, node('b', undefined, `${pressure}%`));
-      activity.append(shortage);
     }
     if (army.artillery?.targetArmyId) {
       activity.append(node('span', undefined,

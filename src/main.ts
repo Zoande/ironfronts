@@ -2297,6 +2297,7 @@ function refreshSelectedArmy(
         && !NAVAL_TRANSIT_STATUSES.has(view.status)
         && (Boolean(view.moveOrder) || view.status === 'extracting' || targetingMode !== null),
       shortage: view.shortage,
+      supply: view.supply,
       legalRetreatExits: view.legalRetreatExits,
       battleFronts: view.battleFronts,
       artillery: view.artillery,

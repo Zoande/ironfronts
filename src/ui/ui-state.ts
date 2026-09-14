@@ -306,6 +306,12 @@ export interface ArmyStackView {
     severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
     modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
   };
+  readonly supply?: {
+    readonly capacity: number;
+    readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    readonly connected: boolean;
+    readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+  };
   readonly legalRetreatExits?: ReadonlyArray<{
     firstNodeId: number; destinationProvinceId: number; x: number; z: number;
     readonly bearing?: string;

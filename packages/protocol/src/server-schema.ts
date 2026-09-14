@@ -34,6 +34,7 @@ const army = point.extend({
   motion: z.object({ targetX: finite, targetZ: finite, durationMs: nonnegative, route: z.array(point).optional(), sampledAtEpochMs: finite.optional(), generation: integer.optional() }).optional(),
   actions: z.object({ canExtract: z.boolean(), extractionProvinceId: integer.nullable(), extractableResources: z.array(z.enum(['food', 'stone', 'metal', 'oil'])), extractReason: z.string().optional() }).optional(),
   shortage: z.object({ severity: z.record(z.string(), nonnegative), modifiers: z.record(z.string(), nonnegative) }).optional(),
+  supply: z.object({ capacity: nonnegative, stores: z.record(z.string(), nonnegative), connected: z.boolean(), allocation: z.record(z.string(), nonnegative) }).optional(),
   suspendedOrder: point.extend({ intent: z.enum(['move', 'attack']) }).nullable().optional(),
   battleFronts: z.array(z.object({ id: z.string(), directionNodeId: integer, role: z.enum(['attack', 'defense']),
     friendlyHp: nonnegative, friendlyBaselineHp: nonnegative, enemyHp: nonnegative, enemyBaselineHp: nonnegative,

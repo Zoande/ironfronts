@@ -70,10 +70,6 @@ export function applyUpkeepAndShortages(state: GameState, dtHours: number): void
     country.netIncome!.stone = country.income.stone;
   }
   for (const army of Object.values(state.armies)) {
-    const country = state.countries[army.ownerCountryId];
-    army.shortageSeverity = country?.shortages
-      ? Object.fromEntries(UPKEEP_RESOURCES.map((key) => [key, country.shortages![key].severity])) as Record<UpkeepResource, number>
-      : { funds: 0, food: 0, metal: 0, oil: 0 };
     const cap = stackOrganizationCap(army);
     army.organization = Math.min(army.organization ?? 100, cap);
   }

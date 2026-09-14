@@ -121,6 +121,9 @@ export interface ArmyStack {
    *  out-of-supply stack fights, holds, and moves worse. Recomputed on a
    *  slow cadence, not every tick. */
   inSupply?: boolean;
+  /** Per-army field stores, allocated by each unit's upkeep ratio. */
+  supplyStores?: Partial<Record<UpkeepResource, number>>;
+  supplyCapacity?: number;
 }
 
 export function groupMaxHp(group: UnitGroup): number {
@@ -143,6 +146,9 @@ export function ensureArmyRuntimeState(stack: ArmyStack): void {
   stack.entrenchment ??= 0;
   stack.stance ??= 'attack-defend';
   stack.inSupply ??= true;
+  stack.shortageSeverity ??= { funds: 0, food: 0, metal: 0, oil: 0 };
+  stack.supplyStores ??= {};
+  stack.supplyCapacity ??= 0;
   stack.extractionAssignment ??= null;
   stack.shortageSeverity ??= { funds: 0, food: 0, metal: 0, oil: 0 };
 }

@@ -165,6 +165,12 @@ export interface ProjectedArmy {
     severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
     modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
   };
+  supply?: {
+    capacity: number;
+    stores: Readonly<Record<string, number>>;
+    connected: boolean;
+    allocation: Readonly<Record<string, number>>;
+  };
   suspendedOrder?: { x: number; z: number; intent: 'move' | 'attack' } | null;
   battleFronts?: ReadonlyArray<{
     id: string;

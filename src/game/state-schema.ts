@@ -56,7 +56,7 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
     navalCrossing: z.object({ fromNodeId: id, toNodeId: id, hoursRemaining: positive }).nullable().default(null),
     organization: positive.optional(), entrenchment: positive.optional(),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']).optional(),
-    inSupply: z.boolean().optional() })),
+    inSupply: z.boolean().optional(), supplyStores: z.object({ funds: positive, food: positive, metal: positive, oil: positive }).partial().optional(), supplyCapacity: positive.optional() })),
   battles: record(z.object({ id: z.string(), frontIds: z.array(z.string()) })),
   battleFronts: record(point.extend({ id: z.string(), battleId: z.string(), anchorNodeId: id, kind: z.enum(['road', 'province']), provinceId: id.nullable(), sideA: side, sideB: side })),
   resourceNodes: record(point.extend({ id, kind: z.enum(['stone', 'metal', 'oil']), remaining: positive, initialAmount: positive, controllerCountryId: id,

@@ -905,6 +905,9 @@
 .ifg-army-panel__header-stats > span { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px; padding: 3px 5px; border: 1px solid var(--ifg-rule-soft); background: rgba(9, 11, 8, .25); }
 .ifg-army-panel__header-stats small { color: var(--ifg-dim); font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
 .ifg-army-panel__header-stats b { font-size: 11px; font-variant-numeric: tabular-nums; }
+.ifg-army-panel__header-controls { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.ifg-army-panel__supply-bar { display: inline-flex; width: 112px; height: 7px; overflow: hidden; background: #0b0d0a; border: 1px solid var(--ifg-rule-soft); cursor: help; }
+.ifg-army-panel__supply-segment { display: block; height: 100%; min-width: 0; opacity: .95; }
 .ifg-army-panel__identity strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1171,11 +1174,6 @@
 .ifg-army-panel__movement-header b { color: var(--ifg-text); font-size: 10px; font-variant-numeric: tabular-nums; }
 .ifg-army-panel__movement-track { display: block; height: 2px; margin-top: 4px; background: rgba(217, 164, 65, .16); }
 .ifg-army-panel__movement-track i { display: block; width: 42%; height: 100%; background: #d9a441; }
-.ifg-army-panel__shortage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; margin-top: 8px; }
-.ifg-army-panel__shortage small { white-space: nowrap; }
-.ifg-army-panel__shortage b { color: #d9a441; font-size: 9px; font-variant-numeric: tabular-nums; }
-.ifg-army-panel__pressure-track { display: block; height: 5px; overflow: hidden; background: #101a29; border: 1px solid rgba(81, 137, 190, .4); }
-.ifg-army-panel__pressure-track i { display: block; height: 100%; background: linear-gradient(90deg, #3e82bf, #c34f3d); }
 .ifg-army-panel__activity-value {
   display: block;
   padding: 7px 8px;
