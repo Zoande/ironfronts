@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 4 as const;
+export const PROTOCOL_VERSION = 5 as const;
 export const GAME_ID = 'world-at-war-2' as const;
 export const GAME_VERSION = 'world-at-war@4' as const;
 
@@ -34,7 +34,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('extract'), armyId: z.string(), resource: z.enum(['food', 'stone', 'metal', 'oil']) }),
   z.object({ type: z.literal('produce'), provinceId: z.number().int().nonnegative(), unitTypeId: z.string() }),
   z.object({ type: z.literal('build'), provinceId: z.number().int().nonnegative(), buildingId: z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']) }),
-  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'training', 'hybrid', 'armored']) }),
+  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']) }),
   z.object({ type: z.literal('setRally'), provinceId: z.number().int().nonnegative(), target: z.object({ x: z.number().finite(), z: z.number().finite() }).nullable() }),
   z.object({
     type: z.literal('sendDiplomaticMessage'),
@@ -324,7 +324,7 @@ export type ProjectionDelta = {
 };
 
 export type ServerMessage =
-  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 4; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean }
+  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 5; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean }
   | { type: 'baseline'; revision: number; state: PlayerProjection; catalogs: PresentationCatalogs; clock: GameClockSync }
   | { type: 'delta'; fromRevision: number; revision: number; delta: ProjectionDelta; events: FilteredEvent[] }
   | { type: 'clockSync'; clock: GameClockSync }
@@ -361,7 +361,7 @@ export interface GameTicketClaims {
   gameId: string;
   countryId: number;
   audience: 'game-server';
-  protocolVersion: 4;
+  protocolVersion: 5;
   expiresAt: number;
   nonce: string;
 }
@@ -371,7 +371,7 @@ export interface GameLobby {
   gameId: string;
   name: string;
   gameVersion: string;
-  protocolVersion: 4;
+  protocolVersion: 5;
   assignedCountryId: number | null;
   countries: LobbyCountry[];
 }
@@ -426,7 +426,7 @@ export interface SessionResponse {
   assignment?: { gameId: string; countryId: number } | null;
   profile?: CommanderProfile;
 }
-export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 4 }
+export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 5 }
 
 export const credentialsSchema = z.object({
   username: z.string().trim().min(3).max(32),

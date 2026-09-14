@@ -163,11 +163,13 @@ export type NavId =
   | 'diplomacy' | 'economy' | 'intelligence' | 'events' | 'trade';
 
 export type SidePanelId = 'diplomacy' | 'research' | 'trade';
-export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
+export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
+export type TechnologyCategory = Exclude<TechnologyBranch, 'resourceBuildings'>;
 
 export interface TechnologyView {
   readonly levels: Record<TechnologyBranch, number>;
-  readonly active?: { readonly branch: TechnologyBranch; readonly targetLevel: number; readonly progress: number; readonly etaSeconds: number };
+  readonly slots: ReadonlyArray<{ readonly branch: TechnologyBranch; readonly targetLevel: number; readonly progress: number; readonly etaSeconds: number } | null>;
+  readonly quotes: Record<TechnologyBranch, { readonly hours: number; readonly cost: Partial<Record<'funds' | 'food' | 'metal' | 'oil', number>>; readonly affordable: boolean; readonly lockedReason?: string }>;
   readonly pending?: boolean;
 }
 
@@ -429,7 +431,12 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
     paused: false,
     resourceOverlay: false,
     debugEnabled: false,
-    technology: { levels: { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1 } },
+    technology: {
+      levels: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1 },
+      slots: [null, null],
+      quotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']
+        .map((id) => [id, { hours: 6, cost: {}, affordable: true }])) as TechnologyView['quotes'],
+    },
     ...overrides,
   };
 }

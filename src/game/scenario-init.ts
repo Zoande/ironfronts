@@ -105,6 +105,7 @@ function makeCountryState(
     // usable from turn one; minors start dry and must build an Ordnance Workshop.
     warheads: selectable && !sandbox ? 1 : 0,
     technologies: initialTechnologyLevels(),
+    researchSlots: [null, null],
   };
   ensureCountryEconomy(country);
   return country;

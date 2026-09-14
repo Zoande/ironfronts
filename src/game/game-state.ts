@@ -27,7 +27,7 @@ export type UpkeepResource = 'funds' | 'food' | 'metal' | 'oil';
 export type ResourcePotential = Record<PhysicalResource, number>;
 export type ResourceBuildingId = 'fields' | 'quarry' | 'mine' | 'oilPump';
 export type ResourceBuildingTiers = Record<ResourceBuildingId, number>;
-export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
+export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
 export type TechnologyLevels = Record<TechnologyBranch, number>;
 
 export interface ResearchState {
@@ -95,9 +95,11 @@ export interface CountryState {
    * already built) — no GAME_VERSION bump.
    */
   phase?: number;
-  /** All branches begin at I. Only one no-cost research project may advance. */
+  /** All branches begin at I. Two paid research projects may advance together. */
   technologies?: TechnologyLevels;
+  /** Legacy single-slot field, migrated into researchSlots when a save loads. */
   research?: ResearchState;
+  researchSlots?: Array<ResearchState | null>;
 }
 
 /** Terminal state of a campaign, from the human player's point of view. */

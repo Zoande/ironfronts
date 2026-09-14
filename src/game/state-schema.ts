@@ -23,8 +23,8 @@ const side = z.object({ countryId: id, directionNodeId: id, role: z.enum(['attac
 const queue = z.object({ id: z.string(), ownerCountryId: id, progressWork: positive.optional(), totalWork: number.positive().optional(), progressHours: positive.optional(), totalHours: number.positive().optional(), targetTier: id.optional() });
 const shortage = z.object({ severity: positive.max(100), notifiedThreshold: z.union([z.literal(0), z.literal(25), z.literal(50), z.literal(75)]) });
 const potential = z.object({ food: positive.max(1), stone: positive.max(1), metal: positive.max(1), oil: positive.max(1) });
-const technologyBranch = z.enum(['infantry', 'resources', 'training', 'hybrid', 'armored']);
-const technologyLevelsSchema = z.object({ infantry: id.min(1).max(8), resources: id.min(1).max(8), training: id.min(1).max(8), hybrid: id.min(1).max(8), armored: id.min(1).max(8) });
+const technologyBranch = z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']);
+const technologyLevelsSchema = z.object({ infantry: id.min(1).max(8), resources: id.min(1).max(8), resourceBuildings: id.min(1).max(8).optional(), training: id.min(1).max(8), hybrid: id.min(1).max(8), armored: id.min(1).max(8) });
 const research = z.object({ branch: technologyBranch, targetLevel: id.min(2).max(8), progressHours: positive, totalHours: number.positive() });
 const resourceBuildings = z.object({ fields: id.max(8), quarry: id.max(8), mine: id.max(8), oilPump: id.max(8) });
 const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: z.string(), mode: z.enum(['campaign', 'sandbox']),
@@ -45,7 +45,7 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
     scheduleDay: z.string(), rainStartMinute: id.max(1439), rainDurationMinutes: id.min(60).max(120),
   }).optional(),
   simulationTick: id,
-  countries: record(z.object({ id, name: z.string(), color: z.string(), controller: z.enum(['player', 'ai', 'neutral']), stockpile, income: stockpile, industryCapacity: positive, upkeep: stockpile.optional(), netIncome: signedStockpile.optional(), coverage: z.object({ funds: positive.max(1), food: positive.max(1), metal: positive.max(1), oil: positive.max(1) }).optional(), reserveHours: z.object({ funds: positive.nullable(), food: positive.nullable(), metal: positive.nullable(), oil: positive.nullable() }).optional(), shortages: z.object({ funds: shortage, food: shortage, metal: shortage, oil: shortage }).optional(), warheads: positive.default(0), phase: id.optional(), technologies: technologyLevelsSchema.optional(), research: research.optional() })),
+  countries: record(z.object({ id, name: z.string(), color: z.string(), controller: z.enum(['player', 'ai', 'neutral']), stockpile, income: stockpile, industryCapacity: positive, upkeep: stockpile.optional(), netIncome: signedStockpile.optional(), coverage: z.object({ funds: positive.max(1), food: positive.max(1), metal: positive.max(1), oil: positive.max(1) }).optional(), reserveHours: z.object({ funds: positive.nullable(), food: positive.nullable(), metal: positive.nullable(), oil: positive.nullable() }).optional(), shortages: z.object({ funds: shortage, food: shortage, metal: shortage, oil: shortage }).optional(), warheads: positive.default(0), phase: id.optional(), technologies: technologyLevelsSchema.optional(), research: research.optional(), researchSlots: z.array(research.nullable()).max(2).optional() })),
   provinceOwners: record(id), provinceBuildings: record(z.object({ barracks: id.max(8), tankPlant: id.max(8), ordnance: id.max(8), missileSite: id.max(8).default(0) })),
   productionQueues: record(z.array(queue.extend({ unitTypeId: unit }))), constructionQueues: record(z.array(queue.extend({ buildingId: building }))), rallyPoints: record(point),
   armies: record(point.extend({ id: z.string(), ownerCountryId: id, name: z.string(), graphNodeId: id,
@@ -103,6 +103,12 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
     // locked out of what it already has.
     country.phase ??= qualifyingPhaseFromBuildings(parsed as unknown as GameState, country.id);
     country.technologies ??= initialTechnologyLevels();
+    country.technologies.resourceBuildings ??= country.technologies.resources;
+    if (country.researchSlots || country.research) {
+      country.researchSlots ??= [country.research!, null];
+      while (country.researchSlots.length < 2) country.researchSlots.push(null);
+    }
+    delete country.research;
   }
   for (const buildings of Object.values(parsed.provinceBuildings)) buildings.missileSite ??= 0;
   for (const army of Object.values(parsed.armies)) {

@@ -43,6 +43,7 @@ export type IconName =
   | 'unit-engineer' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank'
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
+  | 'tech-militia' | 'tech-commandos'
   | 'stat-health' | 'stat-attack' | 'stat-defence' | 'stat-speed' | 'stat-troops'
   | 'structure-barracks' | 'structure-plant' | 'structure-ordnance'
   | 'structure-fortress' | 'structure-city'
@@ -105,6 +106,8 @@ const ICONS: Record<IconName, IconDef> = {
   'marker-light-tank': { kind: 'img', value: ironfrontsPng('marker-light-tank') },
   'marker-medium-tank': { kind: 'img', value: ironfrontsPng('marker-medium-tank') },
   'marker-artillery': { kind: 'img', value: ironfrontsPng('marker-artillery') },
+  'tech-militia': { kind: 'svg', value: svg('tech-militia') },
+  'tech-commandos': { kind: 'svg', value: svg('tech-commandos') },
   'stat-health': { kind: 'img', value: png('heal') },
   'stat-attack': { kind: 'svg', value: svg('crossed-blades') },
   'stat-defence': { kind: 'svg', value: svg('shield') },

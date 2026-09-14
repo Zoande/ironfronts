@@ -22,7 +22,8 @@ import { groupQueueItems, type QueueGroup } from './queue-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import type {
-  MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, TechnologyBranch, TradeLegView, UiStore,
+  MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, TechnologyBranch,
+  TechnologyCategory, TradeLegView, UiStore,
 } from './ui-state';
 
 export interface GameUiActions {
@@ -92,14 +93,38 @@ const RESOURCE_CHIPS: ReadonlyArray<{ key: keyof ProvinceResourceTotals; label: 
  *  since the UI only ever sees the projected tier number, never game-core. */
 const COUNTRY_PHASE_LABELS: Record<number, string> = { 1: 'Phase I', 2: 'Phase II', 3: 'Phase III' };
 
-const TECHNOLOGY_UI: ReadonlyArray<{
-  id: TechnologyBranch; label: string; icon: IconName; description: string; unlocks: string;
+interface TechnologyLineDefinition {
+  readonly id: string;
+  readonly technology?: TechnologyBranch;
+  readonly label: string;
+  readonly shortLabel: string;
+  readonly icon: IconName;
+  readonly description: string;
+  readonly unlocks: string;
+  readonly comingSoon?: boolean;
+}
+
+const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
+  id: TechnologyCategory; label: string; icon: IconName; lines: readonly TechnologyLineDefinition[];
 }> = [
-  { id: 'infantry', label: 'Infantry', icon: 'stat-troops', description: 'Stronger line infantry with improved health, speed and firepower.', unlocks: 'Infantry levels' },
-  { id: 'resources', label: 'Resources', icon: 'resource-overlay', description: 'Better engineers and higher-output fields, quarries, mines and oil pumps.', unlocks: 'Engineers · resource buildings' },
-  { id: 'training', label: 'Training', icon: 'industry', description: 'Higher-level training facilities dramatically accelerate advanced units.', unlocks: 'Barracks · plants · workshops' },
-  { id: 'hybrid', label: 'Hybrid', icon: 'unit-armored-car', description: 'Mobile support doctrine for reconnaissance vehicles, artillery and late strategic systems.', unlocks: 'Armored cars · artillery · nuclear systems at VIII' },
-  { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', description: 'Improved armor, engines and guns for tank formations.', unlocks: 'Light and medium tanks' },
+  { id: 'infantry', label: 'Infantry', icon: 'marker-infantry', lines: [
+    { id: 'infantry', technology: 'infantry', label: 'Line Infantry', shortLabel: 'Infantry', icon: 'marker-infantry', description: 'Modernises the line battalions that hold and contest territory.', unlocks: 'Stronger infantry variants at every level' },
+    { id: 'militia', label: 'Territorial Militia', shortLabel: 'Militia', icon: 'tech-militia', description: 'A future low-cost defensive troop family.', unlocks: 'Planned troop line', comingSoon: true },
+    { id: 'commandos', label: 'Commandos', shortLabel: 'Commandos', icon: 'tech-commandos', description: 'A future elite infiltration and raiding troop family.', unlocks: 'Planned troop line', comingSoon: true },
+  ] },
+  { id: 'resources', label: 'Resources', icon: 'resource-overlay', lines: [
+    { id: 'engineers', technology: 'resources', label: 'Engineer Corps', shortLabel: 'Engineers', icon: 'unit-engineer', description: 'Improves engineer survivability, mobility and field output.', unlocks: 'Engineer unit levels' },
+    { id: 'infrastructure', technology: 'resourceBuildings', label: 'Resource Infrastructure', shortLabel: 'Infrastructure', icon: 'resource-overlay', description: 'Advances fields, quarries, mines and oil pumps.', unlocks: 'Resource building tiers · prerequisite for advanced engineers' },
+  ] },
+  { id: 'training', label: 'Training', icon: 'industry', lines: [
+    { id: 'training', technology: 'training', label: 'Training & Industry', shortLabel: 'Facilities', icon: 'structure-barracks', description: 'Expands military training and production methods.', unlocks: 'Barracks · tank plants · ordnance workshops' },
+  ] },
+  { id: 'hybrid', label: 'Support', icon: 'unit-armored-car', lines: [
+    { id: 'hybrid', technology: 'hybrid', label: 'Mobile Support', shortLabel: 'Mobile Support', icon: 'marker-armored-car', description: 'Coordinates reconnaissance vehicles and artillery support.', unlocks: 'Armored cars · artillery · strategic systems at VIII' },
+  ] },
+  { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', lines: [
+    { id: 'armored', technology: 'armored', label: 'Armored Warfare', shortLabel: 'Armor', icon: 'unit-medium-tank', description: 'Improves tank protection, engines and heavy firepower.', unlocks: 'Light and medium tank levels' },
+  ] },
 ];
 
 /**
@@ -115,7 +140,11 @@ function technologyLevelUnlockText(branch: TechnologyBranch, level: number): str
     case 'infantry':
       return `Infantry Level ${level} (more health and firepower) — also needs Barracks Tier ${level}.`;
     case 'resources':
-      return `Engineers Level ${level}, and Tier ${level} fields, quarries, mines and oil pumps.`;
+      return level >= 3
+        ? `Engineer Level ${level} — also needs Barracks Tier ${level} and Resource Infrastructure Level ${level - 1}.`
+        : `Engineer Level ${level} — also needs Barracks Tier ${level}.`;
+    case 'resourceBuildings':
+      return `Tier ${level} fields, quarries, mines and oil pumps where local resource potential supports it.`;
     case 'training':
       return `Tier ${level} Barracks, Tank Plant and Ordnance Works.`;
     case 'hybrid':
@@ -433,7 +462,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     sell: actions.marketSell,
   });
 
-  // ---------------- technology: one active no-cost project ----------------
+  // ---------------- technology tree + two authoritative research slots ----------------
   const technologyPanel = el('section', 'ifg-tech');
   technologyPanel.id = 'ifg-technology-panel';
   technologyPanel.hidden = true;
@@ -452,63 +481,166 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   techTabs.setAttribute('role', 'tablist');
   const techBody = el('div', 'ifg-tech__body');
   technologyPanel.append(techHead, techTabs, techBody);
-  let selectedTechTab: TechnologyBranch = 'infantry';
+  let selectedTechTab: TechnologyCategory = 'infantry';
+  let selectedTechnology: TechnologyBranch = 'infantry';
+  let selectedTechnologyLevel = 0;
   let techRenderKey = '';
   const renderTechnology = (state: StrategicUiState): void => {
-    const activeKey = state.technology.active
-      ? `${state.technology.active.branch}:${state.technology.active.targetLevel}:${Math.round(state.technology.active.progress * 1000)}:${Math.round(state.technology.active.etaSeconds)}` : '-';
-    const nextKey = `${selectedTechTab}|${Object.values(state.technology.levels).join(',')}|${activeKey}|${state.technology.pending}`;
+    const activeKey = state.technology.slots.map((active) => active
+      ? `${active.branch}:${active.targetLevel}:${Math.round(active.progress * 1000)}:${Math.round(active.etaSeconds)}` : '-').join('|');
+    const quoteKey = Object.values(state.technology.quotes).map((quote) =>
+      `${quote.affordable}:${quote.lockedReason ?? ''}:${Object.values(quote.cost).join(',')}`).join('|');
+    const nextKey = `${selectedTechTab}|${selectedTechnology}:${selectedTechnologyLevel}|${Object.values(state.technology.levels).join(',')}|${activeKey}|${quoteKey}|${state.technology.pending}`;
     if (nextKey === techRenderKey) return;
     techRenderKey = nextKey;
-    const current = TECHNOLOGY_UI.find((branch) => branch.id === selectedTechTab)!;
-    techTabs.replaceChildren(...TECHNOLOGY_UI.map((branch) => {
+    const current = TECHNOLOGY_CATEGORIES.find((category) => category.id === selectedTechTab)!;
+    const allLines = TECHNOLOGY_CATEGORIES.flatMap((category) => [...category.lines]);
+    const definitionFor = (branch: TechnologyBranch): TechnologyLineDefinition =>
+      allLines.find((line) => line.technology === branch)!;
+    if (selectedTechnologyLevel === 0) {
+      selectedTechnologyLevel = Math.min(8, state.technology.levels[selectedTechnology] + 1);
+    }
+    techTabs.replaceChildren(...TECHNOLOGY_CATEGORIES.map((category) => {
       const tab = el('button', 'ifg-tech__tab');
       tab.type = 'button';
       tab.setAttribute('role', 'tab');
-      tab.setAttribute('aria-selected', String(branch.id === selectedTechTab));
-      tab.classList.toggle('is-active', branch.id === selectedTechTab);
-      tab.append(createIcon(branch.icon), el('span', undefined, branch.label), el('b', undefined, `L${state.technology.levels[branch.id]}`));
-      tab.onclick = () => { selectedTechTab = branch.id; renderTechnology(store.get()); };
+      tab.setAttribute('aria-selected', String(category.id === selectedTechTab));
+      tab.classList.toggle('is-active', category.id === selectedTechTab);
+      const liveLines = category.lines.filter((line) => line.technology);
+      const categoryLevel = Math.min(...liveLines.map((line) => state.technology.levels[line.technology!]));
+      tab.append(createIcon(category.icon), el('span', undefined, category.label), el('b', undefined, `L${categoryLevel}`));
+      tab.onclick = () => {
+        selectedTechTab = category.id;
+        const first = category.lines.find((line) => line.technology)?.technology;
+        if (first) {
+          selectedTechnology = first;
+          selectedTechnologyLevel = Math.min(8, state.technology.levels[first] + 1);
+        }
+        techRenderKey = '';
+        renderTechnology(store.get());
+      };
       return tab;
     }));
-    const level = state.technology.levels[current.id];
-    const active = state.technology.active;
-    const hero = el('div', 'ifg-tech__branch');
-    hero.append(createIcon(current.icon, 'ifg-tech__branch-icon'));
-    const copy = el('span', 'ifg-tech__branch-copy');
-    copy.append(el('h3', undefined, current.label), el('p', undefined, current.description), el('small', undefined, current.unlocks));
-    hero.append(copy);
-    const track = el('div', 'ifg-tech__track');
-    for (let candidate = 1; candidate <= 8; candidate += 1) {
-      const node = el('div', 'ifg-tech__node');
-      node.classList.toggle('is-complete', candidate <= level);
-      node.classList.toggle('is-next', candidate === level + 1);
-      node.append(el('strong', undefined, String(candidate)), el('small', undefined, candidate === 1 ? 'Available' : `${[0, 0, 6, 10, 16, 24, 32, 40, 48][candidate]}h`));
-      bindTooltip(node, () => ({
-        title: `Level ${candidate}`,
-        description: technologyLevelUnlockText(current.id, candidate),
-        status: candidate <= level ? 'Unlocked' : candidate === level + 1 ? 'Next' : 'Locked',
-      }));
-      track.append(node);
+    const workspace = el('div', 'ifg-tech__workspace');
+    const tree = el('div', 'ifg-tech__tree');
+    const timeline = el('div', 'ifg-tech__timeline');
+    timeline.append(el('span', undefined, 'Available technology'));
+    for (let level = 1; level <= 8; level += 1) timeline.append(el('b', undefined, `Level ${level}`));
+    tree.append(timeline);
+
+    for (const line of current.lines) {
+      const row = el('section', `ifg-tech__line${line.comingSoon ? ' is-coming-soon' : ''}`);
+      const label = el('header', 'ifg-tech__line-label');
+      label.append(createIcon(line.icon), el('strong', undefined, line.shortLabel));
+      if (line.comingSoon) label.append(el('small', undefined, 'Future troop line'));
+      row.append(label);
+      const track = el('div', 'ifg-tech__track');
+      const branch = line.technology;
+      const currentLevel = branch ? state.technology.levels[branch] : 0;
+      for (let candidate = 1; candidate <= 8; candidate += 1) {
+        const node = el('button', 'ifg-tech__node');
+        node.type = 'button';
+        node.disabled = !branch;
+        node.classList.toggle('is-complete', Boolean(branch && candidate <= currentLevel));
+        node.classList.toggle('is-next', Boolean(branch && candidate === currentLevel + 1));
+        node.classList.toggle('is-selected', Boolean(branch === selectedTechnology && candidate === selectedTechnologyLevel));
+        node.classList.toggle('is-researching', state.technology.slots.some((slot) =>
+          slot !== null && slot.branch === branch && slot.targetLevel === candidate));
+        node.append(createIcon(line.icon), el('small', undefined, `Lvl. ${candidate}`));
+        if (branch === 'resourceBuildings' && candidate < 8) {
+          node.append(el('i', 'ifg-tech__dependency'));
+        }
+        bindTooltip(node, () => ({
+          title: `${line.label} · Level ${candidate}`,
+          description: branch
+            ? technologyLevelUnlockText(branch, candidate)
+            : `${line.description} This technology line is coming soon.`,
+          status: branch
+            ? candidate <= currentLevel ? 'Unlocked' : candidate === currentLevel + 1 ? 'Next' : 'Locked'
+            : 'Coming soon',
+        }));
+        if (branch) node.onclick = () => {
+          selectedTechnology = branch;
+          selectedTechnologyLevel = candidate;
+          techRenderKey = '';
+          renderTechnology(store.get());
+        };
+        track.append(node);
+      }
+      row.append(track);
+      if (line.comingSoon) row.append(el('div', 'ifg-tech__coming-soon', 'Coming soon'));
+      tree.append(row);
     }
-    const action = el('div', 'ifg-tech__action');
-    if (active) {
-      const activeDef = TECHNOLOGY_UI.find((branch) => branch.id === active.branch)!;
-      const status = el('div', 'ifg-tech__status');
-      status.append(el('b', undefined, `${activeDef.label} Level ${active.targetLevel}`), el('small', undefined, `${Math.round(active.progress * 100)}% · ${formatEta(active.etaSeconds)} remaining`));
-      const bar = el('span', 'ifg-tech__bar');
-      const fill = el('i'); fill.style.width = `${Math.round(active.progress * 100)}%`; bar.append(fill);
-      status.append(bar); action.append(status);
-    } else if (level < 8) {
-      const start = el('button', 'ifg-tech__start', `Develop Level ${level + 1}`);
-      start.type = 'button';
-      start.disabled = state.technology.pending === true;
-      start.onclick = () => actions.researchTechnology(current.id);
-      action.append(start, el('small', undefined, 'No resources required · one project at a time'));
-    } else {
-      action.append(el('strong', 'ifg-tech__max', 'Branch fully developed'));
+
+    const rail = el('aside', 'ifg-tech__rail');
+    const researchPanel = el('section', 'ifg-tech__rail-section ifg-tech__research');
+    researchPanel.append(el('h3', undefined, 'Current research'));
+    for (let slotIndex = 0; slotIndex < 2; slotIndex += 1) {
+      const active = state.technology.slots[slotIndex] ?? null;
+      const slot = el('article', `ifg-tech__slot${active ? ' is-active' : ''}`);
+      if (active) {
+        const activeDef = definitionFor(active.branch);
+        slot.append(createIcon(activeDef.icon, 'ifg-tech__slot-icon'));
+        const copy = el('span');
+        copy.append(el('b', undefined, `${activeDef.label} · Level ${active.targetLevel}`),
+          el('small', undefined, `${Math.round(active.progress * 100)}% · ${formatEta(active.etaSeconds)} remaining`));
+        const bar = el('span', 'ifg-tech__bar');
+        const fill = el('i'); fill.style.width = `${Math.round(active.progress * 100)}%`; bar.append(fill);
+        copy.append(bar); slot.append(copy);
+      } else {
+        slot.append(createIcon('objectives', 'ifg-tech__slot-icon'),
+          el('span', undefined, `<b>Free research slot #${slotIndex + 1}</b><small>Select an available technology</small>`));
+      }
+      researchPanel.append(slot);
     }
-    techBody.replaceChildren(hero, track, action);
+
+    const selectedDef = definitionFor(selectedTechnology);
+    const selectedLevel = state.technology.levels[selectedTechnology];
+    const quote = state.technology.quotes[selectedTechnology];
+    const selectedActive = state.technology.slots.find((slot) =>
+      slot !== null && slot.branch === selectedTechnology && slot.targetLevel === selectedTechnologyLevel);
+    const isComplete = selectedTechnologyLevel <= selectedLevel;
+    const isNext = selectedTechnologyLevel === selectedLevel + 1;
+    const slotsFull = state.technology.slots.every(Boolean);
+    const details = el('section', 'ifg-tech__rail-section ifg-tech__details');
+    details.append(el('h3', undefined, 'Research details'));
+    const detailHero = el('div', 'ifg-tech__detail-hero');
+    detailHero.append(createIcon(selectedDef.icon));
+    const detailCopy = el('span');
+    detailCopy.append(el('b', undefined, `${selectedDef.label} · Level ${selectedTechnologyLevel}`),
+      el('small', undefined, selectedDef.description));
+    detailHero.append(detailCopy); details.append(detailHero);
+    const unlocks = el('div', 'ifg-tech__unlocks');
+    unlocks.append(el('small', undefined, 'Unlocks'), el('strong', undefined, selectedDef.unlocks));
+    details.append(unlocks);
+    const costRow = el('div', 'ifg-tech__costs');
+    for (const resource of ['funds', 'food', 'metal', 'oil'] as const) {
+      const amount = isNext ? quote.cost[resource] : undefined;
+      if (!amount) continue;
+      const item = el('span');
+      item.append(createIcon(resource), el('b', undefined, amount.toLocaleString()));
+      costRow.append(item);
+    }
+    const duration = el('span');
+    duration.append(createIcon('objectives'), el('b', undefined, isNext ? `${quote.hours} game h` : '—'));
+    costRow.append(duration); details.append(costRow);
+    const action = el('button', 'ifg-tech__start');
+    action.type = 'button';
+    let disabledReason = '';
+    if (isComplete) disabledReason = 'Technology already unlocked';
+    else if (!isNext) disabledReason = `Develop Level ${selectedLevel + 1} first`;
+    else if (selectedActive) disabledReason = 'Research already in progress';
+    else if (quote.lockedReason) disabledReason = quote.lockedReason;
+    else if (slotsFull) disabledReason = 'Both research slots are occupied';
+    else if (!quote.affordable) disabledReason = 'Insufficient resources';
+    else if (state.technology.pending) disabledReason = 'Awaiting server confirmation';
+    action.disabled = Boolean(disabledReason);
+    action.textContent = disabledReason || `Research Level ${selectedTechnologyLevel}`;
+    action.onclick = () => actions.researchTechnology(selectedTechnology);
+    details.append(action);
+    rail.append(researchPanel, details);
+    workspace.append(tree, rail);
+    techBody.replaceChildren(workspace);
   };
 
   // ---------------- map-mode cluster (top-right) ----------------

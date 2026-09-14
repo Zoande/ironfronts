@@ -48,8 +48,8 @@ const army = point.extend({
 const timeline = z.object({ elapsedSeconds: nonnegative, speed: finite.min(1).max(10_000), sampledAtEpochMs: finite, generation: integer });
 const ownCountry = z.object({ id: integer, name: z.string(), color: z.string(), controller: z.enum(['player', 'ai', 'neutral']),
   stockpile, income: stockpile, industryCapacity: nonnegative, warheads: nonnegative.optional(), phase: integer.optional(),
-  technologies: z.object({ infantry: integer.min(1).max(8), resources: integer.min(1).max(8), training: integer.min(1).max(8), hybrid: integer.min(1).max(8), armored: integer.min(1).max(8) }).optional(),
-  research: z.object({ branch: z.enum(['infantry', 'resources', 'training', 'hybrid', 'armored']), targetLevel: integer.min(2).max(8), progressHours: nonnegative, totalHours: finite.positive() }).optional(),
+  technologies: z.object({ infantry: integer.min(1).max(8), resources: integer.min(1).max(8), resourceBuildings: integer.min(1).max(8), training: integer.min(1).max(8), hybrid: integer.min(1).max(8), armored: integer.min(1).max(8) }).optional(),
+  researchSlots: z.array(z.object({ branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']), targetLevel: integer.min(2).max(8), progressHours: nonnegative, totalHours: finite.positive() }).nullable()).max(2).optional(),
   upkeep: stockpile.optional(), netIncome: stockpile.optional(), coverage: z.record(z.string(), nonnegative).optional(),
   reserveHours: z.record(z.string(), nonnegative.nullable()).optional(), shortages: z.record(z.string(), z.object({ severity: nonnegative, notifiedThreshold: nonnegative })).optional() });
 const diplomacyMessage = z.object({ id: z.string(), fromCountryId: integer, toCountryId: integer, body: z.string(), sentAtTick: integer });
@@ -108,7 +108,7 @@ const clock = z.object({
   timeZone: z.string().min(1).max(100).optional(),
 });
 export const serverMessageSchema: z.ZodType<ServerMessage> = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('hello'), gameId: z.string(), gameVersion: z.string(), protocolVersion: z.literal(4), capabilities: z.array(z.string()),
+  z.object({ type: z.literal('hello'), gameId: z.string(), gameVersion: z.string(), protocolVersion: z.literal(5), capabilities: z.array(z.string()),
     world: z.object({ version: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/), assetBaseUrl: z.url(),
       artifactHashes: record(z.string().regex(/^[a-f0-9]{64}$/)) }), countryId: integer, debugEnabled: z.boolean() }),
   z.object({ type: z.literal('baseline'), revision: integer, state: projectionSchema, catalogs, clock }),

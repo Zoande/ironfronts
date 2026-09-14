@@ -34,6 +34,10 @@ import { ArmyMotionInterpolator, type ArmyPickEntry } from './army-motion';
 import { buildBattleAnchors, combatHuddleOffset, groupEngagedByFront } from './combat-huddle';
 import { MISSILE_RANGE } from './game/strike';
 import { GAME_PACE } from './game/pacing';
+import {
+  TECHNOLOGY_BRANCHES, TECHNOLOGY_HOURS_BY_LEVEL, TECHNOLOGY_LABELS,
+  researchPrerequisiteReason, technologyCost,
+} from './game/technology';
 import { wrappedDistance, wrappedDeltaX } from './game/geometry';
 
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'fields' | 'quarry' | 'mine' | 'oilPump';
@@ -61,18 +65,33 @@ const orderEtaSeconds = (o: WorkOrderView): number => Math.max(0,
     / Math.max(0.01, o.workRate ?? 1)
     / (GAME_PACE.clock.simulationHoursPerRealSecond * (activeSession?.devSimSpeed ?? 1)));
 const technologyView = (session: RemoteGameSession) => {
-  const levels = { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1, ...(session.ownCountry.technologies ?? {}) };
-  const research = session.ownCountry.research;
+  const levels = {
+    infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1,
+    ...(session.ownCountry.technologies ?? {}),
+  };
+  const stockpile = session.ownCountry.stockpile;
+  const quotes = Object.fromEntries(TECHNOLOGY_BRANCHES.map((branch) => {
+    const targetLevel = Math.min(8, levels[branch] + 1);
+    const cost = technologyCost(branch, targetLevel);
+    const affordable = Object.entries(cost).every(([resource, amount]) =>
+      stockpile[resource as keyof typeof stockpile] >= (amount ?? 0));
+    return [branch, {
+      hours: TECHNOLOGY_HOURS_BY_LEVEL[targetLevel], cost, affordable,
+      ...(levels[branch] < 8
+        ? { lockedReason: researchPrerequisiteReason(levels, branch, targetLevel) } : {}),
+    }];
+  })) as import('./ui/ui-state').TechnologyView['quotes'];
   return {
     levels,
     pending: session.pendingResearch(),
-    ...(research ? { active: {
+    quotes,
+    slots: (session.ownCountry.researchSlots ?? [null, null]).map((research) => research ? {
       branch: research.branch,
       targetLevel: research.targetLevel,
       progress: Math.min(1, research.progressHours / research.totalHours),
       etaSeconds: Math.max(0, research.totalHours - research.progressHours)
         / (GAME_PACE.clock.simulationHoursPerRealSecond * session.devSimSpeed),
-    } } : {}),
+    } : null),
   };
 };
 
@@ -1235,9 +1254,9 @@ async function bootstrapGameSession(
     // Fog visibility is O(foreignArmies × visionSources); compute it once per
     // HUD tick and share it between the marker upload and the selection card.
     const nextTechnology = technologyView(session);
-    for (const branch of ['infantry', 'resources', 'training', 'hybrid', 'armored'] as TechnologyBranch[]) {
+    for (const branch of TECHNOLOGY_BRANCHES as readonly TechnologyBranch[]) {
       if (nextTechnology.levels[branch] > knownTechnologyLevels[branch]) {
-        pushNotification('completed', 'Technology developed', `${branch[0].toUpperCase()}${branch.slice(1)} Level ${nextTechnology.levels[branch]} is now available.`);
+        pushNotification('completed', 'Technology developed', `${TECHNOLOGY_LABELS[branch]} Level ${nextTechnology.levels[branch]} is now available.`);
       }
     }
     knownTechnologyLevels = { ...nextTechnology.levels };

@@ -10,7 +10,7 @@ import type { SimContext } from '../../src/game/sim-context';
 function context(): SimContext {
   return {
     state: {
-      countries: { 1: { phase: 3, technologies: { infantry: 8, resources: 8, training: 8, hybrid: 8, armored: 8 }, stockpile: { funds: 100_000, manpower: 0, food: 0, stone: 100_000, metal: 100_000, oil: 0 } } },
+      countries: { 1: { phase: 3, technologies: { infantry: 8, resources: 8, resourceBuildings: 8, training: 8, hybrid: 8, armored: 8 }, stockpile: { funds: 100_000, manpower: 0, food: 0, stone: 100_000, metal: 100_000, oil: 0 } } },
       provinceOwners: { 10: 1 },
       provinceBuildings: { 10: { barracks: 1, tankPlant: 1, ordnance: 1, missileSite: 1 } },
       provinceEconomies: { 10: { productionCapacity: 1 } },

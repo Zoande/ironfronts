@@ -9,7 +9,7 @@ const root = process.cwd();
 
 function lobby(countries: Partial<LobbyCountry>[]): GameLobby {
   return {
-    gameId: 'g', name: 'n', gameVersion: 'v', protocolVersion: 4, assignedCountryId: null,
+    gameId: 'g', name: 'n', gameVersion: 'v', protocolVersion: 5, assignedCountryId: null,
     countries: countries.map((c, i) => ({
       id: i + 1, name: 'X', color: '#fff', startingCities: 5, alive: true, claimed: false, ...c,
     })),
