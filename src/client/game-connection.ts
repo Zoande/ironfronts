@@ -19,6 +19,7 @@ export class GameConnection extends EventTarget {
   status: ConnectionStatus = 'connecting';
   /** Granted by the authenticated server handshake for this connection. */
   debugEnabled = false;
+  debugUnlockAvailable = false;
   devSimSpeed = 1;
   devSimSpeedEnabled = false;
   devDiagnostics = {
@@ -59,8 +60,9 @@ export class GameConnection extends EventTarget {
   private async connect(onStage?: (stage: string) => void): Promise<void> {
     if (this.closed) return;
     const attempt = ++this.attempt;
-    if (this.debugEnabled) {
+    if (this.debugEnabled || this.debugUnlockAvailable) {
       this.debugEnabled = false;
+      this.debugUnlockAvailable = false;
       this.dispatchEvent(new Event('debug-access'));
     }
     this.setStatus('connecting');
@@ -97,6 +99,7 @@ export class GameConnection extends EventTarget {
         if (message.type === 'hello') {
           hello = true;
           this.debugEnabled = message.debugEnabled;
+          this.debugUnlockAvailable = message.debugUnlockAvailable ?? message.debugEnabled;
           this.dispatchEvent(new Event('debug-access'));
           if (this.world && this.world.hash !== message.world.hash) {
             this.setStatus('incompatible'); this.closed = true;
@@ -139,6 +142,10 @@ export class GameConnection extends EventTarget {
           const now = performance.now();
           this.serverEpochMs = message.serverEpochMs + Math.max(0, now - message.sentAt) / 2;
           this.serverSampleAt = now;
+        } else if (message.type === 'devDebugAccess') {
+          this.debugEnabled = message.enabled;
+          this.dispatchEvent(new Event('debug-access'));
+          this.dispatchEvent(new CustomEvent('debug-unlock-result', { detail: message }));
         } else if (message.type === 'devSimSpeed') {
           this.devSimSpeed = message.multiplier;
           this.devSimSpeedEnabled = message.devControlsEnabled;
@@ -212,6 +219,7 @@ export class GameConnection extends EventTarget {
   }
   readEpochMs(): number { return this.gameClock.readEpochMs(); }
   readClock(): GameClockReading { return this.gameClock.read(); }
+  unlockDebug(password: string): void { this.send({ type: 'devUnlockDebug', password }); }
   setDevSimSpeed(multiplier: number): void { this.send({ type: 'devSetSimSpeed', multiplier }); }
   setDevClock(epochMs: number): void { this.send({ type: 'devSetClock', epochMs }); }
   linkDevClockToTimezone(timeZone: string): void {
