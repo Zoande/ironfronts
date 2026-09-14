@@ -5,6 +5,7 @@ import { WebSocket } from 'ws';
 import { GAME_ID, PROTOCOL_VERSION } from '../../packages/protocol/src/index';
 import { signGameTicket } from '../../packages/protocol/src/ticket';
 import { GameplayGateway } from '../../apps/game-server/src/gameplay-gateway';
+import { isDebugEntitledUsername } from '../../apps/auth-server/src/debug-entitlement';
 
 const secret = 'a sufficiently long debug authorization secret';
 const debugPassword = 'correct horse battery staple';
@@ -60,6 +61,12 @@ function setup(deploymentEnabled = true) {
 afterEach(() => { for (const { gateway, server } of openGateways.splice(0)) { gateway.closeAll(); server.close(); } });
 
 describe('account + password gated debug authorization', () => {
+  it('entitles only DimaTest1, case-insensitively', () => {
+    expect(isDebugEntitledUsername('DimaTest1')).toBe(true);
+    expect(isDebugEntitledUsername('dImAtEsT1')).toBe(true);
+    expect(isDebugEntitledUsername('ordinary')).toBe(false);
+  });
+
   it('disables debug when the deployment gate is off even for an entitled account', () => {
     const socket = setup(false).connect('disabled', true);
     expect(socket.sent.find((message) => message.type === 'hello')).toMatchObject({
