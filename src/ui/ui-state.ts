@@ -76,9 +76,9 @@ export interface QueueItem {
   readonly active: boolean;
   /** 0..1, only meaningful when `active`. */
   readonly progress: number;
-  /** Estimated seconds of real time left at normal (1x) simulation speed,
-   *  only meaningful when `active`. A dev speed-up will finish sooner than
-   *  this reads — it is a normal-play estimate, not a live server countdown. */
+  /** Estimated real seconds left at the currently projected simulation speed,
+   *  only meaningful when `active`. This is derived from remaining work and
+   *  the authoritative facility rate, so debug fast-forward shortens it too. */
   readonly etaSeconds: number;
 }
 
