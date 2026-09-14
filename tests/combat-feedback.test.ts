@@ -25,7 +25,9 @@ describe('attack-order feedback', () => {
   it('drives distinct world cursors for rally placement and ground-order aiming', () => {
     const fn = main.slice(main.indexOf('const updateWorldCursor ='), main.indexOf('canvas.addEventListener(\'pointermove\''));
     expect(fn).toContain('cursors/cursor-rally.png');
-    expect(fn).toMatch(/awaitingRallyTarget && selectedProvinceId !== null/);
+    // Shown whenever an own city is selected and no army is armed for an
+    // order — right-click sets/clears the rally directly, no arm step.
+    expect(fn).toMatch(/selectedProvinceId !== null[\s\S]{0,120}session\.ownsProvince\(selectedProvinceId\)/);
     // move / split / retreat aiming get a precision cursor, not the default arrow
     expect(fn).toMatch(/targetingMode === 'move' \|\| targetingMode === 'split' \|\| targetingMode === 'retreat'/);
   });

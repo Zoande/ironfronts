@@ -34,7 +34,7 @@ export type IconName =
   | 'funds' | 'manpower' | 'food' | 'metal' | 'oil' | 'industry'
   | 'mode-strategic' | 'mode-political' | 'mode-diplomacy' | 'mode-terrain'
   | 'diplomacy' | 'economy' | 'objectives' | 'events' | 'provinces' | 'trade'
-  | 'resource-overlay' | 'close' | 'focus' | 'expand' | 'system'
+  | 'resource-overlay' | 'close' | 'focus' | 'expand' | 'system' | 'rally'
   | 'weather-clear' | 'weather-rain'
   | 'note-warning' | 'note-combat' | 'note-completed' | 'note-diplomacy' | 'note-information'
   | 'node-stone' | 'node-metal' | 'node-oil' | 'resource-water'
@@ -70,6 +70,7 @@ const ICONS: Record<IconName, IconDef> = {
   events: { kind: 'svg', value: svg('event') },
   provinces: { kind: 'svg', value: svg('provinces') },
   trade: { kind: 'svg', value: svg('trade') },
+  rally: { kind: 'img', value: png('focus-rally') },
   'resource-overlay': { kind: 'svg', value: svg('pickaxe') },
   close: { kind: 'svg', value: svg('close') },
   focus: { kind: 'svg', value: svg('focus') },
@@ -147,6 +148,11 @@ export function createIcon(name: IconName, className = ''): HTMLElement {
   }
   return wrap;
 }
+
+/** Icon for a raw stockpile resource key (as used in cost/deposit objects). */
+export const RESOURCE_ICON: Record<'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil', IconName> = {
+  funds: 'funds', manpower: 'manpower', food: 'food', stone: 'node-stone', metal: 'metal', oil: 'oil',
+};
 
 export function iconMarkup(name: IconName, className = ''): string {
   const def = ICONS[name];

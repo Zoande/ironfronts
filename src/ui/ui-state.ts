@@ -128,7 +128,9 @@ export interface SelectedProvince {
   readonly producible?: readonly {
     readonly id: string;
     readonly name: string;
+    /** Accessible/tooltip-fallback text only — render `costItems` (icon + number) to sighted users. */
     readonly costLabel: string;
+    readonly costItems: readonly { readonly resource: TradeResourceKey; readonly amount: number }[];
     readonly affordable: boolean;
     readonly available: boolean;
     readonly reason?: string;
@@ -142,7 +144,9 @@ export interface SelectedProvince {
   readonly buildable?: readonly {
     readonly id: string;
     readonly name: string;
+    /** Accessible/tooltip-fallback text only — render `costItems` (icon + number) to sighted users. */
     readonly costLabel: string;
+    readonly costItems: readonly { readonly resource: TradeResourceKey; readonly amount: number }[];
     readonly affordable: boolean;
     readonly available: boolean;
     readonly reason?: string;
@@ -152,8 +156,6 @@ export interface SelectedProvince {
   readonly construction?: readonly QueueItem[];
   /** World-space rally point newly produced units march to, or null. */
   readonly rally?: { readonly x: number; readonly z: number } | null;
-  /** UI is waiting for a map click to place this province's rally point. */
-  readonly awaitingRallyTarget?: boolean;
   readonly commandPending?: boolean;
   readonly canSetRally?: boolean;
 }

@@ -70,7 +70,7 @@ copied unmodified from `0ad/0ad` at ref `master`, from
 | `groups.png` | `groups.png` | Control-group / army-group UI (reserved) |
 | `call-to-arms.png` | `call-to-arms.png` | Mobilise / call-to-arms (reserved) |
 | `focus-attacked.png` | `focus-attacked.png` | "Force under attack" notification + click-to-focus |
-| `focus-rally.png` | `focus-rally.png` | Rally-point focus (reserved) |
+| `focus-rally.png` | `focus-rally.png` | Rally-point indicator (province card) |
 | `stances/aggressive.png` | `stances/aggressive.png` | Army stance: aggressive (reserved) |
 | `stances/defensive.png` | `stances/defensive.png` | Army stance: defensive (reserved) |
 | `stances/passive.png` | `stances/passive.png` | Army stance: passive (reserved) |
