@@ -337,6 +337,7 @@ export function initGameState(
     provinceDevastation: {},
     diplomacyMessages: {},
     diplomacyProposals: {},
+    resourceTradeProposals: {},
     nextDiplomacyId: 1,
     nextArmyId,
     nextBattleId: 1, nextFrontId: 1,

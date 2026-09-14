@@ -2,6 +2,8 @@ import type { BuildingId } from '../units/unit-types';
 import type { ArmyStance } from '../units/army';
 import type { PhysicalResource } from '../game-state';
 import type { TechnologyBranch } from '../game-state';
+import type { TradeLeg } from '../game-state';
+import type { MarketResource } from '../trade';
 
 export interface MoveArmyCommand {
   readonly type: 'moveArmy';
@@ -122,11 +124,35 @@ export interface EndAllianceCommand {
   readonly targetCountryId: number;
 }
 
+export interface MarketTradeCommand {
+  readonly type: 'marketTrade';
+  readonly countryId: number;
+  readonly action: 'buy' | 'sell';
+  readonly resource: MarketResource;
+  readonly amount: number;
+}
+
+export interface ProposeResourceTradeCommand {
+  readonly type: 'proposeResourceTrade';
+  readonly countryId: number;
+  readonly targetCountryId: number;
+  readonly offer: TradeLeg;
+  readonly request: TradeLeg;
+}
+
+export interface RespondResourceTradeCommand {
+  readonly type: 'respondResourceTrade';
+  readonly countryId: number;
+  readonly proposalId: string;
+  readonly accept: boolean;
+}
+
 export type GameCommand =
   | MoveArmyCommand | AttackCommand | RetreatArmyCommand | SplitArmyCommand
   | StopArmyCommand | SetStanceCommand | ExtractCommand | ProduceCommand | BuildCommand | ResearchCommand | RallyCommand
   | SendDiplomaticMessageCommand | ProposeDiplomacyCommand | RespondDiplomacyCommand
-  | DeclareWarCommand | EndAllianceCommand | StrikeCommand;
+  | DeclareWarCommand | EndAllianceCommand | StrikeCommand
+  | MarketTradeCommand | ProposeResourceTradeCommand | RespondResourceTradeCommand;
 
 export type GameCommandType = GameCommand['type'];
 

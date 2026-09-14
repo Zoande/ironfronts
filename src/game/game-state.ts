@@ -202,6 +202,25 @@ export interface DiplomacyProposal {
   resolvedAtTick?: number;
 }
 
+export interface TradeLeg {
+  readonly resource: ResourceKey;
+  readonly amount: number;
+}
+
+/** Ally-only peer trade offer: `fromCountryId` gives `offer` and receives
+ *  `request` if `toCountryId` accepts. Requires an active alliance both when
+ *  proposed and, re-checked, when accepted — see `respondResourceTrade`. */
+export interface ResourceTradeProposal {
+  readonly id: string;
+  readonly fromCountryId: number;
+  readonly toCountryId: number;
+  readonly offer: TradeLeg;
+  readonly request: TradeLeg;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  readonly createdAtTick: number;
+  resolvedAtTick?: number;
+}
+
 export type BattleRole = 'attack' | 'defense';
 
 export interface BattleFrontSideState {
@@ -314,7 +333,9 @@ export interface GameState {
   diplomacyMessages?: Record<string, DiplomacyMessage>;
   /** Optional for compatibility with v2 snapshots created before diplomacy. */
   diplomacyProposals?: Record<string, DiplomacyProposal>;
-  /** Shared monotonic id source for diplomacy records. */
+  /** Optional additive field — absent on saves from before resource trading. */
+  resourceTradeProposals?: Record<string, ResourceTradeProposal>;
+  /** Shared monotonic id source for diplomacy and trade records. */
   nextDiplomacyId?: number;
 
   nextArmyId: number;
@@ -340,6 +361,7 @@ export function relationOf(state: GameState, a: number, b: number): Relation {
 export function setRelation(state: GameState, a: number, b: number, relation: Relation): void {
   if (a === b) return;
   const key = relationKey(a, b);
+  const wasAllied = relationOf(state, a, b) === 'allied';
   if (relation === 'peace') delete state.relations[key];
   else state.relations[key] = relation;
   if (relation === 'war') {
@@ -349,6 +371,17 @@ export function setRelation(state: GameState, a: number, b: number, relation: Re
     const defender = state.countries[b];
     if (defender?.controller === 'neutral') defender.controller = 'ai';
     for (const proposal of Object.values(state.diplomacyProposals ?? {})) {
+      if (proposal.status !== 'pending'
+        || relationKey(proposal.fromCountryId, proposal.toCountryId) !== key) continue;
+      proposal.status = 'withdrawn';
+      proposal.resolvedAtTick = state.simulationTick;
+    }
+  }
+  // A trade offer only makes sense between allies — pull any still-pending
+  // one the moment the alliance it depended on ends, so neither side is left
+  // staring at an offer that can no longer be accepted.
+  if (wasAllied && relation !== 'allied') {
+    for (const proposal of Object.values(state.resourceTradeProposals ?? {})) {
       if (proposal.status !== 'pending'
         || relationKey(proposal.fromCountryId, proposal.toCountryId) !== key) continue;
       proposal.status = 'withdrawn';

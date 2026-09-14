@@ -160,9 +160,9 @@ export interface SelectedProvince {
 
 export type NavId =
   | 'armies' | 'provinces' | 'production' | 'research'
-  | 'diplomacy' | 'economy' | 'intelligence' | 'events';
+  | 'diplomacy' | 'economy' | 'intelligence' | 'events' | 'trade';
 
-export type SidePanelId = 'diplomacy' | 'research';
+export type SidePanelId = 'diplomacy' | 'research' | 'trade';
 export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
 
 export interface TechnologyView {
@@ -205,7 +205,26 @@ export interface DiplomacyProposalView {
 }
 
 export type DiplomacyBusyAction =
-  | 'message' | 'alliance' | 'peace' | 'declare-war' | 'end-alliance' | 'proposal-response';
+  | 'message' | 'alliance' | 'peace' | 'declare-war' | 'end-alliance' | 'proposal-response'
+  | 'trade-offer' | 'trade-response';
+
+export type TradeResourceKey = 'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil';
+
+export interface TradeLegView {
+  readonly resource: TradeResourceKey;
+  readonly amount: number;
+}
+
+export interface TradeProposalView {
+  readonly id: string;
+  readonly fromCountryId: number;
+  readonly toCountryId: number;
+  readonly offer: TradeLegView;
+  readonly request: TradeLegView;
+  readonly status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  readonly createdAtTick: number;
+  readonly resolvedAtTick?: number;
+}
 
 export interface DiplomacyView {
   readonly viewerCountryId: number | null;
@@ -213,6 +232,7 @@ export interface DiplomacyView {
   readonly selectedCountryId: number | null;
   readonly messages: readonly DiplomacyMessageView[];
   readonly proposals: readonly DiplomacyProposalView[];
+  readonly tradeProposals: readonly TradeProposalView[];
   readonly busy: DiplomacyBusyAction | null;
   readonly feedback: string | null;
 }
@@ -352,6 +372,7 @@ export interface StrategicUiState {
   /** One non-modal command drawer at a time; the map remains visible behind it. */
   readonly activeSidePanel: SidePanelId | null;
   readonly diplomacy: DiplomacyView;
+  readonly market: { readonly busy: boolean; readonly feedback: string | null };
   readonly quality: QualityLevel;
   /** 0 = uncapped. Battery-saving opt-in, independent of graphics quality. */
   readonly frameRateCap: FrameRateCap;
@@ -397,9 +418,11 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
       selectedCountryId: null,
       messages: [],
       proposals: [],
+      tradeProposals: [],
       busy: null,
       feedback: null,
     },
+    market: { busy: false, feedback: null },
     quality: 'high',
     frameRateCap: 0,
     effectiveRenderScale: 1,

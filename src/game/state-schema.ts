@@ -10,6 +10,7 @@ const positive = number.nonnegative();
 const id = z.number().int().nonnegative();
 const record = <T extends z.ZodType>(schema: T) => z.record(z.string(), schema);
 const point = z.object({ x: number, z: number });
+const resourceKey = z.enum(['funds', 'manpower', 'food', 'stone', 'metal', 'oil']);
 const stockpile = z.object({ funds: positive, manpower: positive, food: positive, stone: positive, metal: positive, oil: positive });
 const signedStockpile = z.object({ funds: number, manpower: number, food: number, stone: number, metal: number, oil: number });
 const unit = z.string().refine((value) => UNIT_TYPE_BY_ID.has(value), 'Unknown unit type');
@@ -68,6 +69,9 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
   outcome: z.object({ result: z.enum(['victory', 'defeat']), reason: z.string(), atGameHours: positive }).optional(),
   diplomacyMessages: record(z.object({ id: z.string(), fromCountryId: id, toCountryId: id, body: z.string(), sentAtTick: id })).default({}),
   diplomacyProposals: record(z.object({ id: z.string(), fromCountryId: id, toCountryId: id, kind: z.enum(['alliance', 'peace']), status: z.enum(['pending', 'accepted', 'declined', 'withdrawn']), createdAtTick: id, resolvedAtTick: id.optional() })).default({}),
+  resourceTradeProposals: record(z.object({ id: z.string(), fromCountryId: id, toCountryId: id,
+    offer: z.object({ resource: resourceKey, amount: positive }), request: z.object({ resource: resourceKey, amount: positive }),
+    status: z.enum(['pending', 'accepted', 'declined', 'withdrawn']), createdAtTick: id, resolvedAtTick: id.optional() })).default({}),
   nextDiplomacyId: id.default(1), nextArmyId: id, nextBattleId: id, nextFrontId: id.optional(), nextOrderId: id, nextEventId: id,
 });
 
@@ -82,6 +86,7 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
   parsed.provinceDevastation ??= {};
   parsed.diplomacyMessages ??= {};
   parsed.diplomacyProposals ??= {};
+  parsed.resourceTradeProposals ??= {};
   parsed.nextDiplomacyId ??= 1;
   for (const country of Object.values(parsed.countries)) {
     country.warheads ??= 0;

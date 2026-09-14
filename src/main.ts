@@ -262,6 +262,7 @@ let activeConnection: GameConnection | undefined;
 const readDiplomacyMessages = new Set<string>();
 const announcedDiplomacyItems = new Set<string>();
 const diplomacyProposalStatuses = new Map<string, string>();
+const tradeProposalStatuses = new Map<string, string>();
 let diplomacyBootstrapped = false;
 /** Pooled world-space combat visuals; fed by drainSessionEvents, drawn from onStats. */
 const combatEffects = new CombatEffectPool(320);
@@ -684,9 +685,10 @@ async function startGame(token: number): Promise<void> {
       uiStore.patch({ frameRateCap: cap });
     },
     navSelect: (id) => {
-      if (id !== 'diplomacy' && id !== 'research') return;
+      if (id !== 'diplomacy' && id !== 'research' && id !== 'trade') return;
       const open = uiStore.get().activeSidePanel === id;
       uiStore.patch({ activeSidePanel: open ? null : id });
+      if (id === 'trade' && !open) uiStore.patch({ market: { busy: false, feedback: null } });
       if (id === 'diplomacy' && !open) {
         const selected = uiStore.get().diplomacy.selectedCountryId
           ?? Object.values(session.state.countries)
@@ -728,6 +730,18 @@ async function startGame(token: number): Promise<void> {
     },
     respondDiplomacy: (proposalId, accept) => {
       diplomacyCommand(session, 'proposal-response', (done) => session.respondDiplomacy(proposalId, accept, done));
+    },
+    proposeResourceTrade: (countryId, offer, request) => {
+      diplomacyCommand(session, 'trade-offer', (done) => session.proposeResourceTrade(countryId, offer, request, done));
+    },
+    respondResourceTrade: (proposalId, accept) => {
+      diplomacyCommand(session, 'trade-response', (done) => session.respondResourceTrade(proposalId, accept, done));
+    },
+    marketBuy: (resource, amount) => {
+      marketCommand((done) => session.marketTrade('buy', resource, amount, done));
+    },
+    marketSell: (resource, amount) => {
+      marketCommand((done) => session.marketTrade('sell', resource, amount, done));
     },
     researchTechnology: (branch) => {
       session.research(branch as TechnologyBranch, () => {
@@ -1123,6 +1137,7 @@ async function bootstrapGameSession(
   readDiplomacyMessages.clear();
   announcedDiplomacyItems.clear();
   diplomacyProposalStatuses.clear();
+  tradeProposalStatuses.clear();
   diplomacyBootstrapped = false;
   selectedArmyId = null;
   awaitingMoveTarget = false;
@@ -2938,10 +2953,16 @@ function sameDiplomacyView(previous: DiplomacyView, next: DiplomacyView): boolea
         && proposal.status === candidate.status && proposal.createdAtTick === candidate.createdAtTick
         && proposal.resolvedAtTick === candidate.resolvedAtTick;
     });
+  const sameTradeProposals = previous.tradeProposals.length === next.tradeProposals.length
+    && previous.tradeProposals.every((proposal, index) => {
+      const candidate = next.tradeProposals[index];
+      return proposal.id === candidate.id && proposal.status === candidate.status
+        && proposal.resolvedAtTick === candidate.resolvedAtTick;
+    });
   return previous.viewerCountryId === next.viewerCountryId
     && previous.selectedCountryId === next.selectedCountryId
     && previous.busy === next.busy && previous.feedback === next.feedback
-    && sameCountries && sameMessages && sameProposals;
+    && sameCountries && sameMessages && sameProposals && sameTradeProposals;
 }
 
 /**
@@ -2955,24 +2976,27 @@ function sameDiplomacyView(previous: DiplomacyView, next: DiplomacyView): boolea
  */
 let lastDiplomacySignature = '';
 function diplomacySignature(projection: RemoteGameSession['state']): string {
-  const diplomacy = projection.diplomacy ?? { messages: [], proposals: [] };
+  const diplomacy = projection.diplomacy ?? { messages: [], proposals: [], tradeProposals: [] };
   const relations = Object.keys(projection.relations).sort()
     .map((key) => `${key}:${projection.relations[key]}`).join(',');
   const messages = diplomacy.messages.map((m) => `${m.id}:${m.toCountryId}`).join(',');
   const proposals = diplomacy.proposals.map((p) => `${p.id}:${p.status}`).join(',');
+  const tradeProposals = (diplomacy.tradeProposals ?? []).map((p) => `${p.id}:${p.status}`).join(',');
   // name/color/controller are effectively immutable once a country exists;
   // only id + alive (capitulation) actually needs to be tracked here.
   let countries = '';
   for (const country of Object.values(projection.countries)) countries += `${country.id}${country.alive ? 1 : 0}`;
-  return `${relations}|${messages}|${proposals}|${countries}`;
+  return `${relations}|${messages}|${proposals}|${tradeProposals}|${countries}`;
 }
 
 function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: number): void {
   const projection = session.state;
-  const diplomacy = projection.diplomacy ?? { messages: [], proposals: [] };
+  const diplomacy = projection.diplomacy ?? { messages: [], proposals: [], tradeProposals: [] };
+  const tradeProposals = diplomacy.tradeProposals ?? [];
   if (!diplomacyBootstrapped) {
     for (const message of diplomacy.messages) announcedDiplomacyItems.add(`message:${message.id}`);
     for (const proposal of diplomacy.proposals) announcedDiplomacyItems.add(`proposal:${proposal.id}`);
+    for (const proposal of tradeProposals) announcedDiplomacyItems.add(`trade:${proposal.id}`);
     diplomacyBootstrapped = true;
   }
   for (const message of diplomacy.messages) {
@@ -2998,6 +3022,21 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
       announcedDiplomacyItems.add(key);
     }
   }
+  for (const proposal of tradeProposals) {
+    const key = `trade:${proposal.id}`;
+    const previousStatus = tradeProposalStatuses.get(proposal.id);
+    if (previousStatus && previousStatus !== proposal.status && proposal.fromCountryId === projection.viewerCountryId) {
+      const other = projection.countries[proposal.toCountryId]?.name ?? 'Foreign office';
+      pushNotification('diplomacy', 'Trade offer resolved', `${other} ${proposal.status} your trade offer.`);
+    }
+    tradeProposalStatuses.set(proposal.id, proposal.status);
+    if (!announcedDiplomacyItems.has(key) && proposal.toCountryId === projection.viewerCountryId
+      && proposal.status === 'pending') {
+      pushNotification('diplomacy', 'Trade offer received',
+        `${projection.countries[proposal.fromCountryId]?.name ?? 'Foreign office'} sent a trade offer.`);
+      announcedDiplomacyItems.add(key);
+    }
+  }
   // The explicit-selection call sites (picking a country in the panel) always
   // need to rebuild since `target` below can change with nothing else
   // different; the periodic/event-driven calls only need to when something
@@ -3020,7 +3059,10 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
         || (message.toCountryId === projection.viewerCountryId && message.fromCountryId === country.id));
       const incoming = diplomacy.proposals.filter((proposal) =>
         proposal.status === 'pending' && proposal.toCountryId === projection.viewerCountryId
-        && proposal.fromCountryId === country.id).length;
+        && proposal.fromCountryId === country.id).length
+        + tradeProposals.filter((proposal) =>
+          proposal.status === 'pending' && proposal.toCountryId === projection.viewerCountryId
+          && proposal.fromCountryId === country.id).length;
       return {
         id: country.id, name: country.name, color: country.color, controller: country.controller,
         alive: country.alive, relation: diplomacyRelation(session, country.id),
@@ -3035,12 +3077,15 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
     || (message.toCountryId === projection.viewerCountryId && message.fromCountryId === selected));
   const selectedProposals = selected === null ? [] : diplomacy.proposals.filter((proposal) =>
     proposal.fromCountryId === selected || proposal.toCountryId === selected);
+  const selectedTradeProposals = selected === null ? [] : tradeProposals.filter((proposal) =>
+    proposal.fromCountryId === selected || proposal.toCountryId === selected);
   const next: DiplomacyView = {
     viewerCountryId: projection.viewerCountryId,
     countries,
     selectedCountryId: selected,
     messages: selectedMessages,
     proposals: selectedProposals,
+    tradeProposals: selectedTradeProposals,
     busy: current.busy,
     feedback: current.feedback,
   };
@@ -3061,9 +3106,17 @@ function diplomacyCommand(
     const labels: Record<DiplomacyBusyAction, string> = {
       message: 'Cable sent.', alliance: 'Alliance proposal sent.', peace: 'Peace offer sent.',
       'declare-war': 'War declared.', 'end-alliance': 'Alliance ended.', 'proposal-response': 'Proposal response sent.',
+      'trade-offer': 'Trade offer sent.', 'trade-response': 'Trade response sent.',
     };
     uiStore.patch({ diplomacy: { ...uiStore.get().diplomacy, busy: null, feedback: ok ? labels[action] : 'Command rejected.' } });
     syncDiplomacyView(session);
+  });
+}
+
+function marketCommand(send: (done: (ok: boolean) => void) => { ok: true }): void {
+  uiStore.patch({ market: { busy: true, feedback: null } });
+  send((ok) => {
+    uiStore.patch({ market: { busy: false, feedback: ok ? null : 'Trade rejected.' } });
   });
 }
 

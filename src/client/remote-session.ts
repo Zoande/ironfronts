@@ -8,6 +8,9 @@ type BuildingId = 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'field
 type PhysicalResource = 'food' | 'stone' | 'metal' | 'oil';
 type ArmyStance = 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
 export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
+export type MarketResource = 'manpower' | 'food' | 'stone' | 'metal' | 'oil';
+export type ResourceKey = 'funds' | MarketResource;
+export interface TradeLeg { resource: ResourceKey; amount: number; }
 
 function isConnectionFailure(reason: string): boolean {
   return /connection (?:unavailable|lost|closed)|command outcome unknown/i.test(reason);
@@ -244,6 +247,22 @@ export class RemoteGameSession extends EventTarget {
 
   endAlliance(targetCountryId: number, onResult?: (ok: boolean) => void) {
     return this.sendDiplomacyCommand({ type: 'endAlliance', targetCountryId }, onResult);
+  }
+
+  marketTrade(
+    action: 'buy' | 'sell', resource: MarketResource, amount: number, onResult?: (ok: boolean) => void,
+  ) {
+    return this.sendDiplomacyCommand({ type: 'marketTrade', action, resource, amount }, onResult);
+  }
+
+  proposeResourceTrade(
+    targetCountryId: number, offer: TradeLeg, request: TradeLeg, onResult?: (ok: boolean) => void,
+  ) {
+    return this.sendDiplomacyCommand({ type: 'proposeResourceTrade', targetCountryId, offer, request }, onResult);
+  }
+
+  respondResourceTrade(proposalId: string, accept: boolean, onResult?: (ok: boolean) => void) {
+    return this.sendDiplomacyCommand({ type: 'respondResourceTrade', proposalId, accept }, onResult);
   }
 
   ownsArmy(armyId: string): boolean { return this.state.armies[armyId]?.own ?? false; }
