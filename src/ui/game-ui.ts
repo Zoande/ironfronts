@@ -390,6 +390,15 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     dockButtons.set(section.id, b);
     dockMore.append(b);
   }
+  const debugDockButton = el('button', 'ifg-dock__btn');
+  debugDockButton.type = 'button';
+  debugDockButton.hidden = true;
+  debugDockButton.title = 'World Inspector';
+  debugDockButton.setAttribute('aria-label', 'World Inspector');
+  debugDockButton.append(createIcon('system'), el('span', 'ifg-dock__tip', 'World Inspector'));
+  debugDockButton.addEventListener('click', () => actions.requestDebugAccess());
+  dockMore.append(debugDockButton);
+
   expandBtn.addEventListener('click', () => {
     const open = dockMore.hidden;
     dockMore.hidden = !open;
@@ -1205,6 +1214,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     overlay.hidden = !state.paused;
     const debugVisible = state.debugUnlockAvailable || state.debugEnabled;
     debugRow.hidden = !debugVisible;
+    debugDockButton.hidden = !debugVisible;
     debugButton.textContent = state.debugEnabled ? 'Open World Inspector' : 'Unlock World Inspector';
     debugReason.textContent = state.debugEnabled
       ? 'QA controls are unlocked for this session.'
