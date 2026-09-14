@@ -17,9 +17,10 @@ export interface TooltipContent {
 
 const SHOW_DELAY_MS = 170;
 const CLOSE_DELAY_MS = 120;
+const HOLD_MS = 420;
 const GAP = 10;
 type ContentSource = TooltipContent | (() => TooltipContent | null);
-interface OpenPanel { element: HTMLElement; anchor: HTMLElement; depth: number }
+interface OpenPanel { element: HTMLElement; anchor: HTMLElement; depth: number; holdTimer?: number }
 
 let panels: OpenPanel[] = [];
 let showTimer: number | undefined;
@@ -45,7 +46,10 @@ export function renderTooltipHtml(content: TooltipContent): string {
 
 function cancelClose(): void { window.clearTimeout(closeTimer); closeTimer = undefined; }
 function closeFrom(depth: number): void {
-  for (const item of panels.splice(depth)) item.element.remove();
+  for (const item of panels.splice(depth)) {
+    window.clearTimeout(item.holdTimer);
+    item.element.remove();
+  }
   if (!panels.length) activeAnchor = null;
 }
 function hide(): void {
@@ -53,7 +57,14 @@ function hide(): void {
 }
 function scheduleClose(depth = 0): void {
   cancelClose();
-  closeTimer = window.setTimeout(() => closeFrom(depth), CLOSE_DELAY_MS);
+  closeTimer = window.setTimeout(() => {
+    const panel = panels[depth];
+    if (panel && (panel.anchor.matches(':hover') || panel.element.matches(':hover'))) {
+      scheduleClose(depth);
+      return;
+    }
+    closeFrom(depth);
+  }, CLOSE_DELAY_MS);
 }
 
 function place(element: HTMLElement, anchor: HTMLElement, depth: number): void {
@@ -83,7 +94,12 @@ function openPanel(anchor: HTMLElement, content: TooltipContent, depth: number):
   element.className = `ifg-tip${content.disabledReason ? ' is-blocked' : ''}`;
   element.setAttribute('role', content.children?.length ? 'dialog' : 'tooltip');
   element.dataset.depth = String(depth);
+  const hold = document.createElement('i');
+  hold.className = 'ifg-tip__hold';
+  hold.setAttribute('aria-hidden', 'true');
+  element.append(hold);
   element.innerHTML = renderTooltipHtml(content);
+  element.prepend(hold);
   if (content.children?.length) {
     const list = document.createElement('span');
     list.className = 'ifg-tip__branches';
@@ -108,7 +124,9 @@ function openPanel(anchor: HTMLElement, content: TooltipContent, depth: number):
   element.addEventListener('pointerenter', cancelClose);
   element.addEventListener('pointerleave', () => scheduleClose(depth));
   document.body.append(element);
-  panels.push({ element, anchor, depth });
+  const panel: OpenPanel = { element, anchor, depth };
+  panel.holdTimer = window.setTimeout(() => element.classList.add('is-held'), HOLD_MS);
+  panels.push(panel);
   place(element, anchor, depth);
 }
 
