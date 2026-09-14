@@ -37,7 +37,7 @@ export const BUILDING_REQUIRED_PHASE: Record<MilitaryBuildingId, number> = {
 
 /** Game-hours before Phase II / III unlock on their own even without the
  *  qualifying industry, so a country that never builds heavy industry isn't
- *  permanently stuck at Phase I. ~30 and ~90 game-days. */
+ *  permanently stuck at Phase I. Current pacing: 72 h (~3 days) and 168 h (~7 days). */
 const PHASE_2_TIME_HOURS = GAME_PACE.strategic.phase2FallbackHours;
 const PHASE_3_TIME_HOURS = GAME_PACE.strategic.phase3FallbackHours;
 
