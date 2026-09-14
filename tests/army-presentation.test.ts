@@ -57,10 +57,10 @@ describe('selected army presentation', () => {
     expect(summary).toEqual({
       role: 'mixed', frontCount: 2, reinforcementCount: 3,
       friendly: {
-        hp: 120, baselineHp: 150, healthPercent: 80,
+        hp: 120, baselineHp: 150, healthPercent: 80, organizationPercent: 90, damagePerGameHour: 20,
       },
       enemy: {
-        hp: 50, baselineHp: 100, healthPercent: 50,
+        hp: 50, baselineHp: 100, healthPercent: 50, organizationPercent: 0, damagePerGameHour: 12,
       },
       outgoingDamagePerGameHour: 20,
       incomingDamagePerGameHour: 12,
@@ -80,13 +80,13 @@ describe('selected army presentation', () => {
     expect(roundDisplayedHp(21.4)).toBe(21);
   });
 
-  it('spells out base armor damage columns per game hour', async () => {
+  it('uses icon-led armor damage columns with tooltip descriptions', async () => {
     const source = await import('node:fs/promises').then((fs) => fs.readFile(
       new URL('../src/ui/army.ts', import.meta.url), 'utf8',
     ));
-    expect(source).toContain('Base damage / game hour');
-    expect(source).toContain("node('th', undefined, 'Soft')");
-    expect(source).toContain("node('th', undefined, 'Light')");
-    expect(source).toContain("node('th', undefined, 'Heavy')");
+    expect(source).toContain("statHeading('Base damage per game hour'");
+    expect(source).toContain("statHeading('Soft damage'");
+    expect(source).toContain("statHeading('Light damage'");
+    expect(source).toContain("statHeading('Heavy damage'");
   });
 });

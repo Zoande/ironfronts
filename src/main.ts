@@ -2209,6 +2209,9 @@ function refreshSelectedArmy(
   }));
   const activity = !session.fresh ? 'Reconnecting ? state may be stale'
     : session.pendingForArmy(view.id) ? 'Order pending confirmation' : armyActivityLabel(view.status, awaitingMoveTarget, view.own);
+  const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
+    ? 0 : Math.max(0, Date.now() - view.motion.sampledAtEpochMs);
+  const motionDurationMs = view.motion?.durationMs ?? 0;
   uiStore.patch({
     selectedArmy: {
       id: view.id,
@@ -2231,6 +2234,9 @@ function refreshSelectedArmy(
       attack: aggregateTroopStat(groups, 'attack', gameUnit),
       defense: aggregateTroopStat(groups, 'defense', gameUnit),
       activity,
+      arrivalSeconds: view.motion ? Math.max(0, (motionDurationMs - motionElapsedMs) / 1_000) : undefined,
+      movementProgress: view.motion && motionDurationMs > 0
+        ? Math.min(1, motionElapsedMs / motionDurationMs) : undefined,
       own: view.own,
       canExtract: session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
       extractableResources: view.actions?.extractableResources,

@@ -278,6 +278,10 @@ export interface ArmyStackView {
   readonly defense?: { readonly soft: number; readonly light: number; readonly heavy: number };
   /** Player-facing current activity, e.g. moving, extracting, or holding. */
   readonly activity: string;
+  /** Current movement-leg estimate, when the army is marching. */
+  readonly arrivalSeconds?: number;
+  /** 0..1 progress through the current movement leg. */
+  readonly movementProgress?: number;
   /** True when the player commands this stack (enables order buttons). */
   readonly own?: boolean;
   /** Which order buttons are currently valid. */

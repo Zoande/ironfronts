@@ -27,12 +27,25 @@ export interface BattleFrontPresentationSource {
     readonly terrain: number;
     readonly devastation: number;
   };
+  readonly enemyModifiers?: {
+    readonly frontageUsed: number;
+    readonly frontageLimit: number;
+    readonly coordination: number;
+    readonly organization: number;
+    readonly stanceOutput: number;
+    readonly supply: number;
+    readonly protection: number;
+    readonly terrain: number;
+    readonly devastation: number;
+  };
 }
 
 export interface BattleSidePresentation {
   readonly hp: number;
   readonly baselineHp: number;
   readonly healthPercent: number;
+  readonly organizationPercent: number;
+  readonly damagePerGameHour: number;
 }
 
 export interface BattleOverviewPresentation {
@@ -71,6 +84,10 @@ export function summarizeBattleFronts(
       hp,
       baselineHp,
       healthPercent: baselineHp > 0 ? Math.round(Math.min(1, hp / baselineHp) * 100) : 0,
+      organizationPercent: Math.round(average((front) => friendly
+        ? front.friendlyModifiers.organization : (front.enemyModifiers?.organization ?? 0)) * 100),
+      damagePerGameHour: sum((front) => friendly
+        ? front.outgoingDamagePerGameHour : front.incomingDamagePerGameHour),
     };
   };
   const firstRole = fronts[0].role;

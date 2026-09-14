@@ -226,6 +226,7 @@
 }
 .ifg-topbar__weather {
   flex: none;
+  margin-left: auto;
   display: inline-flex;
   width: 26px; height: 26px;
   align-items: center; justify-content: center;
@@ -235,10 +236,6 @@
 .ifg-topbar__weather .ifg-icon { width: 19px; height: 19px; }
 .ifg-topbar__system {
   flex: none;
-  /* The bar now spans the full window width; pin settings to the far right
-     while the country/resources/clock/weather group stays together on the
-     left, instead of trailing them at whatever width the content reaches. */
-  margin-left: auto;
   width: 32px; height: 32px;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--ifg-dim);
@@ -867,7 +864,7 @@
   box-sizing: border-box;
   min-height: 34px;
   display: grid;
-  grid-template-columns: 32px 1fr 32px;
+  grid-template-columns: minmax(0, 1fr) auto auto 32px;
   align-items: center;
   padding: 0 7px;
   background: linear-gradient(180deg, rgba(201, 164, 99, 0.25), rgba(201, 164, 99, 0.08));
@@ -880,6 +877,10 @@
   gap: 10px;
   min-width: 0;
 }
+.ifg-army-panel__header-stats { display: flex; align-items: center; gap: 5px; }
+.ifg-army-panel__header-stats > span { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px; padding: 3px 5px; border: 1px solid var(--ifg-rule-soft); background: rgba(9, 11, 8, .25); }
+.ifg-army-panel__header-stats small { color: var(--ifg-dim); font-size: 8px; letter-spacing: .07em; text-transform: uppercase; }
+.ifg-army-panel__header-stats b { font-size: 11px; font-variant-numeric: tabular-nums; }
 .ifg-army-panel__identity strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -978,7 +979,7 @@
   align-content: start;
   justify-content: start;
   gap: 7px;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 .ifg-army-panel__intel {
@@ -1078,7 +1079,7 @@
 .ifg-army-panel__activity > .ifg-army-panel__eyebrow { margin-bottom: 6px; }
 /* Scroll rather than clip when the combat-profile table + Speed/Troops meta
  * overrun the fixed row, matching __activity / __units (F0). */
-.ifg-army-panel__stats { padding: 9px 10px 10px; overflow-y: auto; overflow-x: hidden; }
+.ifg-army-panel__stats { padding: 9px 10px 10px; overflow: hidden; }
 .ifg-army-panel__stat-table {
   width: 100%;
   margin-top: 5px;
@@ -1113,6 +1114,7 @@
 .ifg-army-panel__stat-meta small { color: var(--ifg-dim); font-size: 9px; letter-spacing: .07em; text-transform: uppercase; }
 .ifg-army-panel__stat-meta b { font-size: 12px; font-variant-numeric: tabular-nums; }
 .ifg-army-panel__stances { display: flex; gap: 4px; margin-top: 6px; }
+.ifg-army-panel__header .ifg-army-panel__stances { margin: 0; }
 .ifg-army-panel__stance {
   flex: 1 1 0;
   display: grid;
@@ -1136,10 +1138,20 @@
   height: 100%;
   box-sizing: border-box;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
   padding-top: 0;
 }
+.ifg-army-panel__movement { margin-top: 7px; }
+.ifg-army-panel__movement-header { display: flex; justify-content: space-between; color: var(--ifg-dim); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.ifg-army-panel__movement-header b { color: var(--ifg-text); font-size: 10px; font-variant-numeric: tabular-nums; }
+.ifg-army-panel__movement-track { display: block; height: 2px; margin-top: 4px; background: rgba(217, 164, 65, .16); }
+.ifg-army-panel__movement-track i { display: block; width: 42%; height: 100%; background: #d9a441; }
+.ifg-army-panel__shortage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; margin-top: 8px; }
+.ifg-army-panel__shortage small { white-space: nowrap; }
+.ifg-army-panel__shortage b { color: #d9a441; font-size: 9px; font-variant-numeric: tabular-nums; }
+.ifg-army-panel__pressure-track { display: block; height: 5px; overflow: hidden; background: #101a29; border: 1px solid rgba(81, 137, 190, .4); }
+.ifg-army-panel__pressure-track i { display: block; height: 100%; background: linear-gradient(90deg, #3e82bf, #c34f3d); }
 .ifg-army-panel__activity-value {
   display: block;
   padding: 7px 8px;
@@ -1241,6 +1253,10 @@
   background: linear-gradient(90deg, #73382d, #bd6048);
   box-shadow: 0 0 5px rgba(177, 76, 55, 0.2);
 }
+.ifg-battle-side.is-inactive { border-left-color: #6b6c63; opacity: .72; }
+.ifg-battle-side.is-inactive .ifg-battle-side__health { border-color: rgba(145, 145, 135, .32); }
+.ifg-battle-side.is-inactive .ifg-battle-side__health i { background: #77786f; box-shadow: none; }
+.ifg-battle__header.is-inactive { opacity: .72; }
 .ifg-battle__live {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

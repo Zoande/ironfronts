@@ -342,7 +342,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   systemButton.append(createIcon('system'));
   systemButton.addEventListener('click', () => actions.togglePause(!store.get().paused));
 
-  topbar.append(countryBlock, resourceStrip, clockBlock, weatherChip, systemButton);
+  topbar.append(countryBlock, resourceStrip, weatherChip, clockBlock, systemButton);
 
   // ---------------- floating command dock (top-left, short) ----------------
   const dock = el('nav', 'ifg-dock');
