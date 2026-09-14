@@ -8,6 +8,7 @@ const mainTs = readFileSync(path.join(process.cwd(), 'src/main.ts'), 'utf8');
 describe('World Inspector unlock UI', () => {
   it('offers an entitled user a visible password unlock in the System menu', () => {
     expect(gameUi).toContain("'Unlock World Inspector'");
+    expect(gameUi).toContain("el('span', 'ifg-dock__tip', 'World Inspector')");
     expect(gameUi).toContain('state.debugUnlockAvailable || state.debugEnabled');
     expect(gameUi).toContain('actions.requestDebugAccess()');
     expect(mainTs).toContain("window.prompt('World Inspector password')");
