@@ -1,7 +1,7 @@
 import type { GameState, PhysicalResource, ProvinceEconomy } from '../game-state';
 import type { SimContext } from '../sim-context';
 import { nearestNode } from '../movement/graph';
-import { unitType } from '../units/unit-catalog';
+import { baseUnitId, unitType } from '../units/unit-catalog';
 import { unitStatMultiplier } from './shortages';
 import {
   BUILDING_FOR_RESOURCE, effectiveEngineerCount, ENGINEER_PRODUCTION_PER_HOUR,
@@ -19,9 +19,10 @@ export function buildEngineerAssignmentIndex(ctx: SimContext): Map<string, numbe
     const province = ctx.world.provinces.find((item) => item.id === assignment.provinceId);
     if (!province || ctx.state.provinceOwners[province.id] !== army.ownerCountryId) continue;
     if (army.graphNodeId !== nearestNode(ctx.graph, province.center[0], province.center[1])) continue;
-    const group = army.units.find((item) => item.typeId === 'engineer');
-    if (!group?.count) continue;
-    const value = group.count * unitStatMultiplier(unitType('engineer'), 'extractionOutput', army.shortageSeverity);
+    const value = army.units.filter((item) => baseUnitId(item.typeId) === 'engineer').reduce((sum, group) =>
+      sum + group.count * (unitType(group.typeId).extractionRate / ENGINEER_PRODUCTION_PER_HOUR)
+        * unitStatMultiplier(unitType(group.typeId), 'extractionOutput', army.shortageSeverity), 0);
+    if (!value) continue;
     const key = engineerAssignmentKey(province.id, assignment.resource);
     result.set(key, (result.get(key) ?? 0) + value);
   }
@@ -42,9 +43,9 @@ export function engineersAssignedTo(
   for (const army of assigned) {
     if (army.status !== 'extracting' || army.order || army.graphNodeId !== centerNode) continue;
     if (ctx.state.provinceOwners[provinceId] !== army.ownerCountryId) continue;
-    const group = army.units.find((item) => item.typeId === 'engineer');
-    if (!group?.count) continue;
-    engineers += group.count * unitStatMultiplier(unitType('engineer'), 'extractionOutput', army.shortageSeverity);
+    engineers += army.units.filter((item) => baseUnitId(item.typeId) === 'engineer').reduce((sum, group) =>
+      sum + group.count * (unitType(group.typeId).extractionRate / ENGINEER_PRODUCTION_PER_HOUR)
+        * unitStatMultiplier(unitType(group.typeId), 'extractionOutput', army.shortageSeverity), 0);
   }
   return engineers;
 }
@@ -74,7 +75,7 @@ export function provinceResourceOutputBreakdown(
   const record = economy ?? ctx.state.provinceEconomies?.[provinceId];
   if (!record) return { base: 0, passive: 0, engineer: 0, total: 0, assignedEngineers: 0, effectiveEngineers: 0, currentTier: 0, maximumTier: 0 };
   const building = BUILDING_FOR_RESOURCE[resource];
-  const tier = Math.max(0, Math.min(5, record.resourceBuildings[building] ?? 0));
+  const tier = Math.max(0, Math.min(8, record.resourceBuildings[building] ?? 0));
   const engineers = assignedEngineerCount ?? engineersAssignedTo(ctx, provinceId, resource);
   const effective = effectiveEngineerCount(engineers, RESOURCE_TIER_ENGINEER_CAP[tier]);
   const owner = ctx.state.provinceOwners[provinceId];
@@ -97,7 +98,7 @@ export function clearInvalidExtractionAssignments(ctx: SimContext): void {
     const centerNode = province ? nearestNode(ctx.graph, province.center[0], province.center[1]) : -1;
     const valid = province && army.ownerCountryId === ctx.state.provinceOwners[assignment.provinceId]
       && army.graphNodeId === centerNode && !army.order
-      && army.units.some((group) => group.typeId === 'engineer' && group.count > 0)
+      && army.units.some((group) => baseUnitId(group.typeId) === 'engineer' && group.count > 0)
       && Boolean(ctx.state.provinceEconomies?.[assignment.provinceId]);
     if (!valid) {
       army.extractionAssignment = null;

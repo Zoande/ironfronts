@@ -10,6 +10,7 @@ import { queueBuilding } from './construction';
 import { issueAttack } from './commands/attack';
 import { issueSplit } from './commands/split';
 import { issueStrike } from './strike';
+import { startResearch } from './technology';
 import {
   declareWar, endAlliance, proposeDiplomacy, respondDiplomacy, sendDiplomaticMessage,
 } from './diplomacy';
@@ -20,7 +21,7 @@ export type {
   GameCommand, GameCommandType, MoveArmyCommand, ProduceCommand, RallyCommand,
   RetreatArmyCommand, SplitArmyCommand, StopArmyCommand, SetStanceCommand, DeclareWarCommand,
   EndAllianceCommand, ProposeDiplomacyCommand, RespondDiplomacyCommand,
-  SendDiplomaticMessageCommand, StrikeCommand,
+  SendDiplomaticMessageCommand, StrikeCommand, ResearchCommand,
 } from './commands/types';
 
 function controlsArmy(ctx: SimContext, countryId: number, armyId: string): boolean {
@@ -62,6 +63,8 @@ export function applyCommand(ctx: SimContext, command: GameCommand): CommandResu
         return { ok: false, reason: 'Not your province.' };
       }
       return queueBuilding(ctx, command.provinceId, command.buildingId, command.countryId);
+    case 'research':
+      return startResearch(ctx.state.countries[command.countryId], command.branch);
     case 'setRally': {
       if (ctx.state.provinceOwners[command.provinceId] !== command.countryId) {
         return { ok: false, reason: 'Not your province.' };

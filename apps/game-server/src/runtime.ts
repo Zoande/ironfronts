@@ -130,7 +130,7 @@ export class GameRuntime {
     const province = this.world.provinces.find((entry) => entry.id === provinceId);
     if (!province) return { ok: false, message: `Province ${provinceId} does not exist.` };
     const definition = BUILDINGS[buildingId];
-    if (!definition || !Number.isInteger(level) || level < 1 || level > 5) {
+    if (!definition || !Number.isInteger(level) || level < 1 || level > 8) {
       return { ok: false, message: 'Invalid building or level.' };
     }
     if (definition.kind === 'military') {

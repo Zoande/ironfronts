@@ -30,7 +30,8 @@ export const GAME_PACE = {
     scale: 1,
     roadMultiplier: 1.35,
     retreatMultiplier: 3,
-    navalDwellHours: 6,
+    /** Thirty real minutes at 1x: troops must assemble transport before sailing. */
+    navalDwellHours: 0.5,
   },
   combat: {
     /** A 1v1 infantry fight lasts roughly 1.5 hours at full readiness. */

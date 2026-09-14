@@ -7,6 +7,7 @@ import type { GameClockReading } from './game-clock';
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'fields' | 'quarry' | 'mine' | 'oilPump';
 type PhysicalResource = 'food' | 'stone' | 'metal' | 'oil';
 type ArmyStance = 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
+export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
 
 interface Stockpile { funds: number; manpower: number; food: number; stone: number; metal: number; oil: number }
 interface OwnCountry {
@@ -21,6 +22,8 @@ interface OwnCountry {
   warheads?: number;
   /** Progression tier — 1, 2, or 3. See game/phase.ts. */
   phase?: number;
+  technologies?: Record<TechnologyBranch, number>;
+  research?: { branch: TechnologyBranch; targetLevel: number; progressHours: number; totalHours: number };
 }
 export class RemoteGameSession extends EventTarget {
   state: PlayerProjection;
@@ -245,6 +248,9 @@ export class RemoteGameSession extends EventTarget {
     return [...this.pendingCommands.values()].some(({ command }) =>
       'provinceId' in command && command.provinceId === provinceId);
   }
+  pendingResearch(): boolean {
+    return [...this.pendingCommands.values()].some(({ command }) => command.type === 'research');
+  }
 
   orderMove(armyId: string, x: number, z: number, intent: 'move' | 'attack' = 'move') {
     if (intent === 'attack') return { ok: false, reason: 'Choose an attack target.' };
@@ -283,6 +289,9 @@ export class RemoteGameSession extends EventTarget {
   produce(provinceId: number, unitTypeId: string) { return this.send({ type: 'produce', provinceId, unitTypeId }); }
   build(provinceId: number, buildingId: BuildingId, onAccepted?: () => void) {
     return this.send({ type: 'build', provinceId, buildingId }, onAccepted);
+  }
+  research(branch: TechnologyBranch, onAccepted?: () => void) {
+    return this.send({ type: 'research', branch }, onAccepted);
   }
   setRally(provinceId: number, x: number, z: number) { return this.send({ type: 'setRally', provinceId, target: { x, z } }); }
   clearRally(provinceId: number) { return this.send({ type: 'setRally', provinceId, target: null }); }

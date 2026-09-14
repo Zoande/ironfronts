@@ -11,7 +11,8 @@ import { armyAtNode } from './movement/position';
 import type { SimContext } from './sim-context';
 import type { ProductionOrder } from './game-state';
 import type { BuildingId } from './units/unit-types';
-import { UNIT_TYPE_BY_ID, unitType } from './units/unit-catalog';
+import { BASE_UNIT_IDS, UNIT_TYPE_BY_ID, baseUnitId, unitType } from './units/unit-catalog';
+import { technologyLevels } from './technology';
 import { makeGroup, mergeStacks, type ArmyStack } from './units/army';
 import { nearestNode } from './movement/graph';
 import { issueMoveOrder } from './units/movement';
@@ -23,23 +24,23 @@ export interface ProduceResult {
   readonly orderId?: string;
 }
 
-function hasBuilding(session: SimContext, provinceId: number, building: BuildingId): boolean {
+function buildingLevel(session: SimContext, provinceId: number, building: BuildingId): number {
   const b = session.state.provinceBuildings[provinceId];
-  if (!b) return false;
-  return (building === 'barracks' ? b.barracks
+  if (!b) return 0;
+  return building === 'barracks' ? b.barracks
     : building === 'tankPlant' ? b.tankPlant
-    : b.ordnance) > 0;
+    : b.ordnance;
 }
 
 /** Unit work completed per real game hour by the required facility level. */
-export const UNIT_PRODUCTION_RATE_BY_LEVEL = [0, 1, 1.35, 1.75, 2.25, 3] as const;
+export const UNIT_PRODUCTION_RATE_BY_LEVEL = [0, 1, 1.3, 1.65, 2.05, 2.5, 3.1, 3.8, 4.7] as const;
 
 export function unitProductionWorkRate(
   session: SimContext, provinceId: number, unitTypeId: string,
 ): number {
   const type = UNIT_TYPE_BY_ID.get(unitTypeId);
   if (!type) return 0;
-  const level = Math.max(0, Math.min(5,
+  const level = Math.max(0, Math.min(8,
     session.state.provinceBuildings[provinceId]?.[type.requiredBuilding] ?? 0));
   const base = session.state.provinceEconomies?.[provinceId]?.productionCapacity ?? 1;
   return base * UNIT_PRODUCTION_RATE_BY_LEVEL[level];
@@ -51,8 +52,12 @@ export function producibleUnits(
 ): string[] {
   if (session.state.provinceOwners[provinceId] !== countryId) return [];
   const out: string[] = [];
-  for (const type of UNIT_TYPE_BY_ID.values()) {
-    if (hasBuilding(session, provinceId, type.requiredBuilding)) out.push(type.id);
+  const country = session.state.countries[countryId];
+  const tech = technologyLevels(country);
+  for (const baseId of BASE_UNIT_IDS) {
+    const base = UNIT_TYPE_BY_ID.get(baseId)!;
+    const level = Math.min(tech[base.technology], buildingLevel(session, provinceId, base.requiredBuilding));
+    if (level > 0) out.push(level === 1 ? baseId : `${baseId}-l${level}`);
   }
   return out;
 }
@@ -66,11 +71,20 @@ export function queueUnit(
   }
   const type = UNIT_TYPE_BY_ID.get(unitTypeId);
   if (!type) return { ok: false, reason: 'Unknown unit.' };
-  if (!hasBuilding(session, provinceId, type.requiredBuilding)) {
+  const facilityLevel = buildingLevel(session, provinceId, type.requiredBuilding);
+  if (facilityLevel < type.level) {
     return { ok: false, reason: `Requires a ${type.requiredBuilding}.` };
   }
   const country = session.state.countries[countryId];
   if (!country) return { ok: false, reason: 'Unknown country.' };
+  if (technologyLevels(country)[type.technology] < type.level) {
+    return { ok: false, reason: `Requires ${type.technology} technology Level ${type.level}.` };
+  }
+  const highestLevel = Math.min(technologyLevels(country)[type.technology], facilityLevel);
+  const highestId = highestLevel === 1 ? type.baseId : `${type.baseId}-l${highestLevel}`;
+  if (type.id !== highestId || baseUnitId(type.id) !== type.baseId) {
+    return { ok: false, reason: 'Only the highest unlocked level may be trained.' };
+  }
   for (const [key, amount] of Object.entries(type.buildCost)) {
     if ((country.stockpile as Record<string, number>)[key] < (amount ?? 0)) {
       return { ok: false, reason: `Not enough ${key}.` };

@@ -84,7 +84,7 @@ export function projectFor(
     const productionAvailable = new Set(producibleUnits({ state, world, graph: graph! }, province.id, viewerCountryId));
     const constructionOptions = new Map(buildOptions({ state, world, graph: graph! }, province.id, viewerCountryId).map((option) => [option.id, option]));
     return [province.id, {
-      production: UNIT_TYPES.map((unit) => {
+      production: UNIT_TYPES.filter((unit) => productionAvailable.has(unit.id)).map((unit) => {
         const available = productionAvailable.has(unit.id);
         const affordable = Object.entries(unit.buildCost).every(([key, value]) => (own?.stockpile[key as keyof typeof own.stockpile] ?? 0) >= (value ?? 0));
         return { unitTypeId: unit.id, available, affordable,
@@ -166,6 +166,8 @@ export function projectFor(
       shortages: structuredClone(own.shortages ?? {}),
       warheads: Math.floor(own.warheads ?? 0),
       phase: own.phase ?? 1,
+      technologies: { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1, ...(own.technologies ?? {}) },
+      research: own.research ? { ...own.research } : undefined,
     } : null,
     relations: { ...state.relations },
     weather: state.weather ? { ...state.weather } : undefined,

@@ -14,6 +14,7 @@ import {
   createInitialState, createUiStore, type GameNotification, type ResourceLine,
   type DiplomacyBusyAction, type DiplomacyCountryView, type DiplomacyMessageView,
   type DiplomacyProposalView, type DiplomacyView,
+  type TechnologyBranch,
 } from './ui/ui-state';
 import { autoDismissDelay, isSticky } from './ui/notification-lifecycle';
 import { DEMO_ARMY, type ArmyPanelCommand } from './ui/army';
@@ -59,6 +60,21 @@ const orderEtaSeconds = (o: WorkOrderView): number => Math.max(0,
   ((o.totalWork ?? o.totalHours ?? 0) - (o.progressWork ?? o.progressHours ?? 0))
     / Math.max(0.01, o.workRate ?? 1)
     / (GAME_PACE.clock.simulationHoursPerRealSecond * (activeSession?.devSimSpeed ?? 1)));
+const technologyView = (session: RemoteGameSession) => {
+  const levels = { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1, ...(session.ownCountry.technologies ?? {}) };
+  const research = session.ownCountry.research;
+  return {
+    levels,
+    pending: session.pendingResearch(),
+    ...(research ? { active: {
+      branch: research.branch,
+      targetLevel: research.targetLevel,
+      progress: Math.min(1, research.progressHours / research.totalHours),
+      etaSeconds: Math.max(0, research.totalHours - research.progressHours)
+        / (GAME_PACE.clock.simulationHoursPerRealSecond * session.devSimSpeed),
+    } } : {}),
+  };
+};
 
 /** Player queues a unit from the selected-province PRODUCE panel. */
 function handleProduce(provinceId: number, unitTypeId: string): void {
@@ -621,10 +637,10 @@ async function startGame(token: number): Promise<void> {
       uiStore.patch({ quality: level, effectiveRenderScale: renderer.effectiveRenderScale });
     },
     navSelect: (id) => {
-      if (id !== 'diplomacy') return;
-      const open = uiStore.get().activeSidePanel === 'diplomacy';
-      uiStore.patch({ activeSidePanel: open ? null : 'diplomacy' });
-      if (!open) {
+      if (id !== 'diplomacy' && id !== 'research') return;
+      const open = uiStore.get().activeSidePanel === id;
+      uiStore.patch({ activeSidePanel: open ? null : id });
+      if (id === 'diplomacy' && !open) {
         const selected = uiStore.get().diplomacy.selectedCountryId
           ?? Object.values(session.state.countries)
             .filter((country) => country.id !== session.playerCountryId)
@@ -665,6 +681,11 @@ async function startGame(token: number): Promise<void> {
     },
     respondDiplomacy: (proposalId, accept) => {
       diplomacyCommand(session, 'proposal-response', (done) => session.respondDiplomacy(proposalId, accept, done));
+    },
+    researchTechnology: (branch) => {
+      session.research(branch as TechnologyBranch, () => {
+        pushNotification('information', 'Research started', `${branch[0].toUpperCase()}${branch.slice(1)} development is under way.`);
+      });
     },
     dismissNotification: (id) => removeNotification(id),
     togglePause: (open) => uiStore.patch({ paused: open }),
@@ -1123,6 +1144,7 @@ async function bootstrapGameSession(
     resources: playerResourceLines(session),
     resourceOverlay: false,
     countryPhase: session.ownCountry.phase,
+    technology: technologyView(session),
   });
 
   // Initial marker upload (before the first sim tick) so armies show at once.
@@ -1146,10 +1168,18 @@ async function bootstrapGameSession(
   const civilClockTimer = window.setInterval(updateCivilClock, 250);
 
   // Replica/HUD refresh, decoupled from the authoritative simulation.
+  let knownTechnologyLevels = { ...technologyView(session).levels };
   const hudTimer = window.setInterval(() => {
     // Fog visibility is O(foreignArmies × visionSources); compute it once per
     // HUD tick and share it between the marker upload and the selection card.
-    uiStore.patch({ resources: playerResourceLines(session), countryPhase: session.ownCountry.phase });
+    const nextTechnology = technologyView(session);
+    for (const branch of ['infantry', 'resources', 'training', 'hybrid', 'armored'] as TechnologyBranch[]) {
+      if (nextTechnology.levels[branch] > knownTechnologyLevels[branch]) {
+        pushNotification('completed', 'Technology developed', `${branch[0].toUpperCase()}${branch.slice(1)} Level ${nextTechnology.levels[branch]} is now available.`);
+      }
+    }
+    knownTechnologyLevels = { ...nextTechnology.levels };
+    uiStore.patch({ resources: playerResourceLines(session), countryPhase: session.ownCountry.phase, technology: nextTechnology });
     syncArmyMarkers(session, renderer);
     syncCombatMarkers(session);
     spawnOngoingBattleFx(session, renderer);
@@ -1530,6 +1560,17 @@ function syncArmyMarkers(
         formation = buildArmyFormation(groups);
         compositionRows = buildArmyCompositionRows(groups);
         armyPresentationCache.set(army.id, { key, formation, compositionRows });
+      }
+      // A stack becomes one transport silhouette only for the underway phase.
+      // During embark/disembark it remains visibly represented by its troops on
+      // the coastal node; reaching land therefore restores the troop models
+      // immediately, even while the short unloading dwell finishes.
+      if (army.status === 'atSea' && formation.length) {
+        formation = [{
+          kind: 5,
+          count: army.composition?.unitCount ?? 0,
+          health: army.composition?.health ?? 0,
+        }];
       }
     }
     armyMarkerScratch.fill(0, cursor, cursor + 28);
@@ -2413,9 +2454,9 @@ function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRendere
       return army ? [army] : [];
     });
     const armorShooter = members.find((army) => army.composition?.groups.some((group) =>
-      group.count > 0 && (group.typeId === 'light-tank' || group.typeId === 'medium-tank')));
+      group.count > 0 && (group.typeId.replace(/-l[2-8]$/, '') === 'light-tank' || group.typeId.replace(/-l[2-8]$/, '') === 'medium-tank')));
     const artilleryShooter = members.find((army) => army.composition?.groups.some((group) =>
-      group.count > 0 && group.typeId === 'artillery'));
+      group.count > 0 && group.typeId.replace(/-l[2-8]$/, '') === 'artillery'));
     const targetFor = (shooter: (typeof members)[number]): { x: number; z: number } => {
       const enemy = members.find((army) => army.ownerCountryId !== shooter.ownerCountryId);
       if (enemy) return { x: enemy.x, z: enemy.z };

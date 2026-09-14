@@ -6,7 +6,11 @@ import { offlineSimulationHours } from '../../apps/game-server/src/timing';
 describe('centralized multiweek pacing', () => {
   it('keeps all unit movement speeds in the shared 1x table', () => {
     for (const unit of UNIT_TYPES) {
-      expect(unit.speed).toBe(GAME_PACE.movement.unitWorldUnitsPerHour[unit.id as keyof typeof GAME_PACE.movement.unitWorldUnitsPerHour]);
+      const family = unit.id.replace(/-l[2-8]$/, '') as keyof typeof GAME_PACE.movement.unitWorldUnitsPerHour;
+      const level = Number(/-l([2-8])$/.exec(unit.id)?.[1] ?? 1);
+      const expected = Math.round(GAME_PACE.movement.unitWorldUnitsPerHour[family]
+        * (1 + (level - 1) * 0.025) * 100) / 100;
+      expect(unit.speed).toBe(expected);
     }
     const infantryHoursAcrossTypicalProvince = 120
       / (GAME_PACE.movement.unitWorldUnitsPerHour.infantry * ROAD_BONUS);
@@ -31,6 +35,6 @@ describe('centralized multiweek pacing', () => {
     expect(GAME_PACE.strategic.phase3FallbackHours).toBe(168);
     expect(GAME_PACE.strategic.warheadHours).toBe(168);
     expect(GAME_PACE.strategic.devastationHours).toBe(144);
-    expect(GAME_PACE.movement.navalDwellHours).toBe(6);
+    expect(GAME_PACE.movement.navalDwellHours).toBe(0.5);
   });
 });

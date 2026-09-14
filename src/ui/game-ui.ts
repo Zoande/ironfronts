@@ -21,7 +21,7 @@ import { groupQueueItems, type QueueGroup } from './queue-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import type {
-  MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, UiStore,
+  MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, TechnologyBranch, UiStore,
 } from './ui-state';
 
 export interface GameUiActions {
@@ -53,6 +53,7 @@ export interface GameUiActions {
   buildStructure(provinceId: number, buildingId: string): void;
   /** Arm map-click placement of a production city's rally point, or clear it. */
   rallyPoint(provinceId: number, action: 'arm' | 'clear'): void;
+  researchTechnology(branch: TechnologyBranch): void;
 }
 export interface GameUiHandle {
   destroy(): void;
@@ -68,6 +69,7 @@ const MAP_MODES: ReadonlyArray<{ mode: MapMode; label: string; icon: IconName }>
 // Only near-term-meaningful sections. A finished game should not advertise a
 // wall of unavailable systems; the rest arrive with their subsystems.
 const DOCK_SECTIONS: ReadonlyArray<{ id: NavId; label: string; icon: IconName }> = [
+  { id: 'research', label: 'Technology', icon: 'objectives' },
   { id: 'diplomacy', label: 'Diplomacy', icon: 'diplomacy' },
   { id: 'economy', label: 'Economy', icon: 'economy' },
   { id: 'events', label: 'Objectives', icon: 'objectives' },
@@ -82,6 +84,16 @@ const RESOURCE_CHIPS: ReadonlyArray<{ key: keyof ProvinceResourceTotals; label: 
 /** Mirrors game/phase.ts's PHASE_LABELS — kept local rather than imported
  *  since the UI only ever sees the projected tier number, never game-core. */
 const COUNTRY_PHASE_LABELS: Record<number, string> = { 1: 'Phase I', 2: 'Phase II', 3: 'Phase III' };
+
+const TECHNOLOGY_UI: ReadonlyArray<{
+  id: TechnologyBranch; label: string; icon: IconName; description: string; unlocks: string;
+}> = [
+  { id: 'infantry', label: 'Infantry', icon: 'stat-troops', description: 'Stronger line infantry with improved health, speed and firepower.', unlocks: 'Infantry levels' },
+  { id: 'resources', label: 'Resources', icon: 'resource-overlay', description: 'Better engineers and higher-output fields, quarries, mines and oil pumps.', unlocks: 'Engineers · resource buildings' },
+  { id: 'training', label: 'Training', icon: 'industry', description: 'Higher-level training facilities dramatically accelerate advanced units.', unlocks: 'Barracks · plants · workshops' },
+  { id: 'hybrid', label: 'Hybrid', icon: 'unit-armored-car', description: 'Mobile support doctrine for reconnaissance vehicles, artillery and late strategic systems.', unlocks: 'Armored cars · artillery · nuclear systems at VIII' },
+  { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', description: 'Improved armor, engines and guns for tank formations.', unlocks: 'Light and medium tanks' },
+];
 
 /** Real, always-available province fields (populated per selection). */
 const PROVINCE_FIELDS = ['Allegiance', 'Terrain', 'Deposits', 'Extraction'] as const;
@@ -395,6 +407,78 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     respondProposal: actions.respondDiplomacy,
   });
 
+  // ---------------- technology: one active no-cost project ----------------
+  const technologyPanel = el('section', 'ifg-tech');
+  technologyPanel.hidden = true;
+  technologyPanel.setAttribute('role', 'dialog');
+  technologyPanel.setAttribute('aria-modal', 'false');
+  technologyPanel.setAttribute('aria-label', 'Technology');
+  const techHead = el('header', 'ifg-tech__head');
+  techHead.append(el('span', 'ifg-tech__eyebrow', 'National development'), el('h2', undefined, 'Technology'));
+  const techClose = el('button', 'ifg-tech__close');
+  techClose.type = 'button';
+  techClose.setAttribute('aria-label', 'Close technology');
+  techClose.append(createIcon('close'));
+  techClose.addEventListener('click', () => actions.navSelect('research'));
+  techHead.append(techClose);
+  const techTabs = el('div', 'ifg-tech__tabs');
+  techTabs.setAttribute('role', 'tablist');
+  const techBody = el('div', 'ifg-tech__body');
+  technologyPanel.append(techHead, techTabs, techBody);
+  let selectedTechTab: TechnologyBranch = 'infantry';
+  let techRenderKey = '';
+  const renderTechnology = (state: StrategicUiState): void => {
+    const activeKey = state.technology.active
+      ? `${state.technology.active.branch}:${state.technology.active.targetLevel}:${Math.round(state.technology.active.progress * 1000)}:${Math.round(state.technology.active.etaSeconds)}` : '-';
+    const nextKey = `${selectedTechTab}|${Object.values(state.technology.levels).join(',')}|${activeKey}|${state.technology.pending}`;
+    if (nextKey === techRenderKey) return;
+    techRenderKey = nextKey;
+    const current = TECHNOLOGY_UI.find((branch) => branch.id === selectedTechTab)!;
+    techTabs.replaceChildren(...TECHNOLOGY_UI.map((branch) => {
+      const tab = el('button', 'ifg-tech__tab');
+      tab.type = 'button';
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', String(branch.id === selectedTechTab));
+      tab.classList.toggle('is-active', branch.id === selectedTechTab);
+      tab.append(createIcon(branch.icon), el('span', undefined, branch.label), el('b', undefined, `L${state.technology.levels[branch.id]}`));
+      tab.onclick = () => { selectedTechTab = branch.id; renderTechnology(store.get()); };
+      return tab;
+    }));
+    const level = state.technology.levels[current.id];
+    const active = state.technology.active;
+    const hero = el('div', 'ifg-tech__branch');
+    hero.append(createIcon(current.icon, 'ifg-tech__branch-icon'));
+    const copy = el('span', 'ifg-tech__branch-copy');
+    copy.append(el('h3', undefined, current.label), el('p', undefined, current.description), el('small', undefined, current.unlocks));
+    hero.append(copy);
+    const track = el('div', 'ifg-tech__track');
+    for (let candidate = 1; candidate <= 8; candidate += 1) {
+      const node = el('div', 'ifg-tech__node');
+      node.classList.toggle('is-complete', candidate <= level);
+      node.classList.toggle('is-next', candidate === level + 1);
+      node.append(el('strong', undefined, String(candidate)), el('small', undefined, candidate === 1 ? 'Available' : `${[0, 0, 6, 10, 16, 24, 32, 40, 48][candidate]}h`));
+      track.append(node);
+    }
+    const action = el('div', 'ifg-tech__action');
+    if (active) {
+      const activeDef = TECHNOLOGY_UI.find((branch) => branch.id === active.branch)!;
+      const status = el('div', 'ifg-tech__status');
+      status.append(el('b', undefined, `${activeDef.label} Level ${active.targetLevel}`), el('small', undefined, `${Math.round(active.progress * 100)}% · ${formatEta(active.etaSeconds)} remaining`));
+      const bar = el('span', 'ifg-tech__bar');
+      const fill = el('i'); fill.style.width = `${Math.round(active.progress * 100)}%`; bar.append(fill);
+      status.append(bar); action.append(status);
+    } else if (level < 8) {
+      const start = el('button', 'ifg-tech__start', `Develop Level ${level + 1}`);
+      start.type = 'button';
+      start.disabled = state.technology.pending === true;
+      start.onclick = () => actions.researchTechnology(current.id);
+      action.append(start, el('small', undefined, 'No resources required · one project at a time'));
+    } else {
+      action.append(el('strong', 'ifg-tech__max', 'Branch fully developed'));
+    }
+    techBody.replaceChildren(hero, track, action);
+  };
+
   // ---------------- map-mode cluster (top-right) ----------------
   const modeCluster = el('div', 'ifg-modes');
   modeCluster.setAttribute('role', 'group');
@@ -606,7 +690,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     pvPickerList.replaceChildren(...options.map((option) => {
       const button = el('button', 'ifg-province-picker__option');
       button.type = 'button';
-      const icon = mode === 'build' ? FACILITY_ICON[option.id] : UNIT_PRODUCTION_ICON[option.id];
+      const family = option.id.replace(/-l[2-8]$/, '');
+      const icon = mode === 'build' ? FACILITY_ICON[option.id] : UNIT_PRODUCTION_ICON[family];
       const thumb = icon ? createIcon(icon, 'ifg-province-picker__thumb') : createUnitPortrait(option.id, option.name);
       thumb.classList.add('ifg-province-picker__thumb');
       const copy = el('span', 'ifg-province-picker__copy');
@@ -616,7 +701,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       button.classList.toggle('is-locked', !option.available);
       bindTooltip(button, () => ({
         title: option.name,
-        description: mode === 'build' ? FACILITY_NOTE[option.id] : UNIT_ROLE_NOTE[option.id],
+        description: mode === 'build' ? FACILITY_NOTE[option.id] : UNIT_ROLE_NOTE[family],
         cost: option.costLabel,
         disabledReason: option.reason ?? (!option.affordable ? `Not enough resources — needs ${option.costLabel}.` : undefined),
       }));
@@ -625,7 +710,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         const optimistic: QueueItem = { id: option.id, label: option.name, active: true, progress: 0, etaSeconds: 0 };
         if (mode === 'train') {
           optimisticTrain = optimistic;
-          paintProvinceCommand(pvTrainCommand, 'Train', 'stat-troops', optimistic, UNIT_PRODUCTION_ICON[option.id]);
+          paintProvinceCommand(pvTrainCommand, 'Train', 'stat-troops', optimistic, UNIT_PRODUCTION_ICON[family]);
           actions.produceUnit(selected.id, option.id);
         } else {
           optimisticBuild = optimistic;
@@ -704,7 +789,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (event.target === overlay) actions.togglePause(false);
   });
 
-  root.append(topbar, dock, diplomacyPanel.element, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, overlay);
+  root.append(topbar, dock, diplomacyPanel.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, overlay);
   document.body.append(root);
 
   const onKey = (event: KeyboardEvent): void => {
@@ -750,10 +835,18 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       diplomacyDockButton.setAttribute('aria-pressed', String(diplomacyOpen));
     }
     diplomacyPanel.render(diplomacyOpen, state.diplomacy);
+    const technologyOpen = state.activeSidePanel === 'research';
+    technologyPanel.hidden = !technologyOpen;
+    if (technologyOpen) renderTechnology(state);
     if (renderedSidePanel === 'diplomacy' && state.activeSidePanel === null) {
       diplomacyDockButton?.focus({ preventScroll: true });
     }
     renderedSidePanel = state.activeSidePanel;
+    for (const [id, button] of dockButtons) {
+      const on = id === state.activeSidePanel;
+      button.classList.toggle('is-on', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
 
     // `.brand { display:flex }` beats [hidden]; override inline, re-asserted so
     // it outlasts the menu launch transition.
@@ -1043,7 +1136,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         const activeConstruction = queuedConstruction ?? (province.commandPending ? optimisticBuild : undefined);
         paintProvinceCommand(
           pvTrainCommand, 'Train', 'stat-troops', activeTraining,
-          activeTraining ? UNIT_PRODUCTION_ICON[activeTraining.id] : undefined,
+          activeTraining ? UNIT_PRODUCTION_ICON[activeTraining.id.replace(/-l[2-8]$/, '')] : undefined,
         );
         paintProvinceCommand(
           pvBuildCommand, 'Build', 'industry', activeConstruction,

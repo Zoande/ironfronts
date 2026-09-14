@@ -30,6 +30,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('extract'), armyId: z.string(), resource: z.enum(['food', 'stone', 'metal', 'oil']) }),
   z.object({ type: z.literal('produce'), provinceId: z.number().int().nonnegative(), unitTypeId: z.string() }),
   z.object({ type: z.literal('build'), provinceId: z.number().int().nonnegative(), buildingId: z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']) }),
+  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'training', 'hybrid', 'armored']) }),
   z.object({ type: z.literal('setRally'), provinceId: z.number().int().nonnegative(), target: z.object({ x: z.number().finite(), z: z.number().finite() }).nullable() }),
   z.object({
     type: z.literal('sendDiplomaticMessage'),
@@ -70,7 +71,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('devSetWeather'), mode: z.enum(['automatic', 'forced-clear', 'forced-rain']) }),
   z.object({ type: z.literal('devCheatBuild'), provinceId: z.number().int().nonnegative(),
     buildingId: z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']),
-    level: z.number().int().min(1).max(5) }),
+    level: z.number().int().min(1).max(8) }),
   z.object({ type: z.literal('devCheatSpawnUnit'), provinceId: z.number().int().nonnegative(),
     countryId: z.number().int().positive(), unitTypeId: z.string().min(1).max(50) }),
   z.object({ type: z.literal('devCheatGiveResource'), countryId: z.number().int().positive(),

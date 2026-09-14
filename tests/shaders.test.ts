@@ -24,9 +24,15 @@ describe('WGSL programs', () => {
   });
 
   it('keeps strategic troop models small relative to roads and towns', () => {
-    const scale = Number(/let scale = ([\d.]+);/.exec(armyModelShader)?.[1]);
+    const scale = Number(/let scale = select\(([\d.]+),/.exec(armyModelShader)?.[1]);
     expect(scale).toBeGreaterThan(0);
     expect(scale).toBeLessThanOrEqual(2.1);
+  });
+
+  it('renders at-sea armies as procedural transport ships on the water surface', () => {
+    expect(armyModelShader).toContain('kind == 5u');
+    expect(armyModelShader).toContain('halfSize = vec3f(1.18, 0.42, 3.20)');
+    expect(armyModelShader).toContain('select(heightAt(centerXZ / uniforms.map.xy), 0.35, kind == 5u)');
   });
 
   it('faces vehicles and infantry down their line of travel and adds a marching gait', () => {

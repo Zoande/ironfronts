@@ -86,7 +86,7 @@ fn modelPart(kind: u32, part: u32) -> ModelPart {
       case 4u: { center = vec3f(1.42, 0.46, 0.0); halfSize = vec3f(0.28, 0.34, 1.55); shade = 0.34; }
       default: { center = vec3f(0.0, 1.82, 0.12); halfSize = vec3f(0.28, 0.14, 0.28); shade = 1.05; }
     }
-  } else {
+  } else if (kind == 3u) {
     // Artillery: carriage, shield, long barrel, trail and wheels.
     switch part {
       case 0u: { center = vec3f(0.0, 0.66, 0.0); halfSize = vec3f(0.78, 0.22, 0.86); shade = 0.64; }
@@ -95,6 +95,18 @@ fn modelPart(kind: u32, part: u32) -> ModelPart {
       case 3u: { center = vec3f(0.0, 0.34, 1.34); halfSize = vec3f(0.20, 0.16, 1.12); shade = 0.52; }
       case 4u: { center = vec3f(-0.92, 0.58, 0.0); halfSize = vec3f(0.24, 0.58, 0.58); shade = 0.26; }
       default: { center = vec3f(0.92, 0.58, 0.0); halfSize = vec3f(0.24, 0.58, 0.58); shade = 0.26; }
+    }
+  } else {
+    // Naval transport placeholder: long dark hull, raised deckhouse, bridge,
+    // bow and two funnels. It intentionally uses the same six-cube budget as
+    // land models so sailing adds no new mesh or asset download.
+    switch part {
+      case 0u: { center = vec3f(0.0, 0.62, 0.0); halfSize = vec3f(1.18, 0.42, 3.20); shade = 0.46; }
+      case 1u: { center = vec3f(0.0, 1.15, 0.45); halfSize = vec3f(0.92, 0.18, 2.45); shade = 0.72; }
+      case 2u: { center = vec3f(0.0, 1.72, 0.70); halfSize = vec3f(0.62, 0.48, 0.82); shade = 0.92; }
+      case 3u: { center = vec3f(0.0, 1.08, -2.72); halfSize = vec3f(0.82, 0.23, 0.55); shade = 0.58; }
+      case 4u: { center = vec3f(-0.34, 2.28, 0.95); halfSize = vec3f(0.18, 0.48, 0.22); shade = 0.34; }
+      default: { center = vec3f(0.34, 2.18, 0.10); halfSize = vec3f(0.18, 0.43, 0.22); shade = 0.34; }
     }
   }
   return ModelPart(center, halfSize, shade);
@@ -112,7 +124,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let copyIndex = instanceIndex / armyModelParams.count;
   let model = armyModels[instanceIndex % armyModelParams.count];
   let copyOffset = f32(i32(copyIndex) - 1) * uniforms.map.x;
-  let kind = min(u32(model.a.w + 0.5), 4u);
+  let kind = min(u32(model.a.w + 0.5), 5u);
   let partIndex = vertexIndex / 36u;
   let cube = cubePoint(vertexIndex % 36u);
   let part = modelPart(kind, partIndex);
@@ -129,7 +141,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // movement path still read at strategic zoom. Selection/pick hitbox is on the
   // flat marker, not the model, so this does not hurt selectability. Trimmed
   // again this pass (1.95 -> 1.7) to sit closer to the road ribbon width.
-  let scale = 1.7;
+  let scale = select(1.7, 2.15, kind == 5u);
   var local = (part.center + cube.position * part.halfSize) * scale;
 
   // Marching gait. moveAmt is how far the unit shifted between the last two
@@ -151,7 +163,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let rotated = vec3f(local.x * cosine - local.z * sine, local.y, local.x * sine + local.z * cosine);
   let travel = select(0.0, clamp((uniforms.sunTime.w - model.d.w) / max(model.d.z, 0.0001), 0.0, 1.0), model.d.z > 0.0);
   let centerXZ = mix(model.a.xy, model.d.xy, travel) + vec2f(copyOffset, 0.0);
-  let ground = heightAt(centerXZ / uniforms.map.xy);
+  // Ships ride the rendered sea surface instead of sampling the seabed.
+  let ground = select(heightAt(centerXZ / uniforms.map.xy), 0.35, kind == 5u);
   // Ground lift tracks model scale so shrinking the unit doesn't leave it hovering.
   let worldPosition = vec3f(centerXZ.x + rotated.x, ground + rotated.y + scale * 0.2, centerXZ.y + rotated.z);
   let normal = normalize(vec3f(cube.normal.x * cosine - cube.normal.z * sine, cube.normal.y, cube.normal.x * sine + cube.normal.z * cosine));

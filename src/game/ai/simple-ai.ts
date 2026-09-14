@@ -25,7 +25,7 @@ import { applyCommand } from '../commands';
 import { producibleUnits } from '../production';
 import { BUILDINGS, buildOptions, buildableBuildings } from '../construction';
 import { stackHealthFraction, type ArmyStack } from '../units/army';
-import { unitType } from '../units/unit-catalog';
+import { baseUnitId, unitType } from '../units/unit-catalog';
 import type { BuildingId } from '../units/unit-types';
 import type { WorldProvince } from '../world-data';
 import { wrappedDistance } from '../geometry';
@@ -305,8 +305,8 @@ function workDeposits(
   if (!sites.length) return;
   for (const army of situation.armies) {
     if (army.order || army.status !== 'idle' || army.extractionAssignment !== null) continue;
-    if (!army.units.some((group) => group.typeId === 'engineer' && group.count > 0)) continue;
-    const incoming = army.units.find((group) => group.typeId === 'engineer')?.count ?? 0;
+    if (!army.units.some((group) => baseUnitId(group.typeId) === 'engineer' && group.count > 0)) continue;
+    const incoming = army.units.filter((group) => baseUnitId(group.typeId) === 'engineer').reduce((sum, group) => sum + group.count, 0);
     const target = sites.map((site) => {
       const building = BUILDING_FOR_RESOURCE[site.resource];
       const tier = site.economy.resourceBuildings[building];
@@ -368,7 +368,7 @@ function developResources(session: SimContext, situation: Pick<EconomyAiSituatio
 function produceUnits(session: SimContext, situation: EconomyAiSituation): void {
   const country = session.state.countries[situation.countryId];
   if (!country) return;
-  const miners = situation.armies.filter((army) => army.units.some((group) => group.typeId === 'engineer' && group.count > 0)).length;
+  const miners = situation.armies.filter((army) => army.units.some((group) => baseUnitId(group.typeId) === 'engineer' && group.count > 0)).length;
   for (const city of situation.cities) {
     const provinceId = city.province.id;
     if ((session.state.productionQueues[provinceId]?.length ?? 0) >= MAX_QUEUED_UNITS) continue;
@@ -396,6 +396,7 @@ function chooseUnit(
   options: readonly string[], miners: number,
 ): string | null {
   const stockpile = country.stockpile;
+  const option = (family: string): string | undefined => options.find((id) => baseUnitId(id) === family);
   const sustainable = (unitId: string): boolean => {
     const upkeep = unitType(unitId).upkeep;
     return (['funds', 'food', 'metal', 'oil'] as UpkeepResource[]).every((resource) => {
@@ -404,18 +405,23 @@ function chooseUnit(
       return deficit <= 0 || country.stockpile[resource] / deficit >= 72;
     });
   };
-  if (miners < 2 && options.includes('engineer')
-    && stockpile.funds > 120 && stockpile.manpower > 80 && sustainable('engineer')) return 'engineer';
-  if (options.includes('medium-tank')
+  const engineer = option('engineer');
+  const mediumTank = option('medium-tank');
+  const lightTank = option('light-tank');
+  const artillery = option('artillery');
+  const infantry = option('infantry');
+  if (miners < 2 && engineer
+    && stockpile.funds > 120 && stockpile.manpower > 80 && sustainable(engineer)) return engineer;
+  if (mediumTank
     && stockpile.metal > 400 && stockpile.oil > 200
-    && stockpile.funds > 3_600 && stockpile.food > 675 && sustainable('medium-tank')) return 'medium-tank';
-  if (options.includes('light-tank')
+    && stockpile.funds > 3_600 && stockpile.food > 675 && sustainable(mediumTank)) return mediumTank;
+  if (lightTank
     && stockpile.metal > 220 && stockpile.oil > 120
-    && stockpile.funds > 2_000 && stockpile.food > 450 && sustainable('light-tank')) return 'light-tank';
-  if (options.includes('artillery')
-    && stockpile.metal > 200 && stockpile.funds > 220 && sustainable('artillery')) return 'artillery';
-  if (options.includes('infantry')
-    && stockpile.manpower > 120 && stockpile.funds > 400 && stockpile.food > 150 && sustainable('infantry')) return 'infantry';
+    && stockpile.funds > 2_000 && stockpile.food > 450 && sustainable(lightTank)) return lightTank;
+  if (artillery
+    && stockpile.metal > 200 && stockpile.funds > 220 && sustainable(artillery)) return artillery;
+  if (infantry
+    && stockpile.manpower > 120 && stockpile.funds > 400 && stockpile.food > 150 && sustainable(infantry)) return infantry;
   return null;
 }
 

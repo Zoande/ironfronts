@@ -4,6 +4,7 @@ import type { ConstructionOrder, ProvinceBuildings, ResourceBuildingId, Stockpil
 import type { BuildingId, MilitaryBuildingId } from './units/unit-types';
 import { BUILDING_REQUIRED_PHASE } from './phase';
 import { RESOURCE_FOR_BUILDING, maximumResourceTier } from './economy/resources';
+import { technologyBranchForBuilding, technologyLevels } from './technology';
 
 interface TierRecipe { readonly cost: Partial<Stockpile>; readonly work: number }
 interface BuildingDef {
@@ -15,9 +16,18 @@ interface BuildingDef {
   readonly buildWork: number;
   readonly buildTimeHours: number;
 }
-const definition = (label: string, kind: BuildingDef['kind'], tiers: readonly TierRecipe[]): BuildingDef => ({
-  label, kind, tiers, cost: tiers[0].cost, buildWork: tiers[0].work, buildTimeHours: tiers[0].work,
-});
+const definition = (label: string, kind: BuildingDef['kind'], firstFive: readonly TierRecipe[]): BuildingDef => {
+  const tiers = [...firstFive];
+  const growth = [1.45, 1.7, 2] as const;
+  for (const factor of growth) {
+    const previous = tiers.at(-1)!;
+    tiers.push({
+      work: Math.round(previous.work * factor),
+      cost: Object.fromEntries(Object.entries(previous.cost).map(([key, value]) => [key, Math.round((value ?? 0) * factor)])),
+    });
+  }
+  return { label, kind, tiers, cost: tiers[0].cost, buildWork: tiers[0].work, buildTimeHours: tiers[0].work };
+};
 
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   barracks: definition('Barracks', 'military', [
@@ -88,9 +98,18 @@ function eligibility(ctx: SimContext, provinceId: number, buildingId: BuildingId
   const targetTier = nextTier(ctx, provinceId, buildingId);
   if (ctx.state.provinceOwners[provinceId] !== countryId) return { id: buildingId, targetTier, affordable: false, reason: 'Not your province.' };
   const urban = isUrban(ctx, provinceId);
+  const countryTechnology = technologyLevels(ctx.state.countries[countryId]);
+  if (buildingId === 'missileSite' && targetTier === 1 && countryTechnology.hybrid < 8) {
+    return { id: buildingId, targetTier, affordable: false, reason: 'Requires Hybrid technology Level 8.' };
+  }
+  const techBranch = technologyBranchForBuilding(buildingId);
+  const techLevel = countryTechnology[techBranch];
+  if (targetTier > techLevel) {
+    return { id: buildingId, targetTier, affordable: false, reason: `Requires ${techBranch} technology Level ${targetTier}.` };
+  }
   if (def.kind === 'military') {
     if (!urban) return { id: buildingId, targetTier, affordable: false, reason: 'Military buildings require an urban province.' };
-    if (targetTier > 5) return { id: buildingId, targetTier: 5, affordable: false, reason: 'Maximum Level V reached.' };
+    if (targetTier > 8) return { id: buildingId, targetTier: 8, affordable: false, reason: 'Maximum Level VIII reached.' };
     const required = BUILDING_REQUIRED_PHASE[buildingId as MilitaryBuildingId];
     if ((ctx.state.countries[countryId]?.phase ?? 1) < required) return { id: buildingId, targetTier, affordable: false, reason: `Requires phase ${required}.` };
   } else {
@@ -99,8 +118,8 @@ function eligibility(ctx: SimContext, provinceId: number, buildingId: BuildingId
     if (!record) return { id: buildingId, targetTier, affordable: false, reason: 'Province economy unavailable.' };
     const resource = RESOURCE_FOR_BUILDING[buildingId as ResourceBuildingId];
     const maxTier = maximumResourceTier(buildingId as ResourceBuildingId, record.resourcePotential[resource]);
-    if (targetTier > 5 && maxTier === 5) {
-      return { id: buildingId, targetTier: 5, affordable: false, reason: 'Maximum Level V reached.' };
+    if (targetTier > 8 && maxTier === 8) {
+      return { id: buildingId, targetTier: 8, affordable: false, reason: 'Maximum Level VIII reached.' };
     }
     if (targetTier > maxTier) return { id: buildingId, targetTier, affordable: false, reason: `Potential supports Level ${maxTier}.` };
   }

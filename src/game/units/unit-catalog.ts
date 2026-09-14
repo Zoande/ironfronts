@@ -26,9 +26,10 @@ function damagePerHour(soft: number, light: number, heavy: number): DamageProfil
   };
 }
 
-export const UNIT_TYPES: readonly UnitType[] = [
+const BASE_UNIT_TYPES: readonly UnitType[] = [
   {
     id: 'infantry',
+    baseId: 'infantry', level: 1, technology: 'infantry',
     name: 'Infantry',
     category: 'infantry',
     armorClass: 'soft',
@@ -42,19 +43,20 @@ export const UNIT_TYPES: readonly UnitType[] = [
     extractionRate: 0,
     engagementRange: 0,
     buildCost: { funds: 350, manpower: 45, food: 35 },
-    buildWork: 2,
+    buildWork: 0.5,
     upkeep: { fundsPerHour: 0.5, foodPerHour: 0.5 },
     shortageEffects: [
       { resource: 'food', stat: 'combatOutput', maxPenalty: 0.5, curve: 'linear' },
       { resource: 'funds', stat: 'organizationCap', maxPenalty: 0.6, curve: 'soft' },
     ],
     cost: { funds: 350, manpower: 45, food: 35 },
-    buildTimeHours: 2,
+    buildTimeHours: 0.5,
     requiredBuilding: 'barracks',
     stackPriority: 10,
   },
   {
     id: 'engineer',
+    baseId: 'engineer', level: 1, technology: 'resources',
     name: 'Engineers',
     category: 'engineer',
     armorClass: 'soft',
@@ -68,7 +70,7 @@ export const UNIT_TYPES: readonly UnitType[] = [
     extractionRate: 0.75,
     engagementRange: 0,
     buildCost: { funds: 450, manpower: 35, food: 30, metal: 10 },
-    buildWork: 3,
+    buildWork: 0.5,
     upkeep: { fundsPerHour: 0.7, foodPerHour: 0.5, metalPerHour: 0.05 },
     shortageEffects: [
       { resource: 'metal', stat: 'extractionOutput', maxPenalty: 0.8, curve: 'linear' },
@@ -76,12 +78,13 @@ export const UNIT_TYPES: readonly UnitType[] = [
       { resource: 'funds', stat: 'organizationCap', maxPenalty: 0.6, curve: 'soft' },
     ],
     cost: { funds: 450, manpower: 35, food: 30, metal: 10 },
-    buildTimeHours: 3,
+    buildTimeHours: 0.5,
     requiredBuilding: 'barracks',
     stackPriority: 8,
   },
   {
     id: 'armored-car',
+    baseId: 'armored-car', level: 1, technology: 'hybrid',
     name: 'Armored Car',
     category: 'recon',
     armorClass: 'light',
@@ -95,7 +98,7 @@ export const UNIT_TYPES: readonly UnitType[] = [
     extractionRate: 0,
     engagementRange: 0,
     buildCost: { funds: 650, manpower: 20, metal: 70, oil: 25 },
-    buildWork: 4,
+    buildWork: 0.75,
     upkeep: { fundsPerHour: 1.2, metalPerHour: 0.1, oilPerHour: 0.5 },
     shortageEffects: [
       { resource: 'oil', stat: 'movementSpeed', maxPenalty: 0.8, curve: 'linear' },
@@ -104,12 +107,13 @@ export const UNIT_TYPES: readonly UnitType[] = [
       { resource: 'funds', stat: 'organizationCap', maxPenalty: 0.6, curve: 'soft' },
     ],
     cost: { funds: 650, manpower: 20, metal: 70, oil: 25 },
-    buildTimeHours: 4,
+    buildTimeHours: 0.75,
     requiredBuilding: 'tankPlant',
     stackPriority: 20,
   },
   {
     id: 'light-tank',
+    baseId: 'light-tank', level: 1, technology: 'armored',
     name: 'Light Tank',
     category: 'armor',
     armorClass: 'light',
@@ -123,7 +127,7 @@ export const UNIT_TYPES: readonly UnitType[] = [
     extractionRate: 0,
     engagementRange: 0,
     buildCost: { funds: 1100, manpower: 30, metal: 140, oil: 55 },
-    buildWork: 6,
+    buildWork: 1,
     upkeep: { fundsPerHour: 2, metalPerHour: 0.2, oilPerHour: 1 },
     shortageEffects: [
       { resource: 'oil', stat: 'movementSpeed', maxPenalty: 0.8, curve: 'linear' },
@@ -131,12 +135,13 @@ export const UNIT_TYPES: readonly UnitType[] = [
       { resource: 'funds', stat: 'organizationCap', maxPenalty: 0.65, curve: 'soft' },
     ],
     cost: { funds: 1100, manpower: 30, metal: 140, oil: 55 },
-    buildTimeHours: 6,
+    buildTimeHours: 1,
     requiredBuilding: 'tankPlant',
     stackPriority: 40,
   },
   {
     id: 'medium-tank',
+    baseId: 'medium-tank', level: 1, technology: 'armored',
     name: 'Medium Tank',
     category: 'armor',
     armorClass: 'heavy',
@@ -150,7 +155,7 @@ export const UNIT_TYPES: readonly UnitType[] = [
     extractionRate: 0,
     engagementRange: 0,
     buildCost: { funds: 2000, manpower: 45, metal: 260, oil: 110 },
-    buildWork: 11,
+    buildWork: 1.25,
     upkeep: { fundsPerHour: 3.5, metalPerHour: 0.35, oilPerHour: 2 },
     shortageEffects: [
       { resource: 'oil', stat: 'movementSpeed', maxPenalty: 0.9, curve: 'linear' },
@@ -158,12 +163,13 @@ export const UNIT_TYPES: readonly UnitType[] = [
       { resource: 'funds', stat: 'organizationCap', maxPenalty: 0.7, curve: 'soft' },
     ],
     cost: { funds: 2000, manpower: 45, metal: 260, oil: 110 },
-    buildTimeHours: 11,
+    buildTimeHours: 1.25,
     requiredBuilding: 'tankPlant',
     stackPriority: 70,
   },
   {
     id: 'artillery',
+    baseId: 'artillery', level: 1, technology: 'hybrid',
     name: 'Artillery',
     category: 'artillery',
     armorClass: 'soft',
@@ -177,7 +183,7 @@ export const UNIT_TYPES: readonly UnitType[] = [
     extractionRate: 0,
     engagementRange: 140,
     buildCost: { funds: 1400, manpower: 35, food: 15, metal: 180, oil: 20 },
-    buildWork: 8,
+    buildWork: 1,
     upkeep: { fundsPerHour: 1.8, foodPerHour: 0.1, metalPerHour: 0.3, oilPerHour: 0.2 },
     shortageEffects: [
       { resource: 'metal', stat: 'combatOutput', maxPenalty: 0.65, curve: 'linear' },
@@ -186,11 +192,54 @@ export const UNIT_TYPES: readonly UnitType[] = [
       { resource: 'funds', stat: 'organizationCap', maxPenalty: 0.6, curve: 'soft' },
     ],
     cost: { funds: 1400, manpower: 35, food: 15, metal: 180, oil: 20 },
-    buildTimeHours: 8,
+    buildTimeHours: 1,
     requiredBuilding: 'ordnance',
     stackPriority: 50,
   },
 ];
+
+const LEVEL_TIME_MULTIPLIER = [0, 1, 2, 4, 8, 16, 32, 64, 144] as const;
+const scaled = (value: number, factor: number): number => Math.round(value * factor * 100) / 100;
+const scaleRecord = <T extends object>(record: T, factor: number): T =>
+  Object.fromEntries(Object.entries(record).map(([key, value]) => [key, scaled(Number(value ?? 0), factor)])) as T;
+
+/** Eight separately stackable troop levels sharing one family portrait/model. */
+export const UNIT_TYPES: readonly UnitType[] = BASE_UNIT_TYPES.flatMap((base) =>
+  Array.from({ length: 8 }, (_, index): UnitType => {
+    const level = index + 1;
+    if (level === 1) return base;
+    const statStep = level - 1;
+    const hpFactor = 1 + statStep * 0.16;
+    const damageFactor = 1 + statStep * 0.18;
+    const costFactor = 1 + statStep * 0.45 + statStep * statStep * 0.08;
+    const upkeepFactor = 1 + statStep * 0.2;
+    const work = scaled(base.buildWork * LEVEL_TIME_MULTIPLIER[level], 1);
+    const buildCost = scaleRecord(base.buildCost, costFactor);
+    return {
+      ...base,
+      id: `${base.id}-l${level}`,
+      name: `${base.name} Level ${level}`,
+      level,
+      maxHp: scaled(base.maxHp, hpFactor),
+      speed: scaled(base.speed, 1 + statStep * 0.025),
+      attack: scaleRecord(base.attack, damageFactor),
+      defense: scaleRecord(base.defense, damageFactor),
+      extractionRate: scaled(base.extractionRate, damageFactor),
+      buildCost,
+      cost: buildCost,
+      buildWork: work,
+      buildTimeHours: work,
+      upkeep: scaleRecord(base.upkeep, upkeepFactor),
+      stackPriority: base.stackPriority + statStep,
+    };
+  }),
+);
+
+export const BASE_UNIT_IDS = BASE_UNIT_TYPES.map((unit) => unit.id);
+
+export function baseUnitId(id: string): string {
+  return id.replace(/-l[2-8]$/, '');
+}
 
 export const UNIT_TYPE_BY_ID: ReadonlyMap<string, UnitType> =
   new Map(UNIT_TYPES.map((unit) => [unit.id, unit]));
