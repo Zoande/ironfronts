@@ -544,15 +544,56 @@ async function startGame(token: number): Promise<void> {
   // confirm when the stream recovers.
   let connectionDropped = false;
   connection.addEventListener('connection-status', () => {
-    const connected = connection.status === 'ready';
-    if (!connected && !connectionDropped) {
+    const disconnected = connection.status === 'disconnected'
+      || connection.status === 'closed' || connection.status === 'incompatible';
+    if (disconnected && !connectionDropped) {
       connectionDropped = true;
       pushNotification('warning', 'Connection lost', 'Reconnecting to the command server…');
-    } else if (connected && connectionDropped) {
+    } else if (connection.status === 'ready' && connectionDropped) {
       connectionDropped = false;
       pushNotification('information', 'Reconnected', 'Live command stream restored.');
     }
   }, attemptListener);
+
+  // Persist browser failures and enough input-routing context to distinguish a
+  // blocked canvas from a stalled renderer or an unhealthy command stream.
+  window.addEventListener('error', (event) => connection.reportDiagnostic('error', 'browser_uncaught_error', {
+    message: event.message || 'Unknown browser error',
+    filename: event.filename || null, line: event.lineno, column: event.colno,
+  }), attemptListener);
+  window.addEventListener('unhandledrejection', (event) => connection.reportDiagnostic(
+    'error', 'browser_unhandled_rejection', {
+      message: event.reason instanceof Error ? event.reason.message : String(event.reason),
+      stack: event.reason instanceof Error ? event.reason.stack?.slice(0, 1_000) ?? null : null,
+    },
+  ), attemptListener);
+  window.addEventListener('online', () => connection.reportDiagnostic('info', 'browser_online'), attemptListener);
+  window.addEventListener('offline', () => connection.reportDiagnostic('warn', 'browser_offline'), attemptListener);
+  document.addEventListener('visibilitychange', () => connection.reportDiagnostic('info', 'visibility_changed', {
+    visibility: document.visibilityState,
+  }), attemptListener);
+  window.addEventListener('pointerdown', (event) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    connection.reportDiagnostic('debug', 'pointer_input', {
+      x: event.clientX, y: event.clientY, pointerType: event.pointerType,
+      targetTag: target?.tagName ?? null, targetId: target?.id || null,
+      targetClass: target?.className ? String(target.className).slice(0, 300) : null,
+      targetPointerEvents: target ? getComputedStyle(target).pointerEvents : null,
+      canvasTarget: event.target === canvas,
+    });
+  }, { ...attemptListener, capture: true });
+  let lastWheelDiagnostic = 0;
+  window.addEventListener('wheel', (event) => {
+    const now = performance.now();
+    if (now - lastWheelDiagnostic < 1_000) return;
+    lastWheelDiagnostic = now;
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    connection.reportDiagnostic('debug', 'wheel_input', {
+      x: event.clientX, y: event.clientY, deltaX: event.deltaX, deltaY: event.deltaY,
+      targetTag: target?.tagName ?? null, targetId: target?.id || null,
+      canvasTarget: event.target === canvas,
+    });
+  }, { ...attemptListener, capture: true, passive: true });
 
   const disposeRendererOnPagehide = (event: PageTransitionEvent): void => {
     if (!event.persisted) renderer.dispose();

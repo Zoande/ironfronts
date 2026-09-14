@@ -29,6 +29,7 @@ function projection() {
 function setup(deploymentEnabled = true) {
   const server = createServer();
   const setSpeed = vi.fn();
+  const clientLog = vi.fn();
   const runtime = { seat: () => 7, projection, catalogs: { units: [], buildings: [] }, command: vi.fn(),
     setWeatherMode: vi.fn(), cheatBuild: vi.fn(() => ({ ok: true, message: 'built' })),
     cheatSpawnUnit: vi.fn(() => ({ ok: true, message: 'spawned' })),
@@ -42,7 +43,7 @@ function setup(deploymentEnabled = true) {
     debugControlsEnabled: deploymentEnabled,
     devSimSpeed: { get: () => 1, set: setSpeed, enabled: deploymentEnabled },
     devDiagnostics: { get: () => ({ requestedSpeed: 1, effectiveSpeed: 1, pendingSimulationSeconds: 0,
-      lastPumpSteps: 1, lastPumpMilliseconds: 0, overloaded: false }) }, log: vi.fn() });
+      lastPumpSteps: 1, lastPumpMilliseconds: 0, overloaded: false }) }, log: vi.fn(), clientLog });
   openGateways.push({ gateway, server });
   const connect = (nonce: string) => {
     const socket = new FakeSocket();
@@ -53,7 +54,7 @@ function setup(deploymentEnabled = true) {
         expiresAt: Date.now() + 30_000, nonce }, secret) });
     return socket;
   };
-  return { gateway, runtime, setSpeed, connect };
+  return { gateway, runtime, setSpeed, clientLog, connect };
 }
 
 afterEach(() => { for (const { gateway, server } of openGateways.splice(0)) { gateway.closeAll(); server.close(); } });
@@ -92,5 +93,15 @@ describe('deployment-gated debug authorization', () => {
       expect(socket.sent.at(-1), request.type).toMatchObject({ type: 'error', code: 'unauthorized_debug' });
     }
     expect(setSpeed).not.toHaveBeenCalled(); socket.close();
+  });
+
+  it('records authenticated browser diagnostics with connection identity', () => {
+    const { connect, clientLog } = setup(false); const socket = connect('diagnostics');
+    socket.message({ type: 'clientDiagnostic', level: 'warn', event: 'connection_declared_stale',
+      clientEpochMs: 100, fields: { revision: 12 } });
+    expect(clientLog).toHaveBeenCalledWith('warn', 'connection_declared_stale', expect.objectContaining({
+      accountId: 'account-diagnostics', countryId: 7, clientEpochMs: 100, revision: 12,
+    }));
+    socket.close();
   });
 });

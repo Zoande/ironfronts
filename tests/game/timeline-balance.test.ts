@@ -31,4 +31,11 @@ describe('continuous combat balance and accurate scheduling',()=>{
     now=2000; scheduler.pump(0); expect(steps).toHaveLength(12);
     now=2500; scheduler.pump(2); expect(steps).toHaveLength(13);
   });
+  it('yields after one integration slice by default so networking can run',()=>{
+    let now=0; const steps:number[]=[];
+    const scheduler=new SimulationScheduler(dt=>steps.push(dt),()=>now);
+    now=1000; scheduler.pump(10_000);
+    expect(steps).toEqual([0.25]);
+    expect(scheduler.pendingSeconds).toBeCloseTo(9_100);
+  });
 });

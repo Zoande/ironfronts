@@ -26,6 +26,10 @@ export const config = {
     process.cwd(),
     process.env.GAME_DATA_PATH ?? path.join(process.env.DATA_DIRECTORY ?? 'data', 'game.json'),
   ),
+  diagnosticsPath: path.resolve(
+    process.cwd(),
+    process.env.DIAGNOSTICS_PATH ?? path.join(process.env.DATA_DIRECTORY ?? 'data', 'diagnostics.jsonl'),
+  ),
   ticketSecret: secret('TICKET_SECRET', 'ironfronts-local-ticket-secret-change-me'),
   internalSecret: secret('INTERNAL_SERVICE_SECRET', 'ironfronts-local-service-secret-change-me'),
   /** Explicit deployment gate layered on top of the signed account claim. */
