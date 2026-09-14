@@ -360,19 +360,11 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const dock = el('nav', 'ifg-dock');
   dock.setAttribute('aria-label', 'Command');
 
-  const expandBtn = el('button', 'ifg-dock__btn ifg-dock__expand');
-  expandBtn.type = 'button';
-  expandBtn.title = 'More';
-  expandBtn.setAttribute('aria-expanded', 'false');
-  expandBtn.append(createIcon('expand'));
-
-  const dockMore = el('div', 'ifg-dock__more');
-  dockMore.hidden = true;
   const dockButtons = new Map<NavId, HTMLButtonElement>();
   for (const section of DOCK_SECTIONS) {
     const b = el('button', 'ifg-dock__btn');
     b.type = 'button';
-    const available = section.id === 'diplomacy';
+    const available = section.id === 'research' || section.id === 'diplomacy';
     b.disabled = !available;
     b.dataset.nav = section.id;
     b.title = `${section.label} — not available yet`;
@@ -380,21 +372,14 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (available) {
       b.title = section.label;
       b.setAttribute('aria-label', section.label);
-      b.setAttribute('aria-controls', 'ifg-diplomacy-panel');
+      b.setAttribute('aria-controls', section.id === 'research' ? 'ifg-technology-panel' : 'ifg-diplomacy-panel');
       b.setAttribute('aria-expanded', 'false');
     }
     b.append(createIcon(section.icon), el('span', 'ifg-dock__tip', section.label));
     b.addEventListener('click', () => actions.navSelect(section.id));
     dockButtons.set(section.id, b);
-    dockMore.append(b);
   }
-  expandBtn.addEventListener('click', () => {
-    const open = dockMore.hidden;
-    dockMore.hidden = !open;
-    expandBtn.setAttribute('aria-expanded', String(open));
-    expandBtn.classList.toggle('is-open', open);
-  });
-  dock.append(dockMore, expandBtn);
+  dock.append(...dockButtons.values());
 
   const diplomacyPanel = createDiplomacyPanel({
     close: () => actions.navSelect('diplomacy'),
@@ -409,6 +394,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
   // ---------------- technology: one active no-cost project ----------------
   const technologyPanel = el('section', 'ifg-tech');
+  technologyPanel.id = 'ifg-technology-panel';
   technologyPanel.hidden = true;
   technologyPanel.setAttribute('role', 'dialog');
   technologyPanel.setAttribute('aria-modal', 'false');

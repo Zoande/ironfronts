@@ -248,12 +248,13 @@
 /* ================= floating command dock ================= */
 .ifg-dock {
   position: absolute;
-  top: 58px;
+  top: 50%;
   left: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   width: max-content;
+  transform: translateY(-50%);
 }
 .ifg-dock__btn {
   position: relative;
@@ -274,10 +275,6 @@
 }
 .ifg-dock__btn:disabled { opacity: 0.4; }
 .ifg-dock__btn:disabled .ifg-icon { filter: grayscale(1); }
-.ifg-dock__expand { height: 22px; }
-.ifg-dock__expand .ifg-icon { width: 14px; height: 14px; transition: transform 0.15s var(--ifg-ease); color: var(--ifg-dim); }
-.ifg-dock__expand.is-open .ifg-icon { transform: rotate(90deg); }
-.ifg-dock__more { display: flex; flex-direction: column; gap: 4px; }
 .ifg-dock__tip {
   position: absolute;
   left: calc(100% + 7px);
@@ -1718,7 +1715,7 @@
 .ifg-order-arrow--attack line { stroke: #c9603f; }
 
 @media (prefers-reduced-motion: reduce) {
-  .ifg-card, .ifg-rnodes, .ifg-modes__item, .ifg-modes__label, .ifg-dock__expand .ifg-icon { transition: none; }
+  .ifg-card, .ifg-rnodes, .ifg-modes__item, .ifg-modes__label { transition: none; }
   .ifg-counter[data-combat="engaged"] { animation: none; border-color: #c9603f; }
 }
 
@@ -1730,7 +1727,6 @@
 @media (max-width: 1366px) {
   .ifg-topbar { height: 42px; gap: 12px; }
   .ifg-notify { top: 50px; }
-  .ifg-dock { top: 50px; }
   .ifg-topbar__country-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ifg-res__value { font-size: 12px; }
   .ifg-card { width: min(420px, calc(100vw - 40px)); }
@@ -1750,7 +1746,6 @@
 @media (min-width: 2400px) {
   .ifg { font-size: 15px; }
   .ifg-topbar { height: 50px; }
-  .ifg-dock { top: 62px; }
 }
 
 .ifg-card__prodlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
