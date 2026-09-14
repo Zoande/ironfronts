@@ -144,8 +144,6 @@ export function renderSelectedArmyPanel(
   close.setAttribute('aria-label', 'Deselect army');
   close.append(createIcon('close'));
   close.addEventListener('click', () => onCommand('deselect'));
-  header.append(identity, headerStats, close);
-
   const health = node('section', 'ifg-army-panel__health');
   const healthEyebrow = node('small', 'ifg-army-panel__eyebrow');
   healthEyebrow.append(createIcon('stat-health', 'ifg-army-panel__eyebrow-icon'), document.createTextNode('Health'));
@@ -224,7 +222,7 @@ export function renderSelectedArmyPanel(
       headerStances.append(btn);
     }
   }
-  header.append(headerStances);
+  header.append(headerStats, identity, headerStances, close);
   const summary = node('div', 'ifg-army-panel__summary');
   summary.append(health, stats);
 

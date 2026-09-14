@@ -2242,8 +2242,9 @@ function refreshSelectedArmy(
   const view = session.army(selectedArmyId);
   if (!view) { deselectArmy(); return; } // gone, or degraded to hidden
   const comp = view.composition;
+  const inCloseCombat = view.status === 'engaged' && Boolean(view.battleFronts?.length);
   const combat = view.status === 'moving' ? 'moving'
-    : view.status === 'engaged' ? 'engaged'
+    : inCloseCombat ? 'engaged'
     : view.status === 'retreating' ? 'retreating' : 'idle';
   const groups = comp?.groups.map((g) => ({
     typeId: g.typeId, label: gameUnitLabel(g.typeId), count: g.count, health: g.health,
@@ -2285,7 +2286,7 @@ function refreshSelectedArmy(
       // 'strike' is a nation-level order, not an army targeting mode — the army
       // card never reflects it.
       targetingMode: view.own && targetingMode !== 'strike' ? targetingMode : null,
-      canMove: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+      canMove: session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),
       canAttack: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),

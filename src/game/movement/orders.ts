@@ -40,6 +40,8 @@ export function issueMoveOrder(
   const army = session.state.armies[armyId];
   if (!army) return { ok: false, reason: 'No such army.' };
   ensureArmyRuntimeState(army);
+  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => Boolean(session.state.battleFronts[frontId]));
+  if (army.status === 'engaged' && army.battleFrontIds!.length === 0) army.status = 'idle';
   if (army.status === 'engaged') return { ok: false, reason: 'Army is in close combat.' };
   if (army.status === 'retreating') return { ok: false, reason: 'Army is retreating.' };
   if (isNavalStatus(army.status)) return { ok: false, reason: 'Army is mid sea crossing.' };

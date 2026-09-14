@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { army, fixture } from '../helpers/simulation';
 import { issueMoveOrder, issueStop, stepMovement, retreatPaths } from '../../src/game/units/movement';
 import { stepCapture, stepCombat } from '../../src/game/combat';
+import { cleanupFronts } from '../../src/game/combat/fronts';
 import { issueExtract } from '../../src/game/extraction';
 import { stepProduction } from '../../src/game/production';
 import { issueAttack } from '../../src/game/commands/attack';
@@ -52,6 +53,13 @@ describe('movement, diplomacy and combat invariants', () => {
     c.state.armies.b=army('b',2,160,100);c.state.relations['1:2']='war';
     issueMoveOrder(c,'a',300,100);stepMovement(c,1.5/1800);stepCombat(c,FIXED_STEP_HOURS);
     expect(a.x).toBeLessThan(160);expect(a.status).toBe('engaged');
+  });
+  it('clears a stale combat lock when its front no longer exists', () => {
+    const c=fixture(); const a=c.state.armies.a=army('a');
+    a.status='engaged'; a.battleFrontIds=['front-gone'];
+    cleanupFronts(c, []);
+    expect(a.battleFrontIds).toEqual([]);
+    expect(a.status).toBe('idle');
   });
   it('never reuses an active front identifier after another front ends', () => {
     const c=fixture();c.state.armies.a=army();c.state.relations['1:2']='war';

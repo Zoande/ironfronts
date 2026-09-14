@@ -214,8 +214,9 @@ export function removeArmyFromAllFronts(session: SimContext, armyId: string): vo
   for (const front of Object.values(session.state.battleFronts)) removeArmyFromFront(session, front, armyId);
 }
 
-function resumeArmyIfFree(army: ArmyStack): void {
+function resumeArmyIfFree(session: SimContext, army: ArmyStack): void {
   ensureArmyRuntimeState(army);
+  army.battleFrontIds = army.battleFrontIds!.filter((frontId) => Boolean(session.state.battleFronts[frontId]));
   if (army.battleFrontIds!.length > 0 || army.status === 'retreating') return;
   if (army.suspendedOrder) {
     army.order = army.suspendedOrder;
@@ -235,7 +236,7 @@ export function cleanupFronts(session: SimContext, events: CombatEvent[]): void 
       const army = session.state.armies[armyId];
       if (army) {
         army.battleFrontIds = army.battleFrontIds?.filter((id) => id !== front.id) ?? [];
-        resumeArmyIfFree(army);
+        resumeArmyIfFree(session, army);
       }
     }
     const battle = session.state.battles[front.battleId];
@@ -251,6 +252,6 @@ export function cleanupFronts(session: SimContext, events: CombatEvent[]): void 
     });
     delete session.state.battleFronts[front.id];
   }
-  for (const army of Object.values(session.state.armies)) resumeArmyIfFree(army);
+  for (const army of Object.values(session.state.armies)) resumeArmyIfFree(session, army);
 }
 
