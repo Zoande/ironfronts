@@ -16,9 +16,21 @@ describe('technology tree presentation', () => {
     expect(ui).toContain('technologyLevelUnlockText(branch, candidate)');
     expect(ui).toContain('bindTooltip(node');
     expect(ui).toContain("for (const resource of ['funds', 'food', 'metal', 'oil'] as const)");
+    expect(ui).toContain('state.technology.levelQuotes[selectedTechnology][selectedTechnologyLevel - 1]');
+    expect(ui).toContain('const amount = quote.cost[resource]');
     expect(css).toMatch(/\.ifg-tech__track\s*\{[^}]*grid-template-columns:\s*repeat\(8/s);
     expect(css).toMatch(/\.ifg-tech__cell:not\(:first-child\)::before\s*\{[^}]*left: calc\(-50% \+ 34px\)/s);
     expect(css).toMatch(/\.ifg-tech__rail\s*\{[^}]*height: 100%;[^}]*overflow: hidden;/s);
+  });
+
+  it('shows level-aware clickable catalogue unlocks', () => {
+    expect(ui).toContain('technologyUnlocks(selectedTechnology, selectedTechnologyLevel)');
+    expect(ui).toContain("el('button', 'ifg-tech__unlock')");
+    expect(ui).toContain('dossier.openUnit(unlock.id)');
+    expect(ui).toContain('dossier.openBuilding(unlock.id, unlock.level)');
+    expect(ui).toContain('createRankInsignia(candidate');
+    expect(css).toContain('.ifg-tech__unlock-grid');
+    expect(css).toContain('.ifg-dossier__card');
   });
 
   it('ships placeholder infantry lines and a wired resource dependency branch', () => {

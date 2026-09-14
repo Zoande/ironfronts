@@ -11,6 +11,7 @@ import { createIcon, iconMarkup, type IconName } from './icons';
 import { roundDisplayedHp, summarizeBattleFronts, type BattleSidePresentation } from './army-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
+import { createRankInsignia, catalogueLevel } from './rank-insignia';
 import type { ArmyActivityKind, ArmyStackView, CombatStatus } from './ui-state';
 
 export type { ArmyStackView, CombatStatus } from './ui-state';
@@ -159,6 +160,7 @@ export function renderSelectedArmyPanel(
   host: HTMLElement,
   army: ArmyStackView,
   onCommand: (command: ArmyPanelCommand) => void,
+  onInspectUnit?: (typeId: string) => void,
 ): void {
   host.style.setProperty('--army-country', army.countryColor);
   host.dataset.combat = army.combat;
@@ -416,8 +418,15 @@ export function renderSelectedArmyPanel(
       const health = Math.round(group.health * 100);
       const unit = node('article', 'ifg-army-unit');
       unit.dataset.unitType = group.typeId;
+      if (onInspectUnit) {
+        unit.tabIndex = 0; unit.setAttribute('role', 'button');
+        unit.addEventListener('click', () => onInspectUnit(group.typeId));
+        unit.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onInspectUnit(group.typeId); } });
+      }
       const visual = node('span', 'ifg-army-unit__visual');
       visual.append(createUnitPortrait(group.typeId, group.label));
+      const level = catalogueLevel(group.typeId);
+      if (level > 1) visual.append(createRankInsignia(level, 'ifg-army-unit__rank'));
       visual.append(node('b', 'ifg-army-unit__count', `×${group.count}`));
       const details = node('span', 'ifg-army-unit__details');
       details.append(node('strong', undefined, group.label));
@@ -429,7 +438,7 @@ export function renderSelectedArmyPanel(
       unit.append(visual, details, condition);
       bindTooltip(unit, () => ({
         title: group.label,
-        description: UNIT_ROLE_NOTE[group.typeId],
+        description: UNIT_ROLE_NOTE[group.typeId.replace(/-l[2-8]$/, '')],
         status: `${group.count} strong · ${health}% condition`,
       }));
       unitRow.append(unit);

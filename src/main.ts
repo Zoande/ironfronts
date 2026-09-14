@@ -75,21 +75,29 @@ const technologyView = (session: RemoteGameSession) => {
     ...(session.ownCountry.technologies ?? {}),
   };
   const stockpile = session.ownCountry.stockpile;
-  const quotes = Object.fromEntries(TECHNOLOGY_BRANCHES.map((branch) => {
-    const targetLevel = Math.min(8, levels[branch] + 1);
+  const quoteFor = (branch: TechnologyBranch, targetLevel: number) => {
     const cost = technologyCost(branch, targetLevel);
     const affordable = Object.entries(cost).every(([resource, amount]) =>
       stockpile[resource as keyof typeof stockpile] >= (amount ?? 0));
-    return [branch, {
-      hours: TECHNOLOGY_HOURS_BY_LEVEL[targetLevel], cost, affordable,
-      ...(levels[branch] < 8
+    return {
+      level: targetLevel, hours: TECHNOLOGY_HOURS_BY_LEVEL[targetLevel],
+      cost: cost as Partial<Record<'funds' | 'food' | 'metal' | 'oil', number>>, affordable,
+      ...(targetLevel > levels[branch]
         ? { lockedReason: researchPrerequisiteReason(levels, branch, targetLevel) } : {}),
-    }];
+    };
+  };
+  const levelQuotes = Object.fromEntries(TECHNOLOGY_BRANCHES.map((branch) => [branch,
+    Array.from({ length: 8 }, (_, index) => quoteFor(branch, index + 1)),
+  ])) as unknown as import('./ui/ui-state').TechnologyView['levelQuotes'];
+  const quotes = Object.fromEntries(TECHNOLOGY_BRANCHES.map((branch) => {
+    const targetLevel = Math.min(8, levels[branch] + 1);
+    const { level: _level, ...quote } = levelQuotes[branch][targetLevel - 1];
+    return [branch, quote];
   })) as import('./ui/ui-state').TechnologyView['quotes'];
   return {
     levels,
     pending: session.pendingResearch(),
-    quotes,
+    quotes, levelQuotes,
     slots: (session.ownCountry.researchSlots ?? [null, null]).map((research) => research ? {
       branch: research.branch,
       targetLevel: research.targetLevel,
@@ -781,6 +789,8 @@ async function startGame(token: number): Promise<void> {
     armyCommand: (command) => handleArmyCommand(command),
     produceUnit: (provinceId, unitTypeId) => handleProduce(provinceId, unitTypeId),
     buildStructure: (provinceId, buildingId) => handleBuild(provinceId, buildingId),
+    unitInfo: (typeId) => session.unit(typeId),
+    buildingInfo: (buildingId) => session.building(buildingId as BuildingId),
   };
   const gameUi = mountGameUi(uiStore, gameUiActions);
   const destroyGameUiOnPagehide = (event: PageTransitionEvent): void => {
@@ -2489,7 +2499,7 @@ function projectSelectedProvince(
           const tier = targetTier ?? 1;
           const costItems = buildingCostItems(id, tier);
           return { id, name: `${buildingLabel(id)}${tier > 1 ? ` Level ${tier}` : ''}`,
-            costItems, costLabel: costLabelFrom(costItems), affordable, available, reason };
+            costItems, costLabel: costLabelFrom(costItems), affordable, available, reason, targetTier: tier };
         })
       : [],
     construction: summary.isOwn

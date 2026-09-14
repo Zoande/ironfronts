@@ -2784,6 +2784,64 @@
 .ifg-tech__unlocks { display: grid; gap: 4px; padding: 9px; background: rgba(255, 255, 255, .25); border: 1px solid rgba(65, 63, 53, .25); }
 .ifg-tech__unlocks small { color: #777163; font-size: 8px; letter-spacing: .14em; text-transform: uppercase; }
 .ifg-tech__unlocks strong { font-size: 10px; line-height: 1.35; }
+
+/* Level insignia: one to four stacked chevrons; V-VIII repeat the count with
+   a diamond command pip. Shared by research, province and army catalogues. */
+.ifg-rank { position:absolute; z-index:7; top:3px; right:3px; min-width:22px; padding:3px 3px 2px; display:flex; flex-direction:column-reverse; align-items:center; gap:1px; color:#f5df8c; background:#171912; border:1px solid #b99a4c; box-shadow:0 1px 4px #000; line-height:1; }
+.ifg-rank i { display:block; width:13px; height:4px; border-top:2px solid currentColor; transform:skewY(-18deg); }
+.ifg-rank b { order:-1; font:8px/8px serif; color:#e8bb52; }
+.ifg-tech__node-visual,.ifg-tech__detail-visual,.ifg-tech__unlock-visual,.ifg-province-picker__badge-host { position:relative; display:grid; place-items:center; min-width:0; min-height:0; }
+.ifg-tech__node-visual>.ifg-icon { width:100%; height:100%; }
+.ifg-tech__node-rank { transform:scale(.68); transform-origin:top right; top:-5px; right:-5px; }
+.ifg-tech__detail-rank,.ifg-tech__unlock-rank,.ifg-province-picker__rank,.ifg-army-unit__rank { transform:scale(.78); transform-origin:top right; }
+.ifg-army-unit__rank { top:4px; right:4px; }
+
+.ifg-tech__unlocks { gap:7px; }
+.ifg-tech__unlock-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.ifg-tech__unlock { min-width:0; padding:4px; color:#2c2c24; background:#e5dfcc; border:1px solid #8c856f; cursor:pointer; }
+.ifg-tech__unlock:hover,.ifg-tech__unlock:focus-visible { border-color:#9c7728; box-shadow:0 0 0 1px #c09b48; }
+.ifg-tech__unlock-visual { height:43px; overflow:hidden; background:rgba(38,39,31,.1); }
+.ifg-tech__unlock-visual>.ifg-icon,.ifg-tech__unlock-visual>.ifg-army-unit__portrait { width:100%; height:100%; }
+.ifg-tech__unlock b,.ifg-tech__unlock small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:8px; }
+.ifg-tech__unlock p,.ifg-tech__unlocks p { margin:0; font-size:8px; line-height:1.3; color:#615c50; }
+.ifg-facility-card[role="button"],.ifg-army-unit[role="button"] { cursor:pointer; }
+.ifg-facility-card[role="button"]:focus-visible,.ifg-army-unit[role="button"]:focus-visible { outline:2px solid var(--ifg-brass); outline-offset:2px; }
+.ifg-province-picker__badge-host { align-self:stretch; cursor:help; }
+.ifg-province-picker__option[aria-disabled="true"] { opacity:.48; cursor:help; }
+
+/* Shared unit/building catalogue dossier. It intentionally sits above every
+   selection panel, while its card owns scrolling on short screens. */
+.ifg-dossier { position:fixed; z-index:180; inset:0; display:grid; place-items:center; padding:4vh 3vw; background:rgba(3,5,3,.76); backdrop-filter:blur(3px); }
+.ifg-dossier[hidden] { display:none; }
+.ifg-dossier__card { width:min(760px,94vw); max-height:92vh; overflow:auto; color:#353329; background:#d8d2bd; border:2px solid #c4a866; box-shadow:0 24px 80px #000; }
+.ifg-dossier__head { position:sticky; z-index:3; top:0; display:flex; justify-content:space-between; align-items:center; min-height:54px; padding:0 14px 0 20px; color:#f1ead4; background:linear-gradient(90deg,#28291f,#4e4b3c); border-bottom:2px solid #b99a4c; }
+.ifg-dossier__head h2 { margin:0; font:800 22px/1 'Bitter',serif; letter-spacing:.12em; text-transform:uppercase; }
+.ifg-dossier__close { width:38px; height:38px; color:#eee5cb; background:#762f25; border:1px solid #d6b585; }
+.ifg-dossier__body { display:grid; gap:10px; padding:10px; }
+.ifg-dossier__hero { position:relative; display:grid; grid-template-columns:180px 1fr; align-items:end; min-height:150px; overflow:hidden; color:#f4eddb; background:radial-gradient(circle at 20% 30%,#77745e,#171a15 72%); }
+.ifg-dossier__visual { position:relative; display:block; height:150px; }
+.ifg-dossier__visual>.ifg-icon,.ifg-dossier__visual>.ifg-army-unit__portrait { width:100%; height:100%; }
+.ifg-dossier__visual img,.ifg-dossier__visual svg { width:100%; height:100%; object-fit:contain; }
+.ifg-dossier__hero>span:last-child { display:grid; gap:5px; padding:18px; background:linear-gradient(90deg,transparent,rgba(0,0,0,.65)); }
+.ifg-dossier__hero strong { font:800 23px/1.1 'Bitter',serif; }
+.ifg-dossier__hero small { letter-spacing:.12em; text-transform:uppercase; }
+.ifg-dossier__section { border:1px solid #696554; background:rgba(250,247,233,.58); }
+.ifg-dossier__section h3 { margin:0; padding:8px; text-align:center; color:#f3edda; background:#4a493b; font:800 15px/1 'Bitter',serif; letter-spacing:.12em; text-transform:uppercase; }
+.ifg-dossier__section p { margin:0; padding:16px 22px; text-align:center; line-height:1.5; }
+.ifg-dossier__stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+.ifg-dossier__stat { display:flex; justify-content:space-between; gap:12px; padding:12px 14px; border-right:1px solid #aaa38e; border-bottom:1px solid #aaa38e; }
+.ifg-dossier__combat { width:100%; border-collapse:collapse; }
+.ifg-dossier__combat th,.ifg-dossier__combat td { padding:10px 14px; text-align:right; border-bottom:1px solid #bbb49d; }
+.ifg-dossier__combat th:first-child { text-align:left; }
+.ifg-dossier__costs { display:flex; flex-wrap:wrap; justify-content:center; gap:20px; padding:16px; }
+.ifg-dossier__costs>span { display:flex; align-items:center; gap:6px; }
+.ifg-dossier__costs .ifg-icon { width:28px; height:28px; }
+.ifg-dossier__unlocks { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; padding:12px; }
+.ifg-dossier__unlocks button { width:92px; padding:5px; background:#d8d1bb; border:1px solid #77715e; cursor:pointer; }
+.ifg-dossier__unlocks button:hover { border-color:#9c7728; }
+.ifg-dossier__unlocks .ifg-army-unit__portrait { display:block; width:80px; height:62px; }
+.ifg-dossier__unlocks b { display:block; font-size:10px; }
+@media (max-width:600px) { .ifg-dossier__hero{grid-template-columns:120px 1fr}.ifg-dossier__visual{height:120px}.ifg-tech__unlock-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
 .ifg-tech__costs { display: flex; align-items: center; justify-content: space-around; gap: 8px; min-height: 56px; }
 .ifg-tech__costs > span { display: grid; justify-items: center; gap: 3px; color: #35362d; }
 .ifg-tech__costs .ifg-icon { width: 27px; height: 27px; }

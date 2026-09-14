@@ -12,7 +12,7 @@ describe('unit portraits', () => {
 
   it('bundles the raster portraits via an eager glob and prefers them', () => {
     expect(source).toContain("import.meta.glob('./assets/units/*.png'");
-    expect(source).toMatch(/const raster = rasterPortrait\(typeId\);\s*\n\s*if \(raster\)/);
+    expect(source).toMatch(/const raster = rasterPortrait\(unitFamilyId\(typeId\)\);\s*\n\s*if \(raster\)/);
   });
 
   it('no longer references the dev-only Call of War prototype directory', () => {

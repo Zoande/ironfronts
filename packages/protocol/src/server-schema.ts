@@ -85,7 +85,7 @@ const delta = z.object({ changed: projectionSchema.pick({ simulationTick: true, 
   redactions: z.array(z.string()) });
 const profile = z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative });
 const cost = stockpile.partial();
-const catalogs = z.object({ units: z.array(z.object({ id: z.string(), name: z.string(), category: z.enum(['infantry', 'engineer', 'recon', 'armor', 'artillery']),
+const catalogs = z.object({ units: z.array(z.object({ id: z.string(), baseId: z.string(), level: integer.min(1).max(8), technology: z.enum(['infantry', 'resources', 'hybrid', 'armored']), name: z.string(), category: z.enum(['infantry', 'engineer', 'recon', 'armor', 'artillery']),
   armorClass: z.enum(['soft', 'light', 'heavy']), icon: z.string(), maxHp: finite.positive(), speed: nonnegative, attack: profile, defense: profile,
   visionOuter: nonnegative, visionInner: nonnegative, extractionRate: nonnegative, engagementRange: nonnegative, buildCost: cost, buildWork: finite.positive(), upkeep: z.record(z.string(), nonnegative), shortageEffects: z.array(z.unknown()), cost, buildTimeHours: finite.positive(), requiredBuilding: buildingId, stackPriority: finite })),
   buildings: z.array(z.object({ id: buildingId, label: z.string(), kind: z.enum(['military', 'resource']), tiers: z.array(z.unknown()), cost, buildWork: finite.positive(), buildTimeHours: finite.positive() })) });

@@ -21,6 +21,8 @@ import { buildNotification } from './notifications';
 import { groupQueueItems, type QueueGroup } from './queue-presentation';
 import { bindTooltip } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
+import { createCatalogDossier, BUILDING_ICON } from './catalog-dossier';
+import { createRankInsignia, catalogueLevel } from './rank-insignia';
 import type {
   MapMode, NavId, ProvinceResourceTotals, QueueItem, StrategicUiState, TechnologyBranch,
   TechnologyCategory, TradeLegView, UiStore,
@@ -59,6 +61,9 @@ export interface GameUiActions {
   /** Start a building in the selected (own, urban) province. */
   buildStructure(provinceId: number, buildingId: string): void;
   researchTechnology(branch: TechnologyBranch): void;
+  /** Read-only authoritative presentation catalogue used by shared info dossiers. */
+  unitInfo?(typeId: string): Record<string, unknown> | undefined;
+  buildingInfo?(buildingId: string): Record<string, unknown> | undefined;
 }
 export interface GameUiHandle {
   destroy(): void;
@@ -154,26 +159,40 @@ function technologyLevelUnlockText(branch: TechnologyBranch, level: number): str
   }
 }
 
+type TechnologyUnlock = { readonly kind: 'unit' | 'building'; readonly id: string; readonly level: number; readonly label: string };
+const leveledUnitId = (family: string, level: number): string => level === 1 ? family : `${family}-l${level}`;
+function technologyUnlocks(branch: TechnologyBranch, level: number): readonly TechnologyUnlock[] {
+  const unit = (id: string, label: string): TechnologyUnlock => ({ kind: 'unit', id: leveledUnitId(id, level), level, label });
+  const building = (id: string, label: string, buildingLevel = level): TechnologyUnlock => ({ kind: 'building', id, level: buildingLevel, label });
+  switch (branch) {
+    case 'infantry': return [unit('infantry', 'Infantry')];
+    case 'resources': return [unit('engineer', 'Engineer')];
+    case 'resourceBuildings': return [building('fields', 'Fields'), building('quarry', 'Quarry'), building('mine', 'Mine'), building('oilPump', 'Oil pump')];
+    case 'training': return [building('barracks', 'Barracks'), building('tankPlant', 'Tank plant'), building('ordnance', 'Ordnance')];
+    case 'hybrid': return [unit('armored-car', 'Armored car'), unit('artillery', 'Artillery'), ...(level === 8 ? [building('missileSite', 'Missile site', 1)] : [])];
+    case 'armored': return [unit('light-tank', 'Light tank'), unit('medium-tank', 'Medium tank')];
+  }
+}
+
 /** Real, always-available province fields (populated per selection). */
 const PROVINCE_FIELDS = ['Allegiance', 'Terrain', 'Deposits', 'Extraction'] as const;
 type ProvinceFieldKey = (typeof PROVINCE_FIELDS)[number];
 
 const FACILITY_CHIPS: ReadonlyArray<{
-  key: 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite'; label: string; icon: IconName;
+  key: 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'fields' | 'quarry' | 'mine' | 'oilPump'; label: string; icon: IconName;
 }> = [
   { key: 'barracks', label: 'Barracks', icon: 'structure-barracks' },
   { key: 'tankPlant', label: 'Tank plant', icon: 'structure-plant' },
   { key: 'ordnance', label: 'Ordnance works', icon: 'structure-ordnance' },
-  { key: 'missileSite', label: 'Missile site', icon: 'structure-ordnance' },
+  { key: 'missileSite', label: 'Missile site', icon: 'structure-missile' },
+  { key: 'fields', label: 'Fields', icon: 'building-fields' },
+  { key: 'quarry', label: 'Quarry', icon: 'building-quarry' },
+  { key: 'mine', label: 'Mine', icon: 'building-mine' },
+  { key: 'oilPump', label: 'Oil pump', icon: 'building-oil-pump' },
 ];
 
 /** Building id → 0 A.D. facility icon, for the graphical Build row. */
-const FACILITY_ICON: Record<string, IconName> = {
-  barracks: 'structure-barracks',
-  tankPlant: 'structure-plant',
-  ordnance: 'structure-ordnance',
-  missileSite: 'structure-ordnance',
-};
+const FACILITY_ICON: Record<string, IconName> = BUILDING_ICON;
 
 /** Compact painted marks for production types that lacked button icons. */
 const UNIT_PRODUCTION_ICON: Readonly<Partial<Record<string, IconName>>> = {
@@ -336,6 +355,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandle {
   const root = el('div', 'ifg');
   root.hidden = true;
+  const dossier = createCatalogDossier((id) => actions.unitInfo?.(id), (id) => actions.buildingInfo?.(id));
 
   const mapControls = el('nav', 'ifg-map-controls');
   mapControls.setAttribute('aria-label', 'Map controls');
@@ -486,7 +506,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   const renderTechnology = (state: StrategicUiState): void => {
     const activeKey = state.technology.slots.map((active) => active
       ? `${active.branch}:${active.targetLevel}:${Math.round(active.progress * 1000)}:${Math.round(active.etaSeconds)}` : '-').join('|');
-    const quoteKey = Object.values(state.technology.quotes).map((quote) =>
+    const quoteKey = Object.values(state.technology.levelQuotes).flat().map((quote) =>
       `${quote.affordable}:${quote.lockedReason ?? ''}:${Object.values(quote.cost).join(',')}`).join('|');
     const nextKey = `${selectedTechTab}|${selectedTechnology}:${selectedTechnologyLevel}|${Object.values(state.technology.levels).join(',')}|${activeKey}|${quoteKey}|${state.technology.pending}`;
     if (nextKey === techRenderKey) return;
@@ -545,7 +565,10 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         node.classList.toggle('is-selected', Boolean(branch === selectedTechnology && candidate === selectedTechnologyLevel));
         node.classList.toggle('is-researching', state.technology.slots.some((slot) =>
           slot !== null && slot.branch === branch && slot.targetLevel === candidate));
-        node.append(createIcon(line.icon), el('small', undefined, `Lvl. ${candidate}`));
+        const nodeIcon = el('span', 'ifg-tech__node-visual');
+        nodeIcon.append(createIcon(line.icon));
+        if (candidate > 1 && branch && branch !== 'resourceBuildings' && branch !== 'training') nodeIcon.append(createRankInsignia(candidate, 'ifg-tech__node-rank'));
+        node.append(nodeIcon, el('small', undefined, `Lvl. ${candidate}`));
         if (branch === 'resourceBuildings' && candidate < 8) {
           cell.append(el('i', 'ifg-tech__dependency'));
         }
@@ -596,7 +619,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     const selectedDef = definitionFor(selectedTechnology);
     const selectedLevel = state.technology.levels[selectedTechnology];
-    const quote = state.technology.quotes[selectedTechnology];
+    const quote = state.technology.levelQuotes[selectedTechnology][selectedTechnologyLevel - 1]
+      ?? state.technology.quotes[selectedTechnology];
     const selectedActive = state.technology.slots.find((slot) =>
       slot !== null && slot.branch === selectedTechnology && slot.targetLevel === selectedTechnologyLevel);
     const isComplete = selectedTechnologyLevel <= selectedLevel;
@@ -605,24 +629,38 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     const details = el('section', 'ifg-tech__rail-section ifg-tech__details');
     details.append(el('h3', undefined, 'Research details'));
     const detailHero = el('div', 'ifg-tech__detail-hero');
-    detailHero.append(createIcon(selectedDef.icon));
+    const selectedVisual = el('span', 'ifg-tech__detail-visual');
+    selectedVisual.append(createIcon(selectedDef.icon));
+    if (selectedTechnologyLevel > 1 && selectedTechnology !== 'resourceBuildings' && selectedTechnology !== 'training') selectedVisual.append(createRankInsignia(selectedTechnologyLevel, 'ifg-tech__detail-rank'));
+    detailHero.append(selectedVisual);
     const detailCopy = el('span');
     detailCopy.append(el('b', undefined, `${selectedDef.label} · Level ${selectedTechnologyLevel}`),
       el('small', undefined, selectedDef.description));
     detailHero.append(detailCopy); details.append(detailHero);
     const unlocks = el('div', 'ifg-tech__unlocks');
-    unlocks.append(el('small', undefined, 'Unlocks'), el('strong', undefined, selectedDef.unlocks));
+    unlocks.append(el('small', undefined, 'Unlocks'));
+    const unlockGrid = el('div', 'ifg-tech__unlock-grid');
+    for (const unlock of technologyUnlocks(selectedTechnology, selectedTechnologyLevel)) {
+      const tile = el('button', 'ifg-tech__unlock'); tile.type = 'button';
+      const visual = el('span', 'ifg-tech__unlock-visual');
+      visual.append(unlock.kind === 'unit' ? createUnitPortrait(unlock.id, unlock.label) : createIcon(FACILITY_ICON[unlock.id] ?? 'industry'));
+      if (unlock.level > 1) visual.append(createRankInsignia(unlock.level, 'ifg-tech__unlock-rank'));
+      tile.append(visual, el('b', undefined, unlock.label), el('small', undefined, `Level ${unlock.level}`));
+      tile.addEventListener('click', () => unlock.kind === 'unit' ? dossier.openUnit(unlock.id) : dossier.openBuilding(unlock.id, unlock.level));
+      unlockGrid.append(tile);
+    }
+    unlocks.append(unlockGrid, el('p', undefined, technologyLevelUnlockText(selectedTechnology, selectedTechnologyLevel)));
     details.append(unlocks);
     const costRow = el('div', 'ifg-tech__costs');
     for (const resource of ['funds', 'food', 'metal', 'oil'] as const) {
-      const amount = isNext ? quote.cost[resource] : undefined;
+      const amount = quote.cost[resource];
       if (!amount) continue;
       const item = el('span');
       item.append(createIcon(resource), el('b', undefined, amount.toLocaleString()));
       costRow.append(item);
     }
     const duration = el('span');
-    duration.append(createIcon('objectives'), el('b', undefined, isNext ? `${quote.hours} game h` : '—'));
+    duration.append(createIcon('objectives'), el('b', undefined, `${quote.hours} game h`));
     costRow.append(duration); details.append(costRow);
     const action = el('button', 'ifg-tech__start');
     action.type = 'button';
@@ -726,8 +764,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   for (const { key, label, icon } of FACILITY_CHIPS) {
     const card = el('article', 'ifg-facility-card');
     card.title = label;
+    card.tabIndex = 0; card.setAttribute('role', 'button');
     const level = el('small', 'ifg-facility-card__level', 'L1');
     card.append(createIcon(icon, 'ifg-facility-card__icon'), el('b', 'ifg-facility-card__name', label), level);
+    const inspect = (): void => dossier.openBuilding(key, Number(level.dataset.level ?? 1));
+    card.addEventListener('click', inspect);
+    card.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); inspect(); } });
     pvFacChipByKey.set(key, { card, level });
     pvFacChips.append(card);
   }
@@ -871,15 +913,25 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const copy = el('span', 'ifg-province-picker__copy');
       copy.append(el('b', undefined, option.name), costRow);
       button.append(thumb, copy);
-      button.disabled = selected.commandPending === true || !option.affordable || !option.available;
+      const unavailable = selected.commandPending === true || !option.affordable || !option.available;
+      button.setAttribute('aria-disabled', String(unavailable));
       button.classList.toggle('is-locked', !option.available);
+      const level = mode === 'train' ? catalogueLevel(option.id)
+        : (Number((option as { targetTier?: number }).targetTier) || 1);
+      const badgeHost = el('span', 'ifg-province-picker__badge-host');
+      badgeHost.append(thumb);
+      if (level > 1) badgeHost.append(createRankInsignia(level, 'ifg-province-picker__rank'));
+      badgeHost.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (mode === 'train') dossier.openUnit(option.id); else dossier.openBuilding(option.id, level);
+      });
       bindTooltip(button, () => ({
         title: option.name,
         description: mode === 'build' ? FACILITY_NOTE[option.id] : UNIT_ROLE_NOTE[family],
         costItems: option.costItems,
         disabledReason: option.reason ?? (!option.affordable ? 'Not enough resources.' : undefined),
       }));
-      if (option.affordable && option.available) button.addEventListener('click', () => {
+      if (!unavailable) button.addEventListener('click', () => {
         closeProvincePicker();
         const optimistic: QueueItem = { id: option.id, label: option.name, active: true, progress: 0, etaSeconds: 0 };
         if (mode === 'train') {
@@ -892,6 +944,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           actions.buildStructure(selected.id, option.id);
         }
       });
+      button.replaceChildren(badgeHost, copy);
       return button;
     }));
     pvPicker.hidden = false;
@@ -983,11 +1036,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (event.target === overlay) actions.togglePause(false);
   });
 
-  root.append(topbar, dock, diplomacyPanel.element, tradePanel.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, overlay);
+  root.append(topbar, dock, diplomacyPanel.element, tradePanel.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, dossier.element, overlay);
   document.body.append(root);
 
   const onKey = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && store.get().phase === 'in-game') {
+      if (dossier.isOpen()) { event.preventDefault(); dossier.close(); return; }
       if (!pvPicker.hidden) {
         event.preventDefault();
         closeProvincePicker();
@@ -1276,14 +1330,16 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
       // Facilities row — own provinces only, shown when at least one stands.
       const b = province.buildings;
-      const anyFacility = Boolean(b && (b.barracks > 0 || b.tankPlant > 0 || b.ordnance > 0 || b.missileSite > 0));
+      const anyFacility = Boolean((b && (b.barracks > 0 || b.tankPlant > 0 || b.ordnance > 0 || b.missileSite > 0))
+        || (physical && Object.values(physical.buildings).some((level) => level > 0)));
       pvFacilities.hidden = !anyFacility;
-      if (b) {
-        for (const { key } of FACILITY_CHIPS) {
-          const chip = pvFacChipByKey.get(key)!;
-          chip.card.hidden = (b[key] ?? 0) <= 0;
-          chip.level.textContent = `Level ${b[key] ?? 0}`;
-        }
+      for (const { key } of FACILITY_CHIPS) {
+        const chip = pvFacChipByKey.get(key)!;
+        const level = b && key in b ? (b[key as keyof typeof b] ?? 0)
+          : (physical?.buildings[key as keyof NonNullable<typeof physical>['buildings']] ?? 0);
+        chip.card.hidden = level <= 0;
+        chip.level.textContent = `Level ${level}`;
+        chip.level.dataset.level = String(level);
       }
       const res = province.resources;
       const dep = province.deposits ?? null;
@@ -1400,7 +1456,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (nextArmyKey !== armyKey) {
       armyKey = nextArmyKey;
       if (showArmy && army) {
-        renderSelectedArmyPanel(armyCard, army, (command) => actions.armyCommand(command));
+        renderSelectedArmyPanel(armyCard, army, (command) => actions.armyCommand(command), (typeId) => dossier.openUnit(typeId));
       }
     }
 

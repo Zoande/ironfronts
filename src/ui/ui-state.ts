@@ -150,6 +150,7 @@ export interface SelectedProvince {
     readonly affordable: boolean;
     readonly available: boolean;
     readonly reason?: string;
+    readonly targetTier?: number;
   }[];
   /** Buildings currently under construction here, own provinces only. Only the
    *  head order (index 0) is actively being worked. */
@@ -172,6 +173,8 @@ export interface TechnologyView {
   readonly levels: Record<TechnologyBranch, number>;
   readonly slots: ReadonlyArray<{ readonly branch: TechnologyBranch; readonly targetLevel: number; readonly progress: number; readonly etaSeconds: number } | null>;
   readonly quotes: Record<TechnologyBranch, { readonly hours: number; readonly cost: Partial<Record<'funds' | 'food' | 'metal' | 'oil', number>>; readonly affordable: boolean; readonly lockedReason?: string }>;
+  /** Complete level catalogue, so locked/future nodes still disclose price and duration. */
+  readonly levelQuotes: Record<TechnologyBranch, ReadonlyArray<{ readonly level: number; readonly hours: number; readonly cost: Partial<Record<'funds' | 'food' | 'metal' | 'oil', number>>; readonly affordable: boolean; readonly lockedReason?: string }>>;
   readonly pending?: boolean;
 }
 
@@ -449,6 +452,8 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
       slots: [null, null],
       quotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']
         .map((id) => [id, { hours: 6, cost: {}, affordable: true }])) as TechnologyView['quotes'],
+      levelQuotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']
+        .map((id) => [id, Array.from({ length: 8 }, (_, index) => ({ level: index + 1, hours: 6, cost: {}, affordable: true }))])) as unknown as TechnologyView['levelQuotes'],
     },
     ...overrides,
   };

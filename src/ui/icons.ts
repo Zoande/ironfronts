@@ -48,7 +48,8 @@ export type IconName =
   | 'tech-militia' | 'tech-commandos'
   | 'stat-health' | 'stat-attack' | 'stat-defence' | 'stat-speed' | 'stat-troops' | 'supply'
   | 'activity-embark' | 'activity-disembark'
-  | 'structure-barracks' | 'structure-plant' | 'structure-ordnance'
+  | 'structure-barracks' | 'structure-plant' | 'structure-ordnance' | 'structure-missile'
+  | 'building-fields' | 'building-quarry' | 'building-mine' | 'building-oil-pump'
   | 'structure-fortress' | 'structure-city'
   | 'stance-attack' | 'stance-attack-defend' | 'stance-defend'
   | 'stance-retreat' | 'stance-defend-retreat'
@@ -124,6 +125,14 @@ const ICONS: Record<IconName, IconDef> = {
   'structure-barracks': { kind: 'img', value: ironfrontsPng('structure-barracks-icon') },
   'structure-plant': { kind: 'img', value: ironfrontsPng('structure-tank-plant-icon') },
   'structure-ordnance': { kind: 'img', value: ironfrontsPng('structure-ordnance-icon') },
+  // Separate catalogue keys deliberately share shipped art for now. Keeping
+  // them distinct lets each structure/level receive its own art later without
+  // changing technology, province, or dossier code.
+  'structure-missile': { kind: 'img', value: ironfrontsPng('structure-ordnance-icon') },
+  'building-fields': { kind: 'img', value: png('food') },
+  'building-quarry': { kind: 'img', value: png('stone') },
+  'building-mine': { kind: 'img', value: png('metal') },
+  'building-oil-pump': { kind: 'svg', value: svg('oil') },
   // Reserved — committed painterly art (project owner, see ASSET_CREDITS.md)
   // with no wired mechanic yet: no fortress / city building, no army-stance system.
   'structure-fortress': { kind: 'img', value: ironfrontsPng('fortress') },
