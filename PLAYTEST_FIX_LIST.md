@@ -1,21 +1,62 @@
 # Ironfronts Playtest Fix List
 
-Date: 2026-09-13  
-Scope: login, menus, campaign setup, map, armies, resources, diplomacy, combat, AI response, persistence, responsive layout, performance, copy, and debug access.
+Date: 2026-09-14  
+Scope: login, menus, campaign setup, map, armies, economy/resources, production/construction, technology, diplomacy, combat, AI response, persistence, responsive layout, performance, copy, and debug access.
 
-This is a prioritized backlog from the live browser playtest. Items marked **Verified** were reproduced directly. Items marked **Requirement** are requested behavior that still needs implementation or an explicit product decision.
+This began as a prioritized backlog from the live browser playtest. On 2026-09-14 it was re-audited against the current `main` code after the economy/resource, pacing, building-level and technology updates. Items marked **Verified** were reproduced directly in a browser; **Code-audited** means the current implementation/tests were traced but still needs a fresh browser playtest; **Requirement** means requested behavior or a product decision.
+
+## 2026-09-14 current-game re-audit
+
+### Changes already implemented on `fix/playtest-tech-debug-20260914`
+
+- [x] **Expose Technology in the normal command dock.** The Technology panel and server command already existed, but the dock only enabled Diplomacy, making research effectively unreachable in normal play. Technology is now enabled and linked to the real `research` panel.
+- [x] **Correct stale resource help text.** Stone, metal and oil are no longer described as extraction-only. The current economy produces them through province/resource-building output with engineer boosts.
+- [x] **Make World Inspector access discoverable without making it insecure.** Eligible QA users get a `System → World Inspector` entry. The old Ctrl+D then E shortcut remains useful after unlock.
+- [x] **Put the debug password on the server, not in this public repository.** Enabling QA controls now requires `IRONFRONTS_DEBUG_PASSWORD`; the password is never shipped in source or a browser bundle.
+- [x] **Restore account-specific debug authorization.** Only the authenticated `DimaTest1` account (case-insensitive username match) receives a signed debug entitlement. Deployment gate + entitlement + password are all required before the server exposes debug state or accepts cheat/debug commands.
+
+### Economy / resource model to re-playtest
+
+- [ ] **Verify the new opening stockpile in a fresh selectable country — Code-audited.** Current starting values are `4200 funds / 500 manpower / 500 food / 650 stone / 450 metal / 220 oil`. The old playtest values in this document are obsolete.
+- [ ] **Verify national opening income normalization — Code-audited.** The generator normalizes playable countries into relatively tight opening bands instead of letting population/geography create extreme `+74k/h` style differences. Compare at least five very different countries and confirm the HUD matches one simulated hour of stockpile movement.
+- [ ] **Verify physical-resource production breakdown — Code-audited.** Fields/quarries/mines/oil pumps add passive output by level (`2, 5, 10, 17, 26, 38, 53, 72 /h`), and assigned engineers add a capped technology-scaled boost. Check the province breakdown, national total, ownership/occupation 50% modifier, and actual stockpile delta against each other.
+- [ ] **Verify upkeep/shortage numbers.** The top-bar detail now exposes Production, Upkeep, Net, Coverage, Reserve horizon and shortage Pressure. Test zero-upkeep, sustainable upkeep and severe shortage cases, and confirm penalties match the catalog curves rather than only the displayed percentage.
+- [ ] **Check resource-building potential gates.** Rural resource buildings can only reach the level supported by local potential. Make sure the UI says e.g. `Potential supports Level N` before the player spends anything and never offers an impossible next tier.
+- [ ] **Check occupied-province economics.** Occupied territory currently produces at half output. Verify ownership transitions, reconnection/reload, and recapture do not leave the wrong modifier cached.
+
+### Production / construction timing to re-playtest
+
+- [ ] **Verify queue ETA against actual completion time at 1× and debug fast-forward — Code-audited.** Production ETA is derived from remaining work ÷ facility work rate ÷ the authoritative simulation speed. Start a unit, record the displayed ETA, and compare it to completion within normal rounding tolerance.
+- [ ] **Balance-test advanced-unit production times.** Facility throughput rises with level (`1×, 1.3×, 1.65×, 2.05×, 2.5×, 3.1×, 3.8×, 4.7×`), but advanced-unit work rises much faster. Representative matched-level times at 1× are roughly: Level-I medium tank `1.25 h`; Level-IV `4.9 h`; Level-VI `12.9 h`; Level-VIII `38.3 h`. Level-VIII infantry is still about `15.3 h`. Decide whether this persistent-game pacing is intended.
+- [ ] **Balance-test high-level construction times.** Building Levels VI–VIII are generated from the Level-V recipe using `1.45×`, `1.7×`, then `2×` growth. A typical Level-VIII upgrade is around `208–218 h` of construction work. Confirm this is intentional and clearly communicated before the resource spend.
+- [ ] **Test queued-order semantics.** Costs are paid when queued; only the head order advances. Check multiple units/buildings in one province, ETA handoff after the head finishes, reload mid-queue, rally-point behavior on completion, and insufficient-resource feedback.
+- [ ] **Clarify real time vs game time in all production/research surfaces.** At normal 1×, one simulation/game hour currently advances in one real hour. Debug speed multiplies this. Every `/h`, ETA and research duration should use language that cannot be misread as a turn-based or accelerated default clock.
+
+### Technology system audit
+
+- [ ] **Fresh browser playtest of Technology end-to-end — Code-audited, UI entry fixed on this branch.** The authoritative path exists: UI → `research` command → server `startResearch` → `stepTechnology` → projected progress → completion notification. Verify it manually after merge.
+- [ ] **Verify all five branches actually gate/improve the intended content.**
+  - **Infantry:** advanced infantry levels.
+  - **Resources:** engineer levels plus higher resource-building tiers.
+  - **Training:** higher military-building tiers, which increase facility throughput and gate higher unit levels.
+  - **Hybrid:** armored cars, artillery and the strategic/nuclear path; Missile Site Level I additionally requires Hybrid VIII.
+  - **Armored:** light and medium tank levels.
+- [ ] **Verify one-project-at-a-time behavior and persistence.** Starting a second branch while one is active must fail cleanly; active branch, target level and progress must survive save/reload and reconnect without resetting or double-advancing.
+- [ ] **Balance-test research duration.** Level II→VIII projects take `6, 10, 16, 24, 32, 40, 48 h` respectively: `176 h` to take one branch I→VIII and `880 h` (~36.7 days at normal 1×) to max all five sequentially. Decide whether free research with these durations is the intended strategic tradeoff.
+- [ ] **Decide whether research needs cancel/switch behavior.** There is intentionally only one active project now, but the player has no cancellation/change path. If that is deliberate, explain it before confirmation; otherwise add a safe cancel/switch rule.
+- [ ] **Verify AI technology choices.** AI automatically starts research. Confirm it does not get stuck at a branch cap, chooses branches appropriate to what it can build, and does not receive impossible unit/building advantages.
+- [ ] **Verify technology + Phase interaction.** Military construction is gated by both national Phase and Training technology; Missile Sites also require Phase III and Hybrid VIII. Make locked reasons explicit so players understand which prerequisite is blocking them.
+- [ ] **Verify offline catch-up.** The current server replays elapsed downtime at normal 1×. Confirm research, production, construction, economy, movement and combat advance exactly once after restart and that the UI does not show a stale pre-restart ETA.
+
+
 
 ## P0 — Blockers and access control
 
-- [ ] **Fix save restoration crash — Verified.** Restarting the game server with an existing campaign save can fail with `Invalid resource node.` in `state-invariants.ts`. A bad or stale resource-node reference should be migrated, repaired, or archived with a recoverable user-facing message. The server must not crash during startup.
-- [ ] **Add account-based debug authorization — Requirement.** Only the account with the exact username `DimaTest1` may use debug controls. Username matching should be case-insensitive but the canonical account is `DimaTest1`.
-  - The permission must be decided server-side from the authenticated account, not from `?debug`, `?benchmark`, browser state, or `NODE_ENV` alone.
-  - `DimaTest1` may receive the debug/QA role in development and approved test environments.
-  - Every other account must receive `debugEnabled: false`, must not see the Debug/World Inspector controls, and must not receive a usable debug state handle.
-  - The server must reject unauthorized debug messages, including simulation-speed, time-of-day, weather, relation, and full-state inspection operations, even if a client sends them manually.
-  - Production builds should keep debug controls disabled unless an explicit, separately protected deployment setting enables them.
-  - Add tests for `DimaTest1`, a differently cased `dImAtEsT1` equivalent, a normal account, an unauthenticated client, and a forged client request.
-- [ ] **Replace raw validation output on account creation — Verified.** A short password displays technical Zod JSON such as `too_small`, `minimum`, and `path`. Show a short human message beside the field, preserve the form, and keep technical details in logs only.
+- [ ] **Finish stale-save recovery UX — previously Verified crash, now Code-audited as hardened.** The current server catches restore/invariant failures, archives the incompatible save and starts a fresh runtime instead of crashing. Re-test the original `Invalid resource node` case and add a player-facing explanation that the old save was archived rather than silently presenting a fresh campaign.
+- [x] **Account + password gated debug authorization — Implemented on this branch; browser/deployment verification still required.** Only `DimaTest1` (case-insensitive) receives the signed entitlement. `IRONFRONTS_DEBUG_CONTROLS_ENABLED=true` and a non-empty server-side `IRONFRONTS_DEBUG_PASSWORD` are also required. Ordinary/unauthenticated clients cannot unlock or send debug mutations.
+  - [ ] Deploy to QA with a strong environment password and verify the System-menu unlock, wrong-password response, reconnect behavior, Ctrl+D→E shortcut after unlock, and every cheat/time/weather action.
+  - [ ] Confirm production keeps `IRONFRONTS_DEBUG_CONTROLS_ENABLED=false` unless explicitly running an approved QA deployment.
+- [x] **Replace raw validation output on account creation — Code-audited as fixed.** Auth now maps credential validation failures to short field-specific messages instead of returning raw Zod JSON. Recheck visually during the next login pass.
 
 ## P1 — Core gameplay and combat
 
@@ -34,11 +75,11 @@ This is a prioritized backlog from the live browser playtest. Items marked **Ver
 
 - [ ] **Make reload/resume state complete — Partially verified.** Reloading returned to the menu and `Continue` restored the country and active wars/battles, which is good. Verify that selected armies, orders, occupation state, production, extraction, diplomacy, combat HP, and notifications all restore consistently or are intentionally reset.
 - [ ] **Prevent stale-save/world-version mismatches.** When world data changes, detect stale province/resource references before constructing the runtime. Archive the save with a useful reason and offer a clean continuation path instead of throwing during startup.
-- [ ] **Make leaving a campaign intentional.** The system menu says returning to the main menu is not wired up. Either implement it safely with an autosave confirmation or remove/disable the dead-end option until it is available.
+- [ ] **Reverify leaving a campaign — implementation has changed.** Return to Main Menu is now wired through confirmation + teardown while server autosave continues. Browser-test it during combat/production/research and confirm reconnect/Continue restores the authoritative operation without duplicate listeners or lost commands.
 
 ## P2 — Economy, numbers, and content clarity
 
-- [ ] **Define realistic resource scales — Verified.** Initial stockpiles such as `90 stone`, `120 metal`, and `70 oil` sit beside very large rates such as `+74,335.1 funds/h` and `+21,297.3 manpower/h`. Decide whether these are abstract balance units or realistic quantities, then label them accordingly and use consistent rounding.
+- [ ] **Revalidate resource scale after the economy overhaul.** The old `90 stone / 120 metal / 70 oil` and `+74k funds/h` examples are obsolete. Use the 2026-09-14 opening-stockpile/output checks above to decide whether the new abstract units feel understandable and balanced.
 - [ ] **Explain “game hour” and accelerated time.** The HUD, production estimates, combat rates, and debug speed use different-looking time scales. Show a short explanation of normal simulation speed and make all ETA/rate labels use the same authoritative conversion.
 - [ ] **Audit all displayed numbers.** Check resource gains, manpower, food, extraction, unit HP, organization, entrenchment, speed, unit costs, production times, damage, defence, battle totals, and war-aim progress for unit consistency, rounding, and overflow.
 - [ ] **Clarify `S / L / H`.** Spell out what the damage-profile columns mean instead of relying on initials.
@@ -86,11 +127,13 @@ This is a prioritized backlog from the live browser playtest. Items marked **Ver
 
 ## Recommended fix order
 
-1. Save restore crash and stale-world migration.
-2. Server-side DimaTest1-only debug authorization.
-3. Combat time/damage math and battle-result feedback.
-4. AI counterattack/reinforcement/retreat behavior.
-5. Unreachable-target and unopposed-attack feedback.
-6. Narrow army/topbar overflow.
-7. Economy/unit scale and scenario-content clarity.
-8. Performance soak testing, developer reload handling, and final copy/accessibility pass.
+1. Merge/verify Technology dock access and secure World Inspector unlock.
+2. Fresh economy/resource/production/technology browser playtest using the 2026-09-14 checks above.
+3. Decide advanced-unit, construction and research time balance before more content depends on those curves.
+4. Combat time/damage math and battle-result feedback.
+5. AI counterattack/reinforcement/retreat behavior, including technology choices.
+6. Unopposed-attack/capture edge cases and stacked-army selection.
+7. Narrow army/topbar/technology panel responsiveness.
+8. Save/archive recovery UX and full reload/offline-catch-up verification.
+9. Road hierarchy/map readability pass.
+10. Long-session performance soak, telemetry, copy and accessibility.
