@@ -2719,7 +2719,9 @@
 .ifg-tech__line.is-coming-soon { min-height: 94px; opacity: .5; overflow: hidden; }
 .ifg-tech__line.is-coming-soon .ifg-tech__node { grid-template-rows: auto auto auto; height: 66px; pointer-events: none; filter: grayscale(1); }
 .ifg-tech__coming-soon { position: absolute; z-index: 7; left: 150px; right: 12px; top: 50%; padding: 7px; transform: translateY(-50%) rotate(-1deg); color: #d4c8a9; background: rgba(22, 24, 20, .76); border-block: 1px solid rgba(203, 190, 151, .28); font: 700 10px/1 var(--ifg-sans); letter-spacing: .28em; text-align: center; text-transform: uppercase; pointer-events: none; }
-.ifg-tech__dependency { position: absolute; z-index: 1; left: 50%; bottom: 100%; width: calc(100% + 24px); height: 46px; border-top: 2px dashed rgba(190, 173, 118, .48); border-right: 2px dashed rgba(190, 173, 118, .48); pointer-events: none; }
+/* Exact one-column elbow: infrastructure L(n) feeds engineer L(n+1). */
+.ifg-tech__dependency { position: absolute; z-index: 1; left: 50%; bottom: calc(50% + 38px); width: 100%; height: 40px; box-sizing: border-box; border-top: 2px dashed rgba(205, 184, 116, .62); border-left: 2px dashed rgba(205, 184, 116, .62); pointer-events: none; }
+.ifg-tech__dependency::after { content: ''; position: absolute; top: -4px; right: -4px; width: 6px; height: 6px; background: #cdb874; border: 1px solid rgba(20, 22, 17, .8); border-radius: 50%; }
 .ifg-tech__detail { display: grid; grid-template-columns: minmax(230px, .62fr) minmax(0, 1.4fr); align-items: stretch; gap: 16px; min-width: 858px; min-height: 190px; padding-top: 18px; }
 .ifg-tech__visual { position: relative; min-width: 0; min-height: 190px; margin: 0; overflow: hidden; background: #080b09; border: 1px solid rgba(184, 158, 99, .46); box-shadow: 0 14px 28px rgba(0, 0, 0, .32), inset 0 0 32px rgba(0, 0, 0, .38); }
 .ifg-tech__visual::after { position: absolute; inset: 0; content: ""; pointer-events: none; background: linear-gradient(180deg, transparent 50%, rgba(5, 7, 5, .82)); box-shadow: inset 0 0 0 3px rgba(10, 12, 9, .44); }
