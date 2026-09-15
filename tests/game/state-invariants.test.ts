@@ -18,25 +18,10 @@ describe('restored state invariants', () => {
     }
   });
 
-  it('migrates v2 work-hours once and strips legacy cadence fields', () => {
+  it('rejects a pre-V4 save instead of migrating it (V4 is a deliberate reset)', () => {
     const ctx = fixture();
     const old = structuredClone(ctx.state) as unknown as Record<string, unknown>;
     old.version = 2;
-    (old.clock as Record<string, unknown>).gameTimeHours = 1800;
-    (old.clock as Record<string, unknown>).combatCadence = 99;
-    old.provinceDevastation = { 10: 3_600 };
-    old.outcome = { result: 'victory', reason: 'done', atGameHours: 1_800 };
-    const crossing = army();
-    crossing.status = 'embarking';
-    crossing.navalCrossing = { fromNodeId: 0, toNodeId: 1, hoursRemaining: 1_800 };
-    old.armies = { a: crossing };
-    const migrated = parseGameState(old);
-    expect(migrated.version).toBe(3);
-    expect(migrated.clock.gameTimeHours).toBe(1);
-    expect(migrated.clock).not.toHaveProperty('combatCadence');
-    expect(migrated.provinceDevastation?.[10]).toBe(2);
-    expect(migrated.outcome?.atGameHours).toBe(1);
-    expect(migrated.armies.a.navalCrossing?.hoursRemaining).toBe(1);
-    expect(parseGameState(migrated).clock.gameTimeHours).toBe(1);
+    expect(() => parseGameState(old)).toThrow();
   });
 });

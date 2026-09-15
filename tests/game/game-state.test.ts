@@ -3,6 +3,7 @@ import {
   GAME_STATE_VERSION, cloneGameState, deserializeGameState, emptyStockpile,
   relationOf, serializeGameState, setRelation, type GameState,
 } from '../../src/game/game-state';
+import { initialTechnologyLevels } from '../../src/game/technology';
 
 function minimalState(): GameState {
   return {
@@ -12,12 +13,24 @@ function minimalState(): GameState {
     mode: 'campaign',
     fogOfWar: true,
     economyEnabled: true,
-    clock: { gameTimeHours: 12.5, startDate: '1 Sep 1939', initialEpochMs: Date.UTC(1939,8,1,10), generation: 0 }, simulationTick: 0,
+    clock: {
+      gameTimeHours: 12.5, startDate: '1 Sep 1939', initialEpochMs: Date.UTC(1939,8,1,10), generation: 0,
+      cadence: { incomeHours: 0, supplyHours: 0, aiHours: 0 }, visualGeneration: 0,
+    },
+    simulationTick: 0,
     countries: {
       24: {
         id: 24, name: 'Spain', color: '#8EB0BB', controller: 'player',
         stockpile: { ...emptyStockpile(), funds: 100 },
         income: emptyStockpile(), industryCapacity: 10, warheads: 0, phase: 2,
+        upkeep: emptyStockpile(), netIncome: emptyStockpile(),
+        coverage: { funds: 1, food: 1, metal: 1, oil: 1 },
+        reserveHours: { funds: null, food: null, metal: null, oil: null },
+        shortages: {
+          funds: { severity: 0, notifiedThreshold: 0 }, food: { severity: 0, notifiedThreshold: 0 },
+          metal: { severity: 0, notifiedThreshold: 0 }, oil: { severity: 0, notifiedThreshold: 0 },
+        },
+        technologies: initialTechnologyLevels(),
       },
     },
     provinceOwners: { 294: 24, 295: 0 },
@@ -38,8 +51,9 @@ function minimalState(): GameState {
         extractorArmyId: null, status: 'idle', provenance: 'generatedNatural',
       },
     },
+    provinceEconomies: {},
     relations: {}, provinceDevastation: {}, diplomacyMessages: {}, diplomacyProposals: {},
-    nextDiplomacyId: 1,
+    resourceTradeProposals: {}, nextDiplomacyId: 1,
     battles: {}, battleFronts: {},
     nextArmyId: 2, nextBattleId: 1, nextFrontId: 1, nextOrderId: 1, nextEventId: 1,
   };
