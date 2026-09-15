@@ -25,7 +25,7 @@ Vite runs on `127.0.0.1:5173` in the supplied script. `vite.config.ts` builds bo
 
 ## Entrypoints
 
-`apps/client/src/main.ts` is the stable main entry and imports the current implementation from `src/main.ts`. `apps/client/src/login.ts` owns the login/register page. Keeping the entries in the client workspace gives the monorepo a stable boundary while renderer/UI modules remain in `src`.
+`apps/client/src/main.ts` imports the stable `src/main.ts` facade; application orchestration lives in `src/app/bootstrap.ts`. `apps/client/src/login.ts` owns the login/register page.
 
 ### Login page
 
@@ -95,9 +95,9 @@ The UI has three layers:
 
 - `src/menu`: pre-game dossier, country selection, settings, and audio interaction.
 - `src/ui/ui-state.ts`: small typed observable store shared by game UI components.
-- `src/ui/game-ui.ts`: DOM composition and action callbacks for the in-game HUD.
+- `src/ui/game-ui.ts`: stable HUD facade; shell composition lives under `src/ui/shell` and styling under `src/ui/styles`.
 
-`src/main.ts` is orchestration: it connects renderer callbacks, remote-session updates, UI state/actions, audio state, selection/targeting workflows, and teardown. The renderer is a presentation/cache layer; the UI reads projected state and sends commands through `RemoteGameSession`.
+`src/app/bootstrap.ts` connects renderer callbacks, remote-session updates, UI state/actions, audio state, selection/targeting workflows, and teardown. The renderer is a presentation/cache layer; the UI reads projected state and sends commands through `RemoteGameSession`.
 
 The client refreshes civil clock display every 250 ms and HUD/marker projections every 400 ms. These are presentation cadences and do not advance gameplay.
 
@@ -130,7 +130,7 @@ The client freezes the renderer's independent demo time cycle and drives lightin
 
 Browser autoplay restrictions are handled by priming menu music/assets and retrying unlock on the first real pointer/keyboard interaction. UI sample failures fall back to generated oscillator/noise cues. Ambience includes wind, rain, and proximity-driven ocean. Thunder is a spatial HRTF proof of concept.
 
-`MusicDirector` is a state machine for menu, opening, peace, war, and victory. It avoids a recent-history window of four tracks, waits a state-specific randomized gap between tracks, and tries remote official sources before local archive fallbacks. Credits and redistribution terms are in `AUDIO_CREDITS.md`.
+`MusicDirector` is a state machine for menu, opening, peace, and war. It avoids a recent-history window of four tracks, waits a state-specific randomized gap between tracks, and tries remote official sources before local archive fallbacks. Credits and redistribution terms are in `AUDIO_CREDITS.md`.
 
 ## Preferences
 

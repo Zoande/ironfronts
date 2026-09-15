@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EnvironmentController } from '../src/environment-controller';
+import { EnvironmentController } from '../src/rendering/environment-controller';
 
 describe('EnvironmentController', () => {
   it('preserves the existing time controls and multiplier limits', () => {

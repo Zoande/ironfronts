@@ -8,7 +8,7 @@ const root = process.cwd();
 
 describe('map behavior regressions', () => {
   it('starts in strategic mode across state, renderer, and fallback controls', () => {
-    const renderer = readFileSync(path.join(root, 'src/renderer.ts'), 'utf8');
+    const renderer = readFileSync(path.join(root, 'src/rendering/renderer.ts'), 'utf8');
     const html = readFileSync(path.join(root, 'index.html'), 'utf8');
     expect(createInitialState().mapMode).toBe('balanced');
     expect(renderer).toContain("private mapMode: MapMode = 'balanced'");
@@ -26,14 +26,14 @@ describe('map behavior regressions', () => {
   });
 
   it('keeps the transparent full-screen HUD root from blocking canvas input', () => {
-    const css = readFileSync(path.join(root, 'src/ui/game-ui.css'), 'utf8');
+    const css = readFileSync(path.join(root, 'src/ui/styles/game-ui.css'), 'utf8');
     expect(css).toMatch(/\.ifg\s*\{[^}]*pointer-events:\s*none/s);
     expect(css).toMatch(/\.ifg\s*>\s*\*\s*\{\s*pointer-events:\s*auto/);
   });
 
   it('does not expose or upload resource-node map icons', () => {
-    const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
-    const ui = readFileSync(path.join(root, 'src/ui/game-ui.ts'), 'utf8');
+    const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
+    const ui = readFileSync(path.join(root, 'src/ui/shell/game-ui.ts'), 'utf8');
     expect(main).not.toContain('syncResourceMarkers');
     expect(main).not.toContain('setResourceOverlay(true)');
     expect(ui).not.toContain('overlayToggle');

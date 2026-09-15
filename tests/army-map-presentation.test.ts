@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildArmyCompositionRows, buildArmyFormation, dominantVisualKind, visualKindForUnit,
-} from '../src/army-map-presentation';
+} from '../src/rendering/army-map-presentation';
 
 describe('army map presentation LOD data', () => {
   it('maps rule-level troop types onto six distinct counter silhouettes', () => {

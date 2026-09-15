@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 const notifications = readFileSync(path.join(root, 'src/ui/notifications.ts'), 'utf8');
 
 describe('attack-order feedback', () => {
@@ -122,7 +122,7 @@ describe('combat huddle (visual-only positioning)', () => {
 describe('continuous battle FX (gunfire, smoke stalk, city-under-siege overlay)', () => {
   it('spawns ongoing FX per authoritative battle-front cluster, at the same centroid the huddle uses, gated on camera LOD', () => {
     const start = main.indexOf('function spawnOngoingBattleFx');
-    const block = main.slice(start, main.indexOf('\nlet campaignOutcomeShown', start));
+    const block = main.slice(start, main.indexOf('\nfunction drainSessionEvents', start));
     expect(block).toContain('effectDensityForDistance(lastCombatCameraDistance)');
     // Groups the same way the huddle above does — a cluster only exists
     // because a fully-visible engaged army reported that front id, so no

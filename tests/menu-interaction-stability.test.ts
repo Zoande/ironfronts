@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const menu = readFileSync(path.join(root, 'src/menu/menu.ts'), 'utf8');
-const audio = readFileSync(path.join(root, 'src/audio/audio-manager.ts'), 'utf8');
+const audio = readFileSync(path.join(root, 'src/audio/engine/audio-manager.ts'), 'utf8');
 
 describe('menu interaction stability', () => {
   it('drives the dossier transition from CSS, not a main-thread rAF loop', () => {

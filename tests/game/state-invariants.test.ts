@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateWorldState } from '../../src/game/state-invariants';
 import { parseGameState } from '../../src/game/state-schema';
+import { GAME_STATE_VERSION } from '../../src/game/game-state';
 import { fixture, army } from '../helpers/simulation';
 
 describe('restored state invariants', () => {
@@ -18,24 +19,24 @@ describe('restored state invariants', () => {
     }
   });
 
-  it('migrates v2 work-hours once and strips legacy cadence fields', () => {
+  it('strips retired and unknown fields from a current save', () => {
     const ctx = fixture();
     const old = structuredClone(ctx.state) as unknown as Record<string, unknown>;
-    old.version = 2;
-    (old.clock as Record<string, unknown>).gameTimeHours = 1800;
+    old.version = GAME_STATE_VERSION;
+    (old.clock as Record<string, unknown>).gameTimeHours = 1;
     (old.clock as Record<string, unknown>).combatCadence = 99;
-    old.provinceDevastation = { 10: 3_600 };
-    old.outcome = { result: 'victory', reason: 'done', atGameHours: 1_800 };
+    old.provinceDevastation = { 10: 2 };
+    old.outcome = { result: 'victory', reason: 'done', atGameHours: 1 };
     const crossing = army();
     crossing.status = 'embarking';
-    crossing.navalCrossing = { fromNodeId: 0, toNodeId: 1, hoursRemaining: 1_800 };
+    crossing.navalCrossing = { fromNodeId: 0, toNodeId: 1, hoursRemaining: 1 };
     old.armies = { a: crossing };
     const migrated = parseGameState(old);
-    expect(migrated.version).toBe(3);
+    expect(migrated.version).toBe(GAME_STATE_VERSION);
     expect(migrated.clock.gameTimeHours).toBe(1);
     expect(migrated.clock).not.toHaveProperty('combatCadence');
     expect(migrated.provinceDevastation?.[10]).toBe(2);
-    expect(migrated.outcome?.atGameHours).toBe(1);
+    expect(migrated).not.toHaveProperty('outcome');
     expect(migrated.armies.a.navalCrossing?.hoursRemaining).toBe(1);
     expect(parseGameState(migrated).clock.gameTimeHours).toBe(1);
   });

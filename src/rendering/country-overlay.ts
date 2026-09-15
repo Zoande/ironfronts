@@ -1,11 +1,11 @@
 import type { CountryRecord } from './types';
-import { CountryLabelAtlas } from './country-labels/atlas';
+import { CountryLabelAtlas } from '../country-labels/atlas';
 import {
   LABEL_GLYPH_STRIDE, layoutCountryLabelWithinTerritory, placeCountryLabelOnTerrain,
-} from './country-labels/layout';
-import { createCountryAnchor, type CountryAnchor } from './country-labels/topology';
+} from '../country-labels/layout';
+import { createCountryAnchor, type CountryAnchor } from '../country-labels/topology';
 
-export { buildCountryColorBuffer } from './country-labels/colors';
+export { buildCountryColorBuffer } from '../country-labels/colors';
 
 export interface CountryOwnershipChange {
   provinceId: number;

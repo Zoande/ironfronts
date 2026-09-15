@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { capVisibleInstances, type PropVisibility } from '../src/chunk-visibility';
-import type { Mesh } from '../src/scene-meshes';
+import { capVisibleInstances, type PropVisibility } from '../src/rendering/chunk-visibility';
+import type { Mesh } from '../src/rendering/scene-meshes';
 import {
   DEFAULT_FRAME_RATE_CAP, DEFAULT_QUALITY, FRAME_RATE_CAPS, isFrameRateCap, isQualityLevel,
   loadFrameRateCap, loadQuality, QUALITY_LEVELS, QUALITY_PRESETS,
@@ -83,13 +83,13 @@ describe('graphics quality presets', () => {
   });
 
   it('exposes the resolved preset knobs + gated counts through the renderer readout', () => {
-    const renderer = readFileSync(new URL('../src/renderer.ts', import.meta.url), 'utf8');
+    const renderer = readFileSync(new URL('../src/rendering/renderer.ts', import.meta.url), 'utf8');
     expect(renderer).toContain('get qualityReadout()');
     expect(renderer).toContain('armyModelRange');
     // the 3D-army LOD swap distance is preset-scaled, not a bare constant
     expect(renderer).toContain('this.camera.distance < this.armyModelDrawDistance');
     expect(renderer).toContain('ARMY_MODEL_RANGE_BASE * this.qualityPreset.propDistanceScale');
-    const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+    const main = readFileSync(new URL('../src/app/bootstrap.ts', import.meta.url), 'utf8');
     expect(main).toContain('activeRenderer.qualityReadout');
     expect(main).toMatch(/preset\s+prop .*lod .*detail .*furniture/);
   });

@@ -8,10 +8,10 @@ import {
 } from '../src/audio/music-catalog';
 
 describe('music catalog', () => {
-  it('contains the complete May 2015 31-track archive', () => {
-    expect(MUSIC_TRACKS).toHaveLength(31);
-    expect(new Set(MUSIC_TRACKS.map((track) => track.id)).size).toBe(31);
-    expect(new Set(MUSIC_TRACKS.map((track) => track.archiveFile)).size).toBe(31);
+  it('contains the 30 tracks used by the runtime soundtrack', () => {
+    expect(MUSIC_TRACKS).toHaveLength(30);
+    expect(new Set(MUSIC_TRACKS.map((track) => track.id)).size).toBe(30);
+    expect(new Set(MUSIC_TRACKS.map((track) => track.archiveFile)).size).toBe(30);
   });
 
   it('matches the Ironfronts soundtrack state grouping', () => {
@@ -19,7 +19,6 @@ describe('music catalog', () => {
     expect(tracksForState('opening')).toHaveLength(1);
     expect(tracksForState('peace')).toHaveLength(23);
     expect(tracksForState('war')).toHaveLength(4);
-    expect(tracksForState('victory')).toHaveLength(1);
   });
 
   it('uses the supplied old MP3 archive for the two combat tracks missing from the archived GitHub mirror', () => {

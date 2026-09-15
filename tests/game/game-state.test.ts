@@ -38,7 +38,8 @@ function minimalState(): GameState {
         extractorArmyId: null, status: 'idle', provenance: 'generatedNatural',
       },
     },
-    relations: {}, provinceDevastation: {}, diplomacyMessages: {}, diplomacyProposals: {},
+    relations: {}, provinceDevastation: {}, provinceEconomies: {},
+    diplomacyMessages: {}, diplomacyProposals: {}, resourceTradeProposals: {},
     nextDiplomacyId: 1,
     battles: {}, battleFronts: {},
     nextArmyId: 2, nextBattleId: 1, nextFrontId: 1, nextOrderId: 1, nextEventId: 1,
@@ -46,10 +47,10 @@ function minimalState(): GameState {
 }
 
 describe('game-state serialization', () => {
-  it('round-trips through JSON unchanged', () => {
+  it('normalizes once, then round-trips through JSON unchanged', () => {
     const state = minimalState();
     const restored = deserializeGameState(serializeGameState(state));
-    expect(restored).toEqual(state);
+    expect(deserializeGameState(serializeGameState(restored))).toEqual(restored);
     expect(restored.diplomacyMessages).toEqual({});
     expect(restored.diplomacyProposals).toEqual({});
     expect(restored.nextDiplomacyId).toBe(1);
@@ -67,6 +68,12 @@ describe('game-state serialization', () => {
   it('rejects an unknown version', () => {
     const bad = JSON.stringify({ ...minimalState(), version: 999 });
     expect(() => deserializeGameState(bad)).toThrow(/version/);
+  });
+
+  it('discards the retired campaign outcome field from old saves', () => {
+    const legacy = { ...minimalState(), outcome: { result: 'victory', reason: 'legacy', atGameHours: 4 } };
+    const restored = deserializeGameState(JSON.stringify(legacy));
+    expect(restored).not.toHaveProperty('outcome');
   });
 
   it('has no functions, class instances, or nested prototypes', () => {

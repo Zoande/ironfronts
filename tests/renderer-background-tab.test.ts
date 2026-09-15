@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const renderer = readFileSync(path.join(process.cwd(), 'src/renderer.ts'), 'utf8');
+const renderer = readFileSync(path.join(process.cwd(), 'src/rendering/renderer.ts'), 'utf8');
 
 describe('background-tab render suspension', () => {
   it('skips the frame body while the tab is hidden but keeps the rAF loop alive', () => {

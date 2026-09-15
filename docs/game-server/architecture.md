@@ -72,7 +72,7 @@ Public facades remain deliberately small:
 - `src/game/commands.ts` is the command ownership gate and dispatcher. Complex command workflows live under `src/game/commands/`.
 - `src/game/combat.ts` coordinates battles, retreat, and artillery. Pure damage/frontage math and province capture live under `src/game/combat/`.
 - `src/game/units/movement.ts` coordinates fixed-step movement. Orders, position, contact, pursuit, policy, retreat, speed, heap routing, and spatial indexing have focused modules.
-- `src/main.ts` composes browser state; army interpolation/upload and picking live under `src/client/`, queue rendering under `src/ui/`, and road-junction generation under `src/graphics/`.
+- `src/app/bootstrap.ts` composes browser state; army interpolation/upload and rendering support live under `src/rendering/`, client transport under `src/client/`, queue rendering under `src/ui/`, and road-junction generation under `src/graphics/`.
 - `apps/game-server/src/main.ts` composes the process. Scheduling, publication, HTTP, gameplay sockets, event filtering, persistence, and world loading are separate modules.
 
 When adding behavior, put validation and mutation with the owning domain. Avoid adding game rules to the WebSocket handler, transport concepts to `GameState`, or fog decisions to client code. A useful rule is: the entrypoint schedules, the runtime adapts, the domain decides, and projection redacts.

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(new URL('../src/ui/game-ui.css', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../src/ui/styles/game-ui.css', import.meta.url), 'utf8');
 const armyUi = readFileSync(new URL('../src/ui/army.ts', import.meta.url), 'utf8');
 
 describe('selected army panel containment', () => {

@@ -3,9 +3,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const camera = readFileSync(path.join(root, 'src/camera.ts'), 'utf8');
-const renderer = readFileSync(path.join(root, 'src/renderer.ts'), 'utf8');
-const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+const camera = readFileSync(path.join(root, 'src/rendering/camera.ts'), 'utf8');
+const renderer = readFileSync(path.join(root, 'src/rendering/renderer.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 
 /** Playtest #2 + #6: deterministic top-down spawn, and right-click issues orders. */
 describe('camera + order controls', () => {

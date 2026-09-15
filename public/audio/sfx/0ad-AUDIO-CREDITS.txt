@@ -7,8 +7,6 @@ tree, branch main:
 
   0ad-army-select.ogg  interface/select/building/sel_universal_1.ogg
   0ad-move-order.ogg   interface/ui/rally_click_01.ogg
-  0ad-victory.ogg      interface/alarm/alarmvictory_1.ogg
-  0ad-defeat.ogg       interface/alarm/alarmdefeat_1.ogg
   0ad-close-battle.ogg attack/weapon/sword_attack_08.ogg
 
 Source: https://gitea.wildfiregames.com/0ad/0ad/src/branch/main/binaries/data/mods/public/audio

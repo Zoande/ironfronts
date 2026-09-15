@@ -8,7 +8,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { WorldData } from '../../src/game/world-data';
 import { buildWorldData } from '../../src/game/world-data-loader';
-import { generateResourceNodes } from '../../src/resource-nodes';
+import { generateResourceNodes } from '../../src/rendering/resource-nodes';
 
 const WORLD_DIR = path.resolve(__dirname, '../../public/world');
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ArmyMotionInterpolator, presentedArmyPosition } from '../src/army-motion';
+import { ArmyMotionInterpolator, presentedArmyPosition } from '../src/rendering/army-motion';
 import { ArmyPicker } from '../src/client/army-picker';
 describe('bounded authoritative army presentation', () => {
   it('buffers samples and freezes prediction after half a second', () => {

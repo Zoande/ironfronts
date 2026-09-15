@@ -92,10 +92,6 @@ The Hellespont, and credit additional performers on various recordings.
 - Karmic Confluence
 - Rise of Macedon
 
-### Outcome
-
-- You Are Victorious! — victory stinger
-
 ## Runtime source policy
 
 During development, tracks that still exist in the archived public

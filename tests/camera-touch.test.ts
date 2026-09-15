@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { StrategyCamera } from '../src/camera';
+import { StrategyCamera } from '../src/rendering/camera';
 
 class TestCanvas extends EventTarget {
   getBoundingClientRect(): DOMRect {

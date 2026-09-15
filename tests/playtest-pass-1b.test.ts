@@ -39,7 +39,7 @@ describe('campaign-map country eligibility (#3)', () => {
 });
 
 describe('order failure feedback (#5)', () => {
-  const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+  const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 
   it.each([
     ['Target is not reachable.', 'Target is not reachable'],
@@ -52,7 +52,7 @@ describe('order failure feedback (#5)', () => {
   });
 
   it('wires the tested mapper into server, right-click, and armed-button failures', () => {
-    expect(main).toContain("import { describeOrderFailure } from './ui/order-feedback'");
+    expect(main).toContain("import { describeOrderFailure } from '../ui/order-feedback'");
     expect(main.match(/describeOrderFailure\(/g)).toHaveLength(4);
     expect(main).not.toContain("pushNotification('warning', 'Command failed', reason)");
   });

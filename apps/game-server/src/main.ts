@@ -84,7 +84,6 @@ if (persisted) {
     runtime.session.pendingBuildings.length = 0;
     runtime.session.pendingCaptures.length = 0;
     runtime.session.pendingCombat.length = 0;
-    runtime.session.pendingOutcome.length = 0;
     log('info', 'offline_simulation_caught_up', { offlineHours: offlineCatchupHours });
   }
 }

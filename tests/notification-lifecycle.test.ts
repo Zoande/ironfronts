@@ -35,7 +35,7 @@ describe('notification lifecycle', () => {
   });
 
   it('the HUD wiring dismisses by id and clears timers on teardown', () => {
-    const main = readFileSync(path.join(process.cwd(), 'src/main.ts'), 'utf8');
+    const main = readFileSync(path.join(process.cwd(), 'src/app/bootstrap.ts'), 'utf8');
     // Manual dismiss goes through the id-based remover, not a title sweep.
     expect(main).toContain('dismissNotification: (id) => removeNotification(id)');
     expect(main).not.toMatch(/entry\.title !== 'Command failed'/);

@@ -201,7 +201,6 @@ export function projectFor(
     relations: { ...state.relations },
     weather: state.weather ? { ...state.weather } : undefined,
     diplomacy,
-    outcome: state.outcome ? { ...state.outcome } : undefined,
   });
 }
 
@@ -355,7 +354,6 @@ export function diffProjection(previous: PlayerProjection, next: PlayerProjectio
   if (!same(previous.ownCountry, next.ownCountry)) delta.changed.ownCountry = next.ownCountry;
   if (!same(previous.weather, next.weather)) delta.changed.weather = next.weather;
   if (!same(previous.diplomacy, next.diplomacy)) delta.changed.diplomacy = next.diplomacy;
-  if (!same(previous.outcome, next.outcome)) delta.changed.outcome = next.outcome;
   for (const key of COLLECTIONS) {
     const before = (previous[key] ?? {}) as Record<string, unknown>;
     const after = (next[key] ?? {}) as Record<string, unknown>;

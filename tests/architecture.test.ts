@@ -86,7 +86,7 @@ describe('module architecture', () => {
 
   it('keeps shader modules independent from renderer and domain code', () => {
     const shaderRoot = path.join(sourceRoot, 'shaders');
-    const allowedSharedDependencies = new Set([path.join(sourceRoot, 'world-fog.ts')]);
+    const allowedSharedDependencies = new Set([path.join(sourceRoot, 'rendering', 'world-fog.ts')]);
     const violations = sourceFiles
       .filter((filename) => filename.startsWith(shaderRoot))
       .flatMap((filename) => dependencies(filename)
@@ -122,6 +122,7 @@ describe('module architecture', () => {
     const gameRoot = path.join(sourceRoot, 'game');
     const forbidden = [
       path.join(sourceRoot, 'renderer.ts'),
+      path.join(sourceRoot, 'rendering'),
       path.join(sourceRoot, 'main.ts'),
       path.join(sourceRoot, 'shaders'),
       path.join(sourceRoot, 'ui'),
@@ -157,6 +158,24 @@ describe('module architecture', () => {
       .filter((filename) => filename.startsWith(countryRoot))
       .flatMap((filename) => dependencies(filename)
         .filter((dependency) => /(?:renderer|main)\.ts$/.test(dependency))
+        .map((dependency) => `${relativeName(filename)} -> ${relativeName(dependency)}`));
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps the source root limited to stable entries and declarations', () => {
+    const allowed = new Set(['main.ts', 'renderer.ts', 'styles.css', 'wgsl-reflect.d.ts']);
+    const rootFiles = readdirSync(sourceRoot, { withFileTypes: true })
+      .filter((entry) => entry.isFile()).map((entry) => entry.name).sort();
+    expect(rootFiles.filter((filename) => !allowed.has(filename))).toEqual([]);
+  });
+
+  it('keeps UI and rendering independent from application orchestration', () => {
+    const appRoot = path.join(sourceRoot, 'app');
+    const presentationRoots = [path.join(sourceRoot, 'ui'), path.join(sourceRoot, 'rendering')];
+    const violations = sourceFiles
+      .filter((filename) => presentationRoots.some((directory) => filename.startsWith(directory)))
+      .flatMap((filename) => dependencies(filename)
+        .filter((dependency) => dependency.startsWith(appRoot))
         .map((dependency) => `${relativeName(filename)} -> ${relativeName(dependency)}`));
     expect(violations).toEqual([]);
   });

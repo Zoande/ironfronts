@@ -1,4 +1,4 @@
-export type MusicState = 'menu' | 'opening' | 'peace' | 'war' | 'victory';
+export type MusicState = 'menu' | 'opening' | 'peace' | 'war';
 
 export interface MusicTrack {
   id: string;
@@ -68,7 +68,6 @@ export const MUSIC_TRACKS: readonly MusicTrack[] = [
   track('karmic-confluence', 'Karmic Confluence', 'war', 106.03, 'Karmic Confluence.mp3', 'Karmic_Confluence.ogg'),
   track('rise-macedon', 'Rise of Macedon', 'war', 240.59, 'Rise of Macedon.mp3', 'Rise_of_Macedon.ogg'),
 
-  track('victorious', 'You Are Victorious!', 'victory', 46.55, 'You_are_Victorious!.mp3', 'You_are_Victorious!.ogg'),
 ] as const;
 
 export const TRACK_BY_ID = new Map(MUSIC_TRACKS.map((candidate) => [candidate.id, candidate]));

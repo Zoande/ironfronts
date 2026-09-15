@@ -50,25 +50,13 @@ export function mountMenu(handlers: MenuHandlers): void {
     profile: handlers.profile,
     onLogout: handlers.onLogout,
   });
-  // A second campaign slot is not implemented yet. Rather than lock New
-  // Campaign entirely once a campaign exists, keep it open as a clearly
-  // labelled *preview* of the nation-selection flow that can never deploy —
-  // so the existing save is untouchable from here.
-  const previewOnly = assignedCountry !== null;
-  newCampaign.disabled = false;
-  newCampaign.classList.remove('is-disabled');
-  newCampaign.classList.toggle('is-preview', previewOnly);
-  if (previewOnly) {
+  const hasCampaign = assignedCountry !== null;
+  newCampaign.disabled = hasCampaign;
+  newCampaign.classList.toggle('is-disabled', hasCampaign);
+  newCampaign.title = hasCampaign ? 'A campaign is already in progress. Use Continue to resume it.' : '';
+  if (hasCampaign) {
     const sub = newCampaign.querySelector('small');
-    if (sub) sub.textContent = "Inspect the setup flow. Your campaign stays untouched.";
-    const previewBanner = document.getElementById('ifm-registry-preview');
-    if (previewBanner) {
-      previewBanner.textContent = assignedCountry
-        ? `Preview only. Your campaign as ${assignedCountry.name} is already in progress. `
-          + `Go back and choose Continue to resume it. Picking a country here will not start a new game.`
-        : `Preview only. Picking a country here will not start a new game.`;
-      previewBanner.hidden = false;
-    }
+    if (sub) sub.textContent = 'Campaign already in progress.';
   }
   continueButton.disabled = assignedCountry === null;
   continueButton.classList.toggle('is-disabled', assignedCountry === null);
@@ -261,19 +249,16 @@ export function mountMenu(handlers: MenuHandlers): void {
       : selectableCountries(handlers.lobby).find((c) => c.id === selectedCountryId) ?? null;
     if (confirmNation) {
       confirmNation.disabled = country === null;
-      confirmNation.textContent = previewOnly ? 'Preview only'
-        : country ? `Join as ${country.name}` : 'Join Campaign';
+      confirmNation.textContent = country ? `Join as ${country.name}` : 'Join Campaign';
     }
     if (nationSelected) {
       nationSelected.textContent = country ? `Assigned: ${country.name}` : 'No nation selected';
       nationSelected.classList.toggle('is-ready', country !== null);
     }
     if (countryHint) {
-      countryHint.textContent = previewOnly
-        ? `Preview of the nation-selection flow. A second campaign slot isn't built yet, so this cannot deploy. Your current campaign is safe.`
-        : country === null
-          ? 'Select a beige country. Grey countries cannot be claimed.'
-          : `${country.name} is selected. Join to take command for the whole campaign.`;
+      countryHint.textContent = country === null
+        ? 'Select a beige country. Grey countries cannot be claimed.'
+        : `${country.name} is selected. Join to take command for the whole campaign.`;
     }
   }
 
@@ -473,21 +458,7 @@ export function mountMenu(handlers: MenuHandlers): void {
     }
   }
 
-  /**
-   * New Campaign's nation-picker entry point (Confirm button + roster Enter).
-   * While a campaign is already loaded this is preview-only: it never launches,
-   * so the New Campaign flow can be inspected without risking data/game.json.
-   * Continue does NOT go through here — it calls `deploy` directly.
-   */
   async function deployFromPicker(countryId: number): Promise<void> {
-    if (previewOnly) {
-      if (countryHint) {
-        countryHint.textContent = `Preview only. A second campaign slot isn't built yet. `
-          + `Your campaign${assignedCountry ? ` as ${assignedCountry.name}` : ''} is untouched. Use Continue to resume it.`;
-      }
-      playCue('select');
-      return;
-    }
     await deploy(countryId);
   }
 

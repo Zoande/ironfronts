@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiplomacyColorData, findCountryByName } from '../src/diplomacy';
-import type { CountryRecord, DiplomaticRelation } from '../src/types';
+import { buildDiplomacyColorData, findCountryByName } from '../src/rendering/diplomacy';
+import type { CountryRecord, DiplomaticRelation } from '../src/rendering/types';
 
 const countries: CountryRecord[] = [
   { id: 2, name: 'France', color: '#789abc', colorFamily: 0, capitalProvinceId: 1 },

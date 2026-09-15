@@ -288,11 +288,6 @@ export interface PlayerProjection {
     tradeProposals: ResourceTradeProposal[];
   };
   /** Set once the campaign is decided from the viewer's point of view. */
-  outcome?: {
-    result: 'victory' | 'defeat';
-    reason: string;
-    atGameHours: number;
-  };
 }
 
 /**

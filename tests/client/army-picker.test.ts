@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ArmyPicker } from '../../src/client/army-picker';
-import type { ArmyPickEntry } from '../../src/army-motion';
+import type { ArmyPickEntry } from '../../src/rendering/army-motion';
 
 function stationary(id: string, x: number, z: number): ArmyPickEntry {
   return { id, x, z, targetX: x, targetZ: z, remainingMs: 0 };
