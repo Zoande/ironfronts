@@ -13,6 +13,7 @@ function secret(name: string, fallback: string): string {
 }
 
 const debugControlsEnabled = process.env.IRONFRONTS_DEBUG_CONTROLS_ENABLED === 'true';
+const diagnosticsPath = process.env.DIAGNOSTICS_PATH?.trim();
 
 export const config = {
   port: numberEnv('GAME_PORT', 3002),
@@ -26,10 +27,8 @@ export const config = {
     process.cwd(),
     process.env.GAME_DATA_PATH ?? path.join(process.env.DATA_DIRECTORY ?? 'data', 'game.json'),
   ),
-  diagnosticsPath: path.resolve(
-    process.cwd(),
-    process.env.DIAGNOSTICS_PATH ?? path.join(process.env.DATA_DIRECTORY ?? 'data', 'diagnostics.jsonl'),
-  ),
+  /** JSONL diagnostics are opt-in. Unset or blank means no diagnostic file. */
+  diagnosticsPath: diagnosticsPath ? path.resolve(process.cwd(), diagnosticsPath) : undefined,
   ticketSecret: secret('TICKET_SECRET', 'ironfronts-local-ticket-secret-change-me'),
   internalSecret: secret('INTERNAL_SERVICE_SECRET', 'ironfronts-local-service-secret-change-me'),
   /** Explicit deployment gate layered on top of the signed account claim. */

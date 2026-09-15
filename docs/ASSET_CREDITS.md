@@ -70,7 +70,7 @@ copied unmodified from `0ad/0ad` at ref `master`, from
 | `groups.png` | `groups.png` | Control-group / army-group UI (reserved) |
 | `call-to-arms.png` | `call-to-arms.png` | Mobilise / call-to-arms (reserved) |
 | `focus-attacked.png` | `focus-attacked.png` | "Force under attack" notification + click-to-focus |
-| `focus-rally.png` | `focus-rally.png` | Rally-point focus (reserved) |
+| `focus-rally.png` | `focus-rally.png` | Rally-point indicator (province card) |
 | `stances/aggressive.png` | `stances/aggressive.png` | Army stance: aggressive (reserved) |
 | `stances/defensive.png` | `stances/defensive.png` | Army stance: defensive (reserved) |
 | `stances/passive.png` | `stances/passive.png` | Army stance: passive (reserved) |
@@ -139,8 +139,10 @@ lu nl no nz pl pt ro sa se tr za`.
 tricolours, Nordic crosses, the Hinomaru, the Union Jack) the flag-icons file
 above is used directly. Where it differs, a period flag is vendored from
 Wikimedia Commons — see the next section and `docs/flags.md`. The leftover
-modern flag-icons files (`de.svg`, `it.svg`, `gr.svg`, …) stay vendored only as
-fallbacks and are not referenced for those countries.
+modern flag-icons files (`it.svg`, `gr.svg`, …) stay vendored only as
+fallbacks and are not referenced for those countries. Germany is a deliberate
+exception: it maps to the modern `de.svg`, not a period one — see
+`docs/flags.md`.
 
 ---
 
@@ -152,8 +154,6 @@ fallbacks and are not referenced for those countries.
 works). Each file carries its source URL and licence in a leading XML comment.
 
 Vendored under `src/ui/assets/flags/`, unmodified:
-`de-1935-1945` (Germany, 1935–45 national flag — period-accurate for the
-scenario, incl. the swastika, per the campaign brief),
 `it-1861-1946` (Kingdom of Italy), `su-1936-1955` (USSR),
 `gr-1935-1970` (Greece, royalist land flag), `yu-1918-1941` (Kingdom of
 Yugoslavia), `eg-1922-1958` (Kingdom of Egypt), `iq-1921-1959` (Kingdom of
@@ -206,6 +206,7 @@ centered on 256x256 transparent RGBA canvases for runtime use.
 | `src/ui/assets/icons/ironfronts/unit-armored-car-icon.png` | Armored-car production button |
 | `src/ui/assets/icons/ironfronts/unit-light-tank-icon.png` | Light-tank production button |
 | `src/ui/assets/icons/ironfronts/unit-medium-tank-icon.png` | Medium-tank production button |
+| `src/ui/assets/icons/ironfronts/unit-artillery-icon.png` | Generated artillery production button |
 | `src/ui/assets/icons/ironfronts/structure-barracks-icon.png` | Barracks build button |
 | `src/ui/assets/icons/ironfronts/structure-tank-plant-icon.png` | Tank-plant build button |
 | `src/ui/assets/icons/ironfronts/structure-ordnance-icon.png` | Ordnance-works build button |

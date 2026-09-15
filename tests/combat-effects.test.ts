@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   CombatEffectPool, EFFECT_KIND, EFFECT_STRIDE, compassLabel, effectDensityForDistance,
-} from '../src/combat-effects';
+} from '../src/rendering/combat-effects';
 import {
   buildBattleAnchors, combatHuddleOffset, groupEngagedByFront,
   HUDDLE_MAX_PULL, HUDDLE_TARGET_RADIUS, type EngagedStackLike, type Point,
-} from '../src/combat-huddle';
+} from '../src/rendering/combat-huddle';
 
 const CAM = { x: 0, z: 0 };
 

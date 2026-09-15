@@ -7,7 +7,10 @@ import type { GameClockReading } from './game-clock';
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'fields' | 'quarry' | 'mine' | 'oilPump';
 type PhysicalResource = 'food' | 'stone' | 'metal' | 'oil';
 type ArmyStance = 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
-export type TechnologyBranch = 'infantry' | 'resources' | 'training' | 'hybrid' | 'armored';
+export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
+export type MarketResource = 'manpower' | 'food' | 'stone' | 'metal' | 'oil';
+export type ResourceKey = 'funds' | MarketResource;
+export interface TradeLeg { resource: ResourceKey; amount: number; }
 
 function isConnectionFailure(reason: string): boolean {
   return /connection (?:unavailable|lost|closed)|command outcome unknown/i.test(reason);
@@ -27,7 +30,7 @@ interface OwnCountry {
   /** Progression tier — 1, 2, or 3. See game/phase.ts. */
   phase?: number;
   technologies?: Record<TechnologyBranch, number>;
-  research?: { branch: TechnologyBranch; targetLevel: number; progressHours: number; totalHours: number };
+  researchSlots?: Array<{ branch: TechnologyBranch; targetLevel: number; progressHours: number; totalHours: number } | null>;
 }
 export class RemoteGameSession extends EventTarget {
   state: PlayerProjection;
@@ -246,6 +249,22 @@ export class RemoteGameSession extends EventTarget {
     return this.sendDiplomacyCommand({ type: 'endAlliance', targetCountryId }, onResult);
   }
 
+  marketTrade(
+    action: 'buy' | 'sell', resource: MarketResource, amount: number, onResult?: (ok: boolean) => void,
+  ) {
+    return this.sendDiplomacyCommand({ type: 'marketTrade', action, resource, amount }, onResult);
+  }
+
+  proposeResourceTrade(
+    targetCountryId: number, offer: TradeLeg, request: TradeLeg, onResult?: (ok: boolean) => void,
+  ) {
+    return this.sendDiplomacyCommand({ type: 'proposeResourceTrade', targetCountryId, offer, request }, onResult);
+  }
+
+  respondResourceTrade(proposalId: string, accept: boolean, onResult?: (ok: boolean) => void) {
+    return this.sendDiplomacyCommand({ type: 'respondResourceTrade', proposalId, accept }, onResult);
+  }
+
   ownsArmy(armyId: string): boolean { return this.state.armies[armyId]?.own ?? false; }
   ownsProvince(provinceId: number): boolean { return this.state.provinceOwners[provinceId] === this.playerCountryId; }
 
@@ -303,8 +322,12 @@ export class RemoteGameSession extends EventTarget {
   research(branch: TechnologyBranch, onAccepted?: () => void) {
     return this.send({ type: 'research', branch }, onAccepted);
   }
-  setRally(provinceId: number, x: number, z: number) { return this.send({ type: 'setRally', provinceId, target: { x, z } }); }
-  clearRally(provinceId: number) { return this.send({ type: 'setRally', provinceId, target: null }); }
+  setRally(provinceId: number, x: number, z: number, onAccepted?: () => void) {
+    return this.send({ type: 'setRally', provinceId, target: { x, z } }, onAccepted);
+  }
+  clearRally(provinceId: number, onAccepted?: () => void) {
+    return this.send({ type: 'setRally', provinceId, target: null }, onAccepted);
+  }
   rallyPoint(provinceId: number): { x: number; z: number; route?: Array<{ x: number; z: number }> } | null {
     return this.state.rallyPoints[provinceId] ?? null;
   }

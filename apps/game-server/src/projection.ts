@@ -5,6 +5,7 @@ import {
   provinceResourceOutputBreakdown,
   buildEngineerAssignmentIndex, engineerAssignmentKey,
   unitProductionWorkRate,
+  GAME_PACE,
   type GameState, type LandGraph, type WorldData,
 } from '@ironfronts/game-core';
 import type { PlayerProjection, ProjectionDelta, PublicCountry } from '@ironfronts/protocol';
@@ -54,22 +55,45 @@ export function projectFor(
         ),
       };
     }
+    // Cached so the identical (order, position) pathfinding call below isn't
+    // repeated for an own army — projectArmyView always mirrors x/z from
+    // state.armies, so army.x/z === source.x/z and the result is identical.
+    let ownOrderRoute: ReturnType<typeof orderRouteForClient> | undefined;
     if (graph && army.own) {
       const order = state.armies[army.id]?.order;
       const route = order && orderRouteForClient(order, graph, army.x, army.z);
+      ownOrderRoute = route || null;
       if (route) projected = { ...projected, moveRoute: route, moveIntent: order!.intent };
     }
     if (graph && army.status !== 'unknown' && gameHoursPerRealSecond > 0) {
       const source = state.armies[army.id];
+      if (source?.navalCrossing
+        && (source.status === 'embarking' || source.status === 'disembarking')) {
+        projected = {
+          ...projected,
+          navalPhase: {
+            kind: source.status,
+            durationMs: GAME_PACE.movement.navalDwellHours / gameHoursPerRealSecond * 1_000,
+            remainingMs: Math.max(0, source.navalCrossing.hoursRemaining / gameHoursPerRealSecond * 1_000),
+            sampledAtEpochMs,
+          },
+        };
+      }
       const leg = source ? currentMovementLeg({ state, world, graph }, source) : null;
       if (leg && leg.worldUnitsPerGameHour > 0) {
-        const route = source!.order ? orderRouteForClient(source!.order, graph, source!.x, source!.z) ?? undefined : undefined;
+        const route = !source!.order ? undefined
+          : army.own ? (ownOrderRoute ?? undefined)
+          : orderRouteForClient(source!.order, graph, source!.x, source!.z) ?? undefined;
         projected = {
           ...projected,
           motion: {
             sampledAtEpochMs, generation: state.clock.generation ?? 0,
             targetX: leg.targetX,
             targetZ: leg.targetZ,
+            progress: (source!.order?.edgeProgress ?? 0) + leg.distance > 0
+              ? Math.min(1, Math.max(0,
+                (source!.order?.edgeProgress ?? 0) / ((source!.order?.edgeProgress ?? 0) + leg.distance),
+              )) : 1,
             route,
             durationMs: leg.distance / (leg.worldUnitsPerGameHour * gameHoursPerRealSecond) * 1_000,
           },
@@ -111,6 +135,10 @@ export function projectFor(
       .map((message) => ({ ...message }))
       .sort((a, b) => a.sentAtTick - b.sentAtTick || a.id.localeCompare(b.id)),
     proposals: Object.values(state.diplomacyProposals ?? {})
+      .filter((proposal) => proposal.fromCountryId === viewerCountryId || proposal.toCountryId === viewerCountryId)
+      .map((proposal) => ({ ...proposal }))
+      .sort((a, b) => a.createdAtTick - b.createdAtTick || a.id.localeCompare(b.id)),
+    tradeProposals: Object.values(state.resourceTradeProposals ?? {})
       .filter((proposal) => proposal.fromCountryId === viewerCountryId || proposal.toCountryId === viewerCountryId)
       .map((proposal) => ({ ...proposal }))
       .sort((a, b) => a.createdAtTick - b.createdAtTick || a.id.localeCompare(b.id)),
@@ -166,13 +194,13 @@ export function projectFor(
       shortages: structuredClone(own.shortages ?? {}),
       warheads: Math.floor(own.warheads ?? 0),
       phase: own.phase ?? 1,
-      technologies: { infantry: 1, resources: 1, training: 1, hybrid: 1, armored: 1, ...(own.technologies ?? {}) },
-      research: own.research ? { ...own.research } : undefined,
+      technologies: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, ...(own.technologies ?? {}) },
+      researchSlots: (own.researchSlots ?? [own.research ?? null, null]).map((research) =>
+        research ? { ...research } : null),
     } : null,
     relations: { ...state.relations },
     weather: state.weather ? { ...state.weather } : undefined,
     diplomacy,
-    outcome: state.outcome ? { ...state.outcome } : undefined,
   });
 }
 
@@ -326,7 +354,6 @@ export function diffProjection(previous: PlayerProjection, next: PlayerProjectio
   if (!same(previous.ownCountry, next.ownCountry)) delta.changed.ownCountry = next.ownCountry;
   if (!same(previous.weather, next.weather)) delta.changed.weather = next.weather;
   if (!same(previous.diplomacy, next.diplomacy)) delta.changed.diplomacy = next.diplomacy;
-  if (!same(previous.outcome, next.outcome)) delta.changed.outcome = next.outcome;
   for (const key of COLLECTIONS) {
     const before = (previous[key] ?? {}) as Record<string, unknown>;
     const after = (next[key] ?? {}) as Record<string, unknown>;

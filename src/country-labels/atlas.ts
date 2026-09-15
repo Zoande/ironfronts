@@ -1,4 +1,4 @@
-import type { CountryRecord } from '../types';
+import type { CountryRecord } from '../rendering/types';
 
 export interface CountryLabelGlyph {
   u0: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gameplayProvinceId, resolvePrimaryClick } from '../src/picking';
+import { gameplayProvinceId, resolvePrimaryClick } from '../src/rendering/picking';
 
 describe('resolvePrimaryClick', () => {
   it('selects the province under a normal left-click', () => {

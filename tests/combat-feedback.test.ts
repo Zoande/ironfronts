@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 const notifications = readFileSync(path.join(root, 'src/ui/notifications.ts'), 'utf8');
 
 describe('attack-order feedback', () => {
@@ -25,7 +25,9 @@ describe('attack-order feedback', () => {
   it('drives distinct world cursors for rally placement and ground-order aiming', () => {
     const fn = main.slice(main.indexOf('const updateWorldCursor ='), main.indexOf('canvas.addEventListener(\'pointermove\''));
     expect(fn).toContain('cursors/cursor-rally.png');
-    expect(fn).toMatch(/awaitingRallyTarget && selectedProvinceId !== null/);
+    // Shown whenever an own city is selected and no army is armed for an
+    // order — right-click sets/clears the rally directly, no arm step.
+    expect(fn).toMatch(/selectedProvinceId !== null[\s\S]{0,120}session\.ownsProvince\(selectedProvinceId\)/);
     // move / split / retreat aiming get a precision cursor, not the default arrow
     expect(fn).toMatch(/targetingMode === 'move' \|\| targetingMode === 'split' \|\| targetingMode === 'retreat'/);
   });
@@ -120,7 +122,7 @@ describe('combat huddle (visual-only positioning)', () => {
 describe('continuous battle FX (gunfire, smoke stalk, city-under-siege overlay)', () => {
   it('spawns ongoing FX per authoritative battle-front cluster, at the same centroid the huddle uses, gated on camera LOD', () => {
     const start = main.indexOf('function spawnOngoingBattleFx');
-    const block = main.slice(start, main.indexOf('\nlet campaignOutcomeShown', start));
+    const block = main.slice(start, main.indexOf('\nfunction drainSessionEvents', start));
     expect(block).toContain('effectDensityForDistance(lastCombatCameraDistance)');
     // Groups the same way the huddle above does — a cluster only exists
     // because a fully-visible engaged army reported that front id, so no

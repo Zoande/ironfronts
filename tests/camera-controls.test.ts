@@ -3,9 +3,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const camera = readFileSync(path.join(root, 'src/camera.ts'), 'utf8');
-const renderer = readFileSync(path.join(root, 'src/renderer.ts'), 'utf8');
-const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+const camera = readFileSync(path.join(root, 'src/rendering/camera.ts'), 'utf8');
+const renderer = readFileSync(path.join(root, 'src/rendering/renderer.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 
 /** Playtest #2 + #6: deterministic top-down spawn, and right-click issues orders. */
 describe('camera + order controls', () => {
@@ -37,10 +37,19 @@ describe('camera + order controls', () => {
     expect(renderer).toMatch(/addEventListener\('contextmenu'[\s\S]{0,120}onMapCommand\?\.\(/);
     const start = main.indexOf('function handleMapCommand(');
     const body = main.slice(start, main.indexOf('function selectArmy(', start));
-    expect(body).toContain('if (!selectedArmyId || !session.ownsArmy(selectedArmyId)) return false;');
+    expect(body).toContain('if (!selectedArmyId || !session.ownsArmy(selectedArmyId)) {');
     expect(body).toContain('session.orderAttackArmy(selectedArmyId, targetArmyId)');
     expect(body).toContain("session.orderMove(selectedArmyId, ground[0], ground[1], 'move')");
     // A direct order clears any half-armed targeting mode.
     expect(body).toContain('targetingMode = null;');
+  });
+
+  it('right-click also places/clears the rally point of a selected own city when no army is selected', () => {
+    const start = main.indexOf('function handleMapCommand(');
+    const body = main.slice(start, main.indexOf('function selectArmy(', start));
+    // Right-clicking the selected city itself clears its rally point...
+    expect(body).toMatch(/clickedProvinceId === selectedProvinceId[\s\S]{0,80}session\.clearRally\(selectedProvinceId/);
+    // ...right-clicking anywhere else in owned/discovered ground sets it there.
+    expect(body).toContain('session.setRally(selectedProvinceId, ground[0], ground[1],');
   });
 });

@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173",
+    "dev:all": "node scripts/dev-all.mjs",
+    "reset:data": "node scripts/reset-data.mjs",
     "auth:dev": "tsx watch apps/auth-server/src/main.ts",
     "pregame:dev": "npm run build:world",
     "game:dev": "tsx watch apps/game-server/src/main.ts",
@@ -17,7 +19,8 @@
     "build:infantry-model": "node scripts/build-infantry-model.mjs",
     "build:tank-model": "node scripts/build-tank-model.mjs",
     "build": "npm run build:world && npm run build --workspaces --if-present && tsc --noEmit && vite build",
-    "check": "npm run check --workspaces --if-present && tsc --noEmit && npm run lint:scripts && npm run test:architecture && vitest run",
+    "check": "npm run check --workspaces --if-present && tsc --noEmit && npm run lint:scripts && npm run check:dead-code && npm run test:architecture && vitest run",
+    "check:dead-code": "node scripts/dead-code-check.mjs",
     "lint:scripts": "eslint \"scripts/**/*.mjs\"",
     "preview": "vite preview",
     "pretest": "npm run build:world",

@@ -15,14 +15,14 @@ const state = () => ({ simulationTick:0,viewerCountryId:1,startCamera:{x:0,z:0,d
   provinceOwners:{},provinceBuildings:{},provinceActions:{},productionQueues:{},constructionQueues:{},rallyPoints:{},armies:{},resourceNodes:{},ownCountry:null,relations:{} });
 function handshake(socket: Socket, revision=0, debugEnabled=false, capabilities: string[] = []) {
   socket.open();
-  socket.message({type:'hello',gameId:'world-at-war-2',gameVersion:'world-at-war@4',protocolVersion:4,capabilities,
+  socket.message({type:'hello',gameId:'world-at-war-2',gameVersion:'world-at-war@4',protocolVersion:5,capabilities,
     world:{version:'12',hash:'a'.repeat(64),assetBaseUrl:'http://world',artifactHashes:{}},countryId:1,debugEnabled});
   socket.message({type:'baseline',revision,state:state(),catalogs:{units:[],buildings:[]},clock:{gameStartedAtEpochMs:0,gameEpochMs:0,serverEpochMs:0,speed:1,generation:0,utcOffsetMinutes:120}});
 }
 beforeEach(()=>{
   vi.useFakeTimers();vi.stubGlobal('window',globalThis);vi.stubGlobal('WebSocket',Socket);Socket.instances=[];
   vi.mocked(connectGame).mockClear();
-  vi.mocked(connectGame).mockResolvedValue({protocolVersion:4,websocketUrl:'ws://localhost',ticket:'ticket'} as Awaited<ReturnType<typeof connectGame>>);
+  vi.mocked(connectGame).mockResolvedValue({protocolVersion:5,websocketUrl:'ws://localhost',ticket:'ticket'} as Awaited<ReturnType<typeof connectGame>>);
 });
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('connection handshake cleanup',()=>{

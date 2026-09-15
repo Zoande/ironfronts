@@ -1,10 +1,14 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 4 as const;
+export const PROTOCOL_VERSION = 5 as const;
 export const GAME_ID = 'world-at-war-2' as const;
 export const GAME_VERSION = 'world-at-war@4' as const;
 
 const confirmedWars = z.array(z.number().int().positive()).optional();
+const tradeLegSchema = z.object({
+  resource: z.enum(['funds', 'manpower', 'food', 'stone', 'metal', 'oil']),
+  amount: z.number().int().nonnegative().max(100_000),
+});
 const attackTargetSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('province'), provinceId: z.number().int().nonnegative(),
@@ -30,7 +34,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('extract'), armyId: z.string(), resource: z.enum(['food', 'stone', 'metal', 'oil']) }),
   z.object({ type: z.literal('produce'), provinceId: z.number().int().nonnegative(), unitTypeId: z.string() }),
   z.object({ type: z.literal('build'), provinceId: z.number().int().nonnegative(), buildingId: z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']) }),
-  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'training', 'hybrid', 'armored']) }),
+  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']) }),
   z.object({ type: z.literal('setRally'), provinceId: z.number().int().nonnegative(), target: z.object({ x: z.number().finite(), z: z.number().finite() }).nullable() }),
   z.object({
     type: z.literal('sendDiplomaticMessage'),
@@ -52,6 +56,18 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('strike'), provinceId: z.number().int().nonnegative(),
     x: z.number().finite(), z: z.number().finite(),
+  }),
+  z.object({
+    type: z.literal('marketTrade'), action: z.enum(['buy', 'sell']),
+    resource: z.enum(['manpower', 'food', 'stone', 'metal', 'oil']),
+    amount: z.number().int().positive().max(5_000),
+  }),
+  z.object({
+    type: z.literal('proposeResourceTrade'), targetCountryId: z.number().int().positive(),
+    offer: tradeLegSchema, request: tradeLegSchema,
+  }),
+  z.object({
+    type: z.literal('respondResourceTrade'), proposalId: z.string().min(1).max(100), accept: z.boolean(),
   }),
 ]);
 export type CommandPayload = z.infer<typeof commandPayloadSchema>;
@@ -115,6 +131,22 @@ export interface DiplomacyProposal {
   resolvedAtTick?: number;
 }
 
+export interface TradeLeg {
+  resource: 'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil';
+  amount: number;
+}
+
+export interface ResourceTradeProposal {
+  id: string;
+  fromCountryId: number;
+  toCountryId: number;
+  offer: TradeLeg;
+  request: TradeLeg;
+  status: 'pending' | 'accepted' | 'declined' | 'withdrawn';
+  createdAtTick: number;
+  resolvedAtTick?: number;
+}
+
 export interface CombatRateModifiers {
   frontageUsed: number;
   frontageLimit: number;
@@ -165,9 +197,17 @@ export interface ProjectedArmy {
   /** Next authoritative movement waypoint and wall-clock time remaining. */
   motion?: {
     targetX: number; targetZ: number; durationMs: number;
+    /** 0..1 progress through the current road/sea edge at sample time. */
+    progress?: number;
     /** Remaining authoritative road polyline, beginning at the sampled position. */
     route?: ReadonlyArray<{ x: number; z: number }>;
     sampledAtEpochMs?: number; generation?: number;
+  };
+  /** Authoritative timed port phase. The normal motion projection resumes
+   * while the army is at sea. */
+  navalPhase?: {
+    kind: 'embarking' | 'disembarking';
+    durationMs: number; remainingMs: number; sampledAtEpochMs: number;
   };
   actions?: { canExtract: boolean; extractionProvinceId: number | null; extractableResources: Array<'food' | 'stone' | 'metal' | 'oil'>; extractReason?: string };
   shortage?: {
@@ -245,13 +285,9 @@ export interface PlayerProjection {
   diplomacy?: {
     messages: DiplomacyMessage[];
     proposals: DiplomacyProposal[];
+    tradeProposals: ResourceTradeProposal[];
   };
   /** Set once the campaign is decided from the viewer's point of view. */
-  outcome?: {
-    result: 'victory' | 'defeat';
-    reason: string;
-    atGameHours: number;
-  };
 }
 
 /**
@@ -291,7 +327,7 @@ export type ProjectionDelta = {
 };
 
 export type ServerMessage =
-  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 4; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean }
+  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 5; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean }
   | { type: 'baseline'; revision: number; state: PlayerProjection; catalogs: PresentationCatalogs; clock: GameClockSync }
   | { type: 'delta'; fromRevision: number; revision: number; delta: ProjectionDelta; events: FilteredEvent[] }
   | { type: 'clockSync'; clock: GameClockSync }
@@ -328,7 +364,7 @@ export interface GameTicketClaims {
   gameId: string;
   countryId: number;
   audience: 'game-server';
-  protocolVersion: 4;
+  protocolVersion: 5;
   expiresAt: number;
   nonce: string;
 }
@@ -338,7 +374,7 @@ export interface GameLobby {
   gameId: string;
   name: string;
   gameVersion: string;
-  protocolVersion: 4;
+  protocolVersion: 5;
   assignedCountryId: number | null;
   countries: LobbyCountry[];
 }
@@ -393,7 +429,7 @@ export interface SessionResponse {
   assignment?: { gameId: string; countryId: number } | null;
   profile?: CommanderProfile;
 }
-export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 4 }
+export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 5 }
 
 export const credentialsSchema = z.object({
   username: z.string().trim().min(3).max(32),

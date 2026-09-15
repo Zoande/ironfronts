@@ -68,18 +68,12 @@ export class MusicDirector {
   }
 
   async setState(next: MusicState, options: { force?: boolean } = {}): Promise<void> {
-    if (this.state === next && next !== 'victory' && !options.force) return;
+    if (this.state === next && !options.force) return;
 
     this.state = next;
     this.generation += 1;
     const generation = this.generation;
     this.cancelTimer();
-
-    if (next === 'victory') {
-      const victory = TRACK_BY_ID.get('victorious');
-      if (victory) await this.playTrack(victory, next, generation, 0.45);
-      return;
-    }
 
     if (next === 'opening') {
       const opening = TRACK_BY_ID.get('first-sighting');
@@ -185,7 +179,6 @@ export class MusicDirector {
   private onTrackEnded(state: MusicState, generation: number): void {
     if (!this.isCurrent(state, generation)) return;
 
-    if (state === 'victory') return;
     if (state === 'opening') {
       void this.setState('peace');
       return;

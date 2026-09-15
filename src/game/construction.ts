@@ -4,7 +4,7 @@ import type { ConstructionOrder, ProvinceBuildings, ResourceBuildingId, Stockpil
 import type { BuildingId, MilitaryBuildingId } from './units/unit-types';
 import { BUILDING_REQUIRED_PHASE } from './phase';
 import { RESOURCE_FOR_BUILDING, maximumResourceTier } from './economy/resources';
-import { technologyBranchForBuilding, technologyLevels } from './technology';
+import { TECHNOLOGY_LABELS, technologyBranchForBuilding, technologyLevels } from './technology';
 
 interface TierRecipe { readonly cost: Partial<Stockpile>; readonly work: number }
 interface BuildingDef {
@@ -105,7 +105,7 @@ function eligibility(ctx: SimContext, provinceId: number, buildingId: BuildingId
   const techBranch = technologyBranchForBuilding(buildingId);
   const techLevel = countryTechnology[techBranch];
   if (targetTier > techLevel) {
-    return { id: buildingId, targetTier, affordable: false, reason: `Requires ${techBranch} technology Level ${targetTier}.` };
+    return { id: buildingId, targetTier, affordable: false, reason: `Requires ${TECHNOLOGY_LABELS[techBranch]} Level ${targetTier}.` };
   }
   if (def.kind === 'military') {
     if (!urban) return { id: buildingId, targetTier, affordable: false, reason: 'Military buildings require an urban province.' };

@@ -135,7 +135,6 @@ export class GameConnection extends EventTarget {
         let message: ServerMessage;
         try { message = serverMessageSchema.parse(JSON.parse(String(event.data))); }
         catch (error) {
-          console.error('[game-connection] Invalid server message', error);
           this.dispatchEvent(new CustomEvent('connection-error', {
             detail: 'The server sent an invalid protocol message.',
           }));
@@ -149,6 +148,7 @@ export class GameConnection extends EventTarget {
         if (message.type === 'hello') {
           hello = true;
           this.diagnosticUploadEnabled = message.capabilities.includes('client-diagnostics');
+          if (!this.diagnosticUploadEnabled) this.diagnosticBacklog.length = 0;
           this.debugEnabled = message.debugEnabled;
           this.dispatchEvent(new Event('debug-access'));
           if (this.world && this.world.hash !== message.world.hash) {
@@ -332,12 +332,15 @@ export class GameConnection extends EventTarget {
 
   private trace(level: 'debug' | 'info' | 'warn' | 'error', event: string,
     fields: DiagnosticFields = {}): void {
-    const record = { timestamp: new Date().toISOString(), source: 'browser', event, ...fields };
-    const method = level === 'debug' ? 'debug' : level;
-    console[method]('[ironfronts]', record);
     const boundedFields = Object.fromEntries(Object.entries(fields).slice(0, 30).map(([key, value]) => [
       key.slice(0, 80), typeof value === 'string' ? value.slice(0, 1_000) : value,
     ])) as DiagnosticFields;
+    const consoleFields = Object.fromEntries(Object.entries(boundedFields).map(([key, value]) => [
+      key, typeof value === 'string' ? value.slice(0, 240) : value,
+    ]));
+    if (level === 'error') console.error('[ironfronts]', {
+      timestamp: new Date().toISOString(), source: 'browser', event, ...consoleFields,
+    });
     const entry = { level, event: event.slice(0, 80), clientEpochMs: Date.now(), fields: boundedFields };
     if (this.status !== 'ready' || this.socket?.readyState !== WebSocket.OPEN) {
       this.diagnosticBacklog.push(entry);

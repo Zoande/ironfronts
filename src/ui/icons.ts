@@ -12,6 +12,8 @@
  * No Unicode / emoji glyphs anywhere in the player HUD.
  */
 
+import infantryTechUrl from './assets/units/infantry.png?url';
+
 const pngUrls = import.meta.glob('./assets/icons/0ad/**/*.png', {
   eager: true, query: '?url', import: 'default',
 }) as Record<string, string>;
@@ -33,18 +35,22 @@ const ironfrontsPng = (name: string): string => ironfrontsPngUrls[`./assets/icon
 export type IconName =
   | 'funds' | 'manpower' | 'food' | 'metal' | 'oil' | 'industry'
   | 'mode-strategic' | 'mode-political' | 'mode-diplomacy' | 'mode-terrain'
-  | 'diplomacy' | 'economy' | 'objectives' | 'events' | 'provinces'
-  | 'resource-overlay' | 'close' | 'focus' | 'expand' | 'system'
+  | 'diplomacy' | 'economy' | 'objectives' | 'events' | 'provinces' | 'trade'
+  | 'resource-overlay' | 'close' | 'focus' | 'expand' | 'system' | 'rally'
   | 'weather-clear' | 'weather-rain'
   | 'note-warning' | 'note-combat' | 'note-completed' | 'note-diplomacy' | 'note-information'
   | 'node-stone' | 'node-metal' | 'node-oil' | 'resource-water'
   | 'cmd-move' | 'cmd-attack' | 'cmd-retreat' | 'cmd-split' | 'cmd-stop' | 'cmd-extract'
   | 'cmd-patrol' | 'cmd-garrison'
-  | 'unit-engineer' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank'
+  | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank' | 'unit-artillery'
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
-  | 'stat-health' | 'stat-attack' | 'stat-defence' | 'stat-speed' | 'stat-troops'
-  | 'structure-barracks' | 'structure-plant' | 'structure-ordnance'
+  | 'tech-militia' | 'tech-commandos'
+  | 'tech-navy' | 'tech-airforce'
+  | 'stat-health' | 'stat-attack' | 'stat-defence' | 'stat-speed' | 'stat-troops' | 'supply'
+  | 'activity-embark' | 'activity-disembark'
+  | 'structure-barracks' | 'structure-plant' | 'structure-ordnance' | 'structure-missile'
+  | 'building-fields' | 'building-quarry' | 'building-mine' | 'building-oil-pump'
   | 'structure-fortress' | 'structure-city'
   | 'stance-attack' | 'stance-attack-defend' | 'stance-defend'
   | 'stance-retreat' | 'stance-defend-retreat'
@@ -68,6 +74,8 @@ const ICONS: Record<IconName, IconDef> = {
   objectives: { kind: 'img', value: png('objectives') },
   events: { kind: 'svg', value: svg('event') },
   provinces: { kind: 'svg', value: svg('provinces') },
+  trade: { kind: 'svg', value: svg('trade') },
+  rally: { kind: 'img', value: png('focus-rally') },
   'resource-overlay': { kind: 'svg', value: svg('pickaxe') },
   close: { kind: 'svg', value: svg('close') },
   focus: { kind: 'svg', value: svg('focus') },
@@ -95,23 +103,40 @@ const ICONS: Record<IconName, IconDef> = {
   'cmd-patrol': { kind: 'img', value: png('patrol') },
   'cmd-garrison': { kind: 'img', value: png('garrison') },
   'unit-engineer': { kind: 'img', value: ironfrontsPng('unit-engineer-icon') },
+  'unit-infantry': { kind: 'img', value: infantryTechUrl },
   'unit-armored-car': { kind: 'img', value: ironfrontsPng('unit-armored-car-icon') },
   'unit-light-tank': { kind: 'img', value: ironfrontsPng('unit-light-tank-icon') },
   'unit-medium-tank': { kind: 'img', value: ironfrontsPng('unit-medium-tank-icon') },
+  'unit-artillery': { kind: 'img', value: ironfrontsPng('unit-artillery-icon') },
   'marker-infantry': { kind: 'img', value: ironfrontsPng('marker-infantry') },
   'marker-engineer': { kind: 'img', value: ironfrontsPng('marker-engineer') },
   'marker-armored-car': { kind: 'img', value: ironfrontsPng('marker-armored-car') },
   'marker-light-tank': { kind: 'img', value: ironfrontsPng('marker-light-tank') },
   'marker-medium-tank': { kind: 'img', value: ironfrontsPng('marker-medium-tank') },
   'marker-artillery': { kind: 'img', value: ironfrontsPng('marker-artillery') },
+  'tech-militia': { kind: 'svg', value: svg('tech-militia') },
+  'tech-commandos': { kind: 'svg', value: svg('tech-commandos') },
+  'tech-navy': { kind: 'svg', value: svg('tech-navy') },
+  'tech-airforce': { kind: 'svg', value: svg('tech-airforce') },
   'stat-health': { kind: 'img', value: png('heal') },
   'stat-attack': { kind: 'svg', value: svg('crossed-blades') },
   'stat-defence': { kind: 'svg', value: svg('shield') },
   'stat-speed': { kind: 'svg', value: svg('speed') },
   'stat-troops': { kind: 'svg', value: svg('troops') },
+  supply: { kind: 'svg', value: svg('supply') },
+  'activity-embark': { kind: 'svg', value: svg('activity-embark') },
+  'activity-disembark': { kind: 'svg', value: svg('activity-disembark') },
   'structure-barracks': { kind: 'img', value: ironfrontsPng('structure-barracks-icon') },
   'structure-plant': { kind: 'img', value: ironfrontsPng('structure-tank-plant-icon') },
   'structure-ordnance': { kind: 'img', value: ironfrontsPng('structure-ordnance-icon') },
+  // Separate catalogue keys deliberately share shipped art for now. Keeping
+  // them distinct lets each structure/level receive its own art later without
+  // changing technology, province, or dossier code.
+  'structure-missile': { kind: 'img', value: ironfrontsPng('structure-ordnance-icon') },
+  'building-fields': { kind: 'img', value: png('food') },
+  'building-quarry': { kind: 'img', value: png('stone') },
+  'building-mine': { kind: 'img', value: png('metal') },
+  'building-oil-pump': { kind: 'svg', value: svg('oil') },
   // Reserved — committed painterly art (project owner, see ASSET_CREDITS.md)
   // with no wired mechanic yet: no fortress / city building, no army-stance system.
   'structure-fortress': { kind: 'img', value: ironfrontsPng('fortress') },
@@ -143,6 +168,11 @@ export function createIcon(name: IconName, className = ''): HTMLElement {
   }
   return wrap;
 }
+
+/** Icon for a raw stockpile resource key (as used in cost/deposit objects). */
+export const RESOURCE_ICON: Record<'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil', IconName> = {
+  funds: 'funds', manpower: 'manpower', food: 'food', stone: 'node-stone', metal: 'metal', oil: 'oil',
+};
 
 export function iconMarkup(name: IconName, className = ''): string {
   const def = ICONS[name];

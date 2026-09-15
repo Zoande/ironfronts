@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmptyRenderWorkload, PerformanceMonitor } from '../src/performance-monitor';
+import { createEmptyRenderWorkload, PerformanceMonitor } from '../src/rendering/performance-monitor';
 
 describe('PerformanceMonitor', () => {
   it('reports frame percentiles, phase costs, GPU timing, and workload', () => {

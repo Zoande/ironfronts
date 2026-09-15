@@ -1,3 +1,10 @@
+import { iconMarkup, RESOURCE_ICON } from './icons';
+
+export interface TooltipCostItem {
+  readonly resource: keyof typeof RESOURCE_ICON;
+  readonly amount: number;
+}
+
 /** Shared accessible popover tree used by every HUD control. */
 export interface TooltipBranch {
   readonly label: string;
@@ -9,6 +16,9 @@ export interface TooltipContent {
   readonly description?: string;
   readonly shortcut?: string;
   readonly disabledReason?: string;
+  /** Prefer this over `cost` — icon + number per resource, never spelled-out text. */
+  readonly costItems?: readonly TooltipCostItem[];
+  /** @deprecated plain-text cost fallback; use `costItems`. */
   readonly cost?: string;
   readonly eta?: string;
   readonly status?: string;
@@ -35,8 +45,13 @@ export function renderTooltipHtml(content: TooltipContent): string {
   const rows: string[] = [`<strong class="ifg-tip__title">${esc(content.title)}</strong>`];
   const detail = content.disabledReason ?? content.description;
   if (detail) rows.push(`<span class="ifg-tip__detail${content.disabledReason ? ' is-blocked' : ''}">${esc(detail)}</span>`);
+  if (content.costItems?.length) {
+    const chips = content.costItems.map((item) =>
+      `<span class="ifg-tip__cost-chip">${iconMarkup(RESOURCE_ICON[item.resource], 'ifg-tip__cost-icon')}<b>${item.amount.toLocaleString()}</b></span>`).join('');
+    rows.push(`<span class="ifg-tip__cost">${chips}</span>`);
+  }
   const meta: string[] = [];
-  if (content.cost) meta.push(`<span class="ifg-tip__meta"><i>Cost</i>${esc(content.cost)}</span>`);
+  if (!content.costItems?.length && content.cost) meta.push(`<span class="ifg-tip__meta"><i>Cost</i>${esc(content.cost)}</span>`);
   if (content.eta) meta.push(`<span class="ifg-tip__meta"><i>Time</i>${esc(content.eta)}</span>`);
   if (content.status) meta.push(`<span class="ifg-tip__meta"><i>Status</i>${esc(content.status)}</span>`);
   if (meta.length) rows.push(`<span class="ifg-tip__metas">${meta.join('')}</span>`);

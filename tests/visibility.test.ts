@@ -2,7 +2,7 @@ import { mat4, vec3 } from 'gl-matrix';
 import { describe, expect, it } from 'vitest';
 import {
   extractFrustumPlanes, sphereIntersectsFrustum, sphereIntersectsHorizontalWorldWindow, WORLD_COPY_INDICES,
-} from '../src/visibility';
+} from '../src/rendering/visibility';
 
 function createTestFrustum(): Float32Array {
   const projection = mat4.create();

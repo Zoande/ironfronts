@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * The number of building archetypes must agree in three unrelated places:
- * how many meshes the renderer allocates (src/renderer.ts), how many
+ * how many meshes the renderer allocates (src/rendering/renderer.ts), how many
  * archetype bins scripts/build-world.mjs's chunker groups building instances
- * into, and how many branches src/scene-meshes.ts actually implements. A
+ * into, and how many branches src/rendering/scene-meshes.ts actually implements. A
  * mismatch does not error — chunk-visibility.ts's buildPropVisibility clamps
  * `Math.min(group, groupMeshes.length - 1)`, so an under-sized renderer array
  * silently redraws a higher archetype's buildings using a lower archetype's
@@ -15,9 +15,9 @@ import { describe, expect, it } from 'vitest';
  * whichever materials that mesh happens to have. This is a cheap, GPU-free
  * regression test against exactly that mismatch.
  */
-const renderer = readFileSync(path.join(process.cwd(), 'src/renderer.ts'), 'utf8');
+const renderer = readFileSync(path.join(process.cwd(), 'src/rendering/renderer.ts'), 'utf8');
 const buildWorld = readFileSync(path.join(process.cwd(), 'scripts/build-world.mjs'), 'utf8');
-const sceneMeshes = readFileSync(path.join(process.cwd(), 'src/scene-meshes.ts'), 'utf8');
+const sceneMeshes = readFileSync(path.join(process.cwd(), 'src/rendering/scene-meshes.ts'), 'utf8');
 
 describe('building archetype count agrees across renderer, world-build chunker, and mesh generator', () => {
   it('renderer buildingMeshes length matches build-world.mjs\'s chunker groupCount for buildings', () => {

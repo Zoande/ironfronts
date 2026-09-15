@@ -1,7 +1,7 @@
 import {
   armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, infantryModelShader, infrastructureShader,
   lineShader, mapMarkerShader, polarCapShader, propShader, rainShader, tankModelShader, terrainShader, waterShader, waterwayShader,
-} from './shaders';
+} from '../shaders';
 
 export interface RendererLayouts {
   common: GPUBindGroupLayout;

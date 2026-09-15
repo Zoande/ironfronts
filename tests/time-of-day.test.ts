@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advanceHour, calculateTimeOfDay, clampTimeMultiplier, formatClock, parseClock, stageForHour, wrapHour,
-} from '../src/time-of-day';
+} from '../src/rendering/time-of-day';
 
 describe('time of day', () => {
   it('wraps clock hours and advances a ten-minute day at the selected multiplier', () => {

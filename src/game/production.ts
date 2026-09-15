@@ -12,7 +12,7 @@ import type { SimContext } from './sim-context';
 import type { ProductionOrder } from './game-state';
 import type { BuildingId } from './units/unit-types';
 import { BASE_UNIT_IDS, UNIT_TYPE_BY_ID, baseUnitId, unitType } from './units/unit-catalog';
-import { technologyLevels } from './technology';
+import { TECHNOLOGY_LABELS, technologyLevels } from './technology';
 import { makeGroup, mergeStacks, type ArmyStack } from './units/army';
 import { nearestNode } from './movement/graph';
 import { issueMoveOrder } from './units/movement';
@@ -78,7 +78,7 @@ export function queueUnit(
   const country = session.state.countries[countryId];
   if (!country) return { ok: false, reason: 'Unknown country.' };
   if (technologyLevels(country)[type.technology] < type.level) {
-    return { ok: false, reason: `Requires ${type.technology} technology Level ${type.level}.` };
+    return { ok: false, reason: `Requires ${TECHNOLOGY_LABELS[type.technology]} Level ${type.level}.` };
   }
   const highestLevel = Math.min(technologyLevels(country)[type.technology], facilityLevel);
   const highestId = highestLevel === 1 ? type.baseId : `${type.baseId}-l${highestLevel}`;

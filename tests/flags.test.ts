@@ -16,7 +16,6 @@ const worldCountryNames = JSON.parse(readFileSync(path.join(root, 'public/world/
  */
 describe('1939 flag resolver', () => {
   it('gives sovereign belligerents their period flag, not a modern replacement', () => {
-    expect(COUNTRY_FLAG.Germany).toBe('de-1935-1945');
     expect(COUNTRY_FLAG.Italy).toBe('it-1861-1946');
     expect(COUNTRY_FLAG.Greece).toBe('gr-1935-1970');
     expect(COUNTRY_FLAG.Persia).toBe('ir-1925-1979');
@@ -26,9 +25,16 @@ describe('1939 flag resolver', () => {
     expect(COUNTRY_FLAG.Afghanistan).toBe('af-1931-1973');
     expect(COUNTRY_FLAG.Tibet).toBe('tibet-1916-1951');
     expect(COUNTRY_FLAG.Mengjiang).toBe('mengjiang-1939-1945');
-    for (const name of ['Germany', 'Italy', 'Greece', 'Persia', 'Nationalist China', 'Egypt']) {
+    for (const name of ['Italy', 'Greece', 'Persia', 'Nationalist China', 'Egypt']) {
       expect(resolveFlagUrl(name), name).toBeTruthy();
     }
+  });
+
+  // Germany deliberately uses the modern flag rather than the period
+  // (swastika) one, an explicit exception to the "period flag" rule above.
+  it('gives Germany the modern flag, not the period swastika one', () => {
+    expect(COUNTRY_FLAG.Germany).toBe('de');
+    expect(resolveFlagUrl('Germany')).toBeTruthy();
   });
 
   it('resolves colonies to their administering power', () => {
@@ -80,9 +86,28 @@ describe('1939 flag resolver', () => {
     }
   });
 
+  it('every vendored SVG decodes as a real image, not a blank swatch', () => {
+    // Regression: a leading `<!-- comment -->` before an `<?xml ?>` declaration,
+    // or a stray BOM anywhere but byte 0, makes Chrome's <img>-decoder silently
+    // reject the file (naturalWidth 0) even though it fetches fine and looks
+    // like valid SVG — file-existence and licence-comment checks above never
+    // caught this. de-1935-1945 (Germany), su-1936-1955, et-empire,
+    // eg-1922-1958 and cn-roc all shipped broken this way.
+    for (const file of flagFiles) {
+      const raw = readFileSync(path.join(flagsDir, file), 'utf8');
+      expect(raw.indexOf('﻿'), `${file}: stray BOM`).toBe(-1);
+      const commentEnd = raw.indexOf('-->');
+      const declarationStart = raw.indexOf('<?xml');
+      if (commentEnd !== -1 && declarationStart !== -1) {
+        expect(declarationStart, `${file}: <?xml declaration must not follow a leading comment`)
+          .toBeLessThan(commentEnd);
+      }
+    }
+  });
+
   it('documents provenance and complete scenario coverage in docs/flags.md', () => {
     const doc = readFileSync(path.join(root, 'docs/flags.md'), 'utf8');
-    expect(doc).toMatch(/de-1935-1945/);
+    expect(doc).toMatch(/de\.svg/);
     expect(doc).toMatch(/flag-icons/i);
     expect(doc).toMatch(/every country/i);
   });

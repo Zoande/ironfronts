@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const audioManager = readFileSync(
-  path.join(process.cwd(), 'src/audio/audio-manager.ts'),
+  path.join(process.cwd(), 'src/audio/engine/audio-manager.ts'),
   'utf8',
 );
 

@@ -34,6 +34,9 @@ Scope: approved audit items 1–28. This code pass is complete. It deliberately 
 
 ## Source organization
 
+- Browser orchestration now lives under `src/app`, rendering implementation under `src/rendering`, HUD implementation/state under dedicated `src/ui` subfolders, and authoritative state/session code under `src/game/state` and `src/game/session`. Thin compatibility facades preserve supported imports.
+- A runtime reachability check rejects TypeScript modules that are no longer reachable from an application or package entrypoint.
+- Campaign victory/outcome evaluation and its protocol, persistence, UI, and audio surfaces were removed; campaigns continue simulating after capitals or territory are lost.
 - Server scheduling and projection publication are separate from process composition.
 - Combat is divided into damage, fronts, retreat, artillery, capture, constants, and event types.
 - Movement is divided into orders, policy, position, speed, contact, pursuit, naval transit, retreat, heap routing, and spatial indexing.
@@ -44,10 +47,11 @@ Scope: approved audit items 1–28. This code pass is complete. It deliberately 
 
 Protocol and game-state versions are 3; the game ruleset is `world-at-war@3`. Save envelope/runtime versions remain 2. Process downtime is not simulated; only in-process scheduler delay is retained.
 
-Final code validation:
+Refactor validation:
 
-- `npm run check`: workspace/root TypeScript, script lint, architecture checks, and 550 tests across 90 files passed.
-- `npm run build`: generated-world, workspace TypeScript, and production client builds passed.
-- `git diff --check`: passed; only configured LF-to-CRLF working-tree notices were emitted.
+- Workspace/root TypeScript, script lint, architecture checks, the dead-code reachability audit, and the focused refactor regression suites passed.
+- Generated-world, workspace TypeScript, and the production client build passed.
+- The full suite still contains unrelated pre-existing gameplay/balance expectation failures; this organizational refactor does not alter those systems to make stale assertions pass.
+- `git diff --check` passed; only configured LF-to-CRLF working-tree notices were emitted.
 
-No visual tests, deployment, manual live-save edits, or army model asset changes were performed.
+Per the requested scope, no visual/performance tests, deployment, manual live-save edits, or army model asset changes were performed.

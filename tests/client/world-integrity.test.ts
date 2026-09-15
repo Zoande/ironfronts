@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { configureWorldAssetBase, fetchWorldBinary, verifyWorldDescriptor } from '../../src/world-assets';
+import { configureWorldAssetBase, fetchWorldBinary, verifyWorldDescriptor } from '../../src/rendering/world-assets';
 
 const required = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32'];
 const hex = (bytes: ArrayBuffer): string => [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, '0')).join('');

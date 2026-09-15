@@ -114,6 +114,11 @@ async function fetchChunkIndex(): Promise<Record<string, string[]> | null> {
     chunkIndex = fetch(worldAssetUrl('world-chunks.json'), { cache: 'force-cache' }).then(async (response) => {
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`Unable to load world chunk index: ${response.status}`);
+      // A dev server without a real static-file 404 (Vite's SPA fallback
+      // returns 200 + index.html for any unmatched path) means "no index"
+      // too — the split-cloudflare-assets step that produces this file is
+      // production-only and normal local dev never runs it.
+      if (!(response.headers.get('content-type') ?? '').includes('json')) return null;
       const data = await response.json() as { version?: number; chunks?: Record<string, { files: string[] }> };
       if (data.version !== 1 || !data.chunks) throw new Error('World chunk index is invalid.');
       return Object.fromEntries(Object.entries(data.chunks).map(([name, entry]) => [name, entry.files]));

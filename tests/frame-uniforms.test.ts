@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FRAME_UNIFORM_BYTES, FRAME_UNIFORM_FLOATS, FRAME_UNIFORM_OFFSETS, packFrameUniforms,
-} from '../src/frame-uniforms';
+} from '../src/rendering/frame-uniforms';
 
 describe('frame uniform contract', () => {
   it('packs every named field at its explicit aligned offset', () => {

@@ -1,4 +1,4 @@
-import { presentedArmyPosition, type ArmyPickEntry } from '../army-motion';
+import { presentedArmyPosition, type ArmyPickEntry } from '../rendering/army-motion';
 
 /** CPU picking owns the same bounded trajectory uploaded to the marker shader. */
 export class ArmyPicker {

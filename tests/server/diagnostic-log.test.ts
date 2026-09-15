@@ -10,6 +10,12 @@ afterEach(async () => {
 });
 
 describe('diagnostic JSONL log', () => {
+  it('is a no-op when no destination is configured', async () => {
+    const log = new DiagnosticLog();
+    log.write('error', 'game-server', 'sample');
+    await expect(log.flush()).resolves.toBeUndefined();
+  });
+
   it('serializes writes and rotates a bounded current file', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'ironfronts-diagnostics-'));
     directories.push(directory);
