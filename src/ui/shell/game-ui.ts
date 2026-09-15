@@ -737,8 +737,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   pvClose.addEventListener('click', () => actions.clearSelection());
 
   const pvFlagHost = el('span', 'ifg-card__flag');
-  const pvHead = el('header', 'ifg-card__head');
-  const pvHeadText = el('span', 'ifg-card__headtext');
+  const pvHead = el('header', 'ifg-army-panel__header ifg-province-panel__header');
+  const pvHeadText = el('span', 'ifg-army-panel__identity ifg-province-panel__identity');
   pvHeadText.append(pvName, pvSub);
 
   // Set/cleared by right-clicking the map (see main.ts) — a read-only status
@@ -763,7 +763,10 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     pvFocusBtn.disabled = true;
     pvFocusBtn.title = 'Centre map — not available yet';
   }
-  pvHead.append(pvFlagHost, pvHeadText, pvRally, pvFocusBtn, pvClose);
+  const pvHeaderControls = el('span', 'ifg-army-panel__header-controls ifg-province-panel__header-controls');
+  pvHeaderControls.append(pvRally, pvFocusBtn);
+  pvHeadText.prepend(pvFlagHost);
+  pvHead.append(pvHeadText, pvHeaderControls, pvClose);
 
   const pvGrid = el('div', 'ifg-card__grid');
   const pvFieldValue = new Map<ProvinceFieldKey, HTMLElement>();

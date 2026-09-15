@@ -35,9 +35,10 @@ describe('selected army panel containment', () => {
     expect(armyUi).toContain("node('table', 'ifg-army-panel__stat-table')");
     expect(css).toMatch(/\.ifg-army-panel__commands--primary\s*\{[^}]*bottom: calc\(100% \+ 9px\)/s);
     expect(css).toMatch(/\.ifg-army-panel__commands--primary \.ifg-army-panel__command\s*\{[^}]*width: 72px;[^}]*height: 48px;/s);
-    expect(css).toContain("--ifg-skin-control: url('./assets/skins/hud-control-plate.png')");
-    expect(css).toContain("--ifg-skin-building: url('./assets/skins/hud-building-plaque.png')");
-    expect(css).toContain("--ifg-skin-queue: url('./assets/skins/hud-queue-slot.png')");
+    expect(css).toContain("--ifg-skin-panel: url('../assets/skins/hud-panel-frame.png')");
+    expect(css).toContain("--ifg-skin-control: url('../assets/skins/hud-control-plate.png')");
+    expect(css).toContain("--ifg-skin-building: url('../assets/skins/hud-building-plaque.png')");
+    expect(css).toContain("--ifg-skin-queue: url('../assets/skins/hud-queue-slot.png')");
     expect(css).toContain('-webkit-mask-image: var(--ifg-skin-unit-mask);');
     expect(css).toMatch(/\.ifg-army-panel__summary\s*\{[^}]*grid-template-rows: 92px minmax\(0, 1fr\)/s);
     expect(armyUi).toContain('report.append(activity)');
