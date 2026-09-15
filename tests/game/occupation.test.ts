@@ -4,6 +4,7 @@ import type { GameState } from '../../src/game/game-state';
 import { emptyStockpile, GAME_STATE_VERSION } from '../../src/game/game-state';
 import { recomputeIncome } from '../../src/game/economy';
 import { INITIAL_GAME_EPOCH_MS } from '../../src/game/time';
+import { emptyPotential, emptyResourceBuildings } from '../../src/game/economy/resources';
 
 function world(originalOwnerOf: Record<number, number>): WorldData {
   return {
@@ -32,6 +33,12 @@ function state(owners: Record<number, number>): GameState {
     },
     provinceOwners: owners,
     provinceBuildings: {}, productionQueues: {}, constructionQueues: {}, rallyPoints: {},
+    provinceEconomies: {
+      1: {
+        resourcePotential: emptyPotential(), baseProduction: { ...emptyStockpile(), funds: 100 },
+        resourceBuildings: emptyResourceBuildings(), productionCapacity: 1, constructionCapacity: 1,
+      },
+    },
     armies: {}, resourceNodes: {}, relations: {}, battles: {}, battleFronts: {},
     nextArmyId: 1, nextBattleId: 1, nextFrontId: 1, nextOrderId: 1, nextEventId: 1,
   } as unknown as GameState;
