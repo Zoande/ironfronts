@@ -63,7 +63,7 @@ describe('technology presentation', () => {
     expect(technologyTabAfterKey('training', 'Enter')).toBeNull();
   });
 
-  it('provides eight briefings for all six live research branches', () => {
+  it('provides eight compact levels for all six live research branches', () => {
     expect(Object.keys(TECHNOLOGY_BRANCH_PRESENTATION)).toEqual([
       'infantry',
       'resources',
@@ -75,25 +75,18 @@ describe('technology presentation', () => {
 
     for (const branch of Object.values(TECHNOLOGY_BRANCH_PRESENTATION)) {
       expect(branch.levels).toHaveLength(8);
-      expect(branch.levels.every((level) => level.name && level.summary && level.authorization && level.effect)).toBe(true);
+      expect(branch.levels.every((level) => level.effect)).toBe(true);
       expect(branch.levels.map((level) => level.hours)).toEqual([...TECHNOLOGY_HOURS_BY_LEVEL.slice(1)]);
     }
 
-    expect(TECHNOLOGY_BRANCH_PRESENTATION.resources.levels[7].authorization).toBe('Engineer VIII');
-    expect(TECHNOLOGY_BRANCH_PRESENTATION.resourceBuildings.levels[7].authorization).toBe('Tier VIII resource sites');
-    expect(TECHNOLOGY_BRANCH_PRESENTATION.hybrid.levels[7].authorization)
-      .toBe('Armored Car VIII, Artillery VIII, and Missile Sites');
-
     expect(TECHNOLOGY_BRANCH_PRESENTATION.infantry.levels[3].effect)
-      .toContain('1.48× HP · 1.54× firepower · 1.07× movement');
+      .toContain('HP ×1.48 · ATK ×1.54 · SPD ×1.07');
     expect(TECHNOLOGY_BRANCH_PRESENTATION.resourceBuildings.levels[3].effect)
-      .toContain('17/h passive · 11 engineers · 3.25× engineer output');
+      .toBe('+17/h · 11 ENG · OUTPUT ×3.25');
     expect(TECHNOLOGY_BRANCH_PRESENTATION.training.levels[3].effect)
-      .toContain('2.05 work/h');
-    expect(TECHNOLOGY_BRANCH_PRESENTATION.training.levels[3].effect)
-      .toContain('authorized Missile Sites');
+      .toContain('2.05/h · RATE ×');
     expect(TECHNOLOGY_BRANCH_PRESENTATION.hybrid.levels[7].effect)
-      .toContain('Missile Site authorization');
+      .toContain('MISSILE SITE');
   });
 
   it('assigns distinct artwork to every branch and every technology level', () => {
@@ -135,13 +128,11 @@ describe('technology presentation', () => {
     ), 'infantry');
 
     expect(model.inspected.level).toBe(4);
-    expect(model.inspected.name).toBe('Field Signals');
     expect(model.levels.map((level) => level.state)).toEqual([
       'completed', 'completed', 'current', 'researching', 'locked', 'locked', 'locked', 'locked',
     ]);
     expect(model.canResearch).toBe(false);
     expect(model.active?.percent).toBe(38);
-    expect(model.active?.title).toBe('Infantry Doctrine · Level IV');
   });
 
   it('explains when both authoritative research slots are occupied', () => {
@@ -156,7 +147,7 @@ describe('technology presentation', () => {
     expect(model.inspected.level).toBe(3);
     expect(model.levels[2].state).toBe('available');
     expect(model.canResearch).toBe(false);
-    expect(model.blockedReason).toBe('Both research slots are occupied.');
+    expect(model.blockedReason).toBe('No free slot');
   });
 
   it('marks a dependency-blocked next level as locked instead of available', () => {

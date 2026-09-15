@@ -108,10 +108,7 @@ interface TechnologyLineDefinition {
   readonly id: string;
   readonly technology?: TechnologyBranch;
   readonly label: string;
-  readonly shortLabel: string;
   readonly icon: IconName;
-  readonly description: string;
-  readonly unlocks: string;
   readonly comingSoon?: boolean;
 }
 
@@ -119,30 +116,30 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
   id: TechnologyCategory; label: string; icon: IconName; lines: readonly TechnologyLineDefinition[];
 }> = [
   { id: 'infantry', label: 'Infantry', icon: 'unit-infantry', lines: [
-    { id: 'infantry', technology: 'infantry', label: 'Line Infantry', shortLabel: 'Infantry', icon: 'unit-infantry', description: 'Modernises the line battalions that hold and contest territory.', unlocks: 'Stronger infantry variants at every level' },
-    { id: 'militia', label: 'Territorial Militia', shortLabel: 'Militia', icon: 'tech-militia', description: 'A future low-cost defensive troop family.', unlocks: 'Planned troop line', comingSoon: true },
-    { id: 'commandos', label: 'Commandos', shortLabel: 'Commandos', icon: 'tech-commandos', description: 'A future elite infiltration and raiding troop family.', unlocks: 'Planned troop line', comingSoon: true },
+    { id: 'infantry', technology: 'infantry', label: 'Infantry', icon: 'unit-infantry' },
+    { id: 'militia', label: 'Militia', icon: 'tech-militia', comingSoon: true },
+    { id: 'commandos', label: 'Commandos', icon: 'tech-commandos', comingSoon: true },
   ] },
   { id: 'resources', label: 'Resources', icon: 'resource-overlay', lines: [
-    { id: 'engineers', technology: 'resources', label: 'Engineer Corps', shortLabel: 'Engineers', icon: 'unit-engineer', description: 'Improves engineer survivability, mobility and field output.', unlocks: 'Engineer unit levels' },
-    { id: 'infrastructure', technology: 'resourceBuildings', label: 'Resource Infrastructure', shortLabel: 'Infrastructure', icon: 'resource-overlay', description: 'Advances fields, quarries, mines and oil pumps.', unlocks: 'Resource building tiers · prerequisite for advanced engineers' },
+    { id: 'engineers', technology: 'resources', label: 'Engineers', icon: 'unit-engineer' },
+    { id: 'infrastructure', technology: 'resourceBuildings', label: 'Infrastructure', icon: 'resource-overlay' },
   ] },
   { id: 'training', label: 'Training', icon: 'industry', lines: [
-    { id: 'training', technology: 'training', label: 'Training & Industry', shortLabel: 'Facilities', icon: 'structure-barracks', description: 'Expands military training and production methods.', unlocks: 'Barracks · tank plants · ordnance workshops · authorized missile sites' },
+    { id: 'training', technology: 'training', label: 'Facilities', icon: 'structure-barracks' },
   ] },
   { id: 'hybrid', label: 'Support', icon: 'unit-armored-car', lines: [
-    { id: 'hybrid', technology: 'hybrid', label: 'Mobile Support', shortLabel: 'Mobile Support', icon: 'unit-armored-car', description: 'Coordinates reconnaissance vehicles and artillery support.', unlocks: 'Armored cars · artillery · strategic systems at VIII' },
+    { id: 'hybrid', technology: 'hybrid', label: 'Support', icon: 'unit-armored-car' },
   ] },
   { id: 'armored', label: 'Armored', icon: 'unit-medium-tank', lines: [
-    { id: 'armored', technology: 'armored', label: 'Armored Warfare', shortLabel: 'Armor', icon: 'unit-medium-tank', description: 'Improves tank protection, engines and heavy firepower.', unlocks: 'Light and medium tank levels' },
+    { id: 'armored', technology: 'armored', label: 'Armor', icon: 'unit-medium-tank' },
   ] },
   { id: 'navy', label: 'Navy', icon: 'tech-navy', lines: [
-    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future naval vessels and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
-    { id: 'submarines', label: 'Submarine Service', shortLabel: 'Submarines', icon: 'tech-navy', description: 'Future undersea warfare capabilities.', unlocks: 'Planned naval line', comingSoon: true },
+    { id: 'surface-fleet', label: 'Surface', icon: 'tech-navy', comingSoon: true },
+    { id: 'submarines', label: 'Submarines', icon: 'tech-navy', comingSoon: true },
   ] },
   { id: 'airforce', label: 'Air Force', icon: 'tech-airforce', lines: [
-    { id: 'fighters', label: 'Fighter Command', shortLabel: 'Fighters', icon: 'tech-airforce', description: 'Future air-superiority aircraft and doctrine.', unlocks: 'Planned air line', comingSoon: true },
-    { id: 'bombers', label: 'Bomber Command', shortLabel: 'Bombers', icon: 'tech-airforce', description: 'Future strategic and tactical strike aircraft.', unlocks: 'Planned air line', comingSoon: true },
+    { id: 'fighters', label: 'Fighters', icon: 'tech-airforce', comingSoon: true },
+    { id: 'bombers', label: 'Bombers', icon: 'tech-airforce', comingSoon: true },
   ] },
 ];
 
@@ -480,9 +477,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   technologyPanel.setAttribute('aria-modal', 'false');
   technologyPanel.setAttribute('aria-label', 'Technology');
   const techHead = el('header', 'ifg-tech__head');
-  const techHeadCopy = el('span', 'ifg-tech__head-copy');
-  techHeadCopy.append(el('span', 'ifg-tech__eyebrow', 'Directorate of technical development'), el('h2', undefined, 'Technology dossiers'));
-  techHead.append(techHeadCopy, el('span', 'ifg-tech__stamp', 'Restricted'));
+  techHead.append(el('h2', undefined, 'Technology'));
   const techClose = el('button', 'ifg-tech__close');
   techClose.type = 'button';
   techClose.setAttribute('aria-label', 'Close technology');
@@ -570,6 +565,20 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
   };
   const romanLevel = (level: number): string => ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][level - 1] ?? String(level);
+  const technologyStateLabel: Record<TechnologyLevelVisualState, string> = {
+    completed: 'Done',
+    current: 'Current',
+    available: 'Ready',
+    researching: 'Active',
+    locked: 'Locked',
+  };
+  const compactBlockedReason = (reason: string): string => reason
+    .replace(/^Requires /, 'Need ')
+    .replace(/ technology/g, '')
+    .replace(/ Level /g, ' ')
+    .replace(/^Both research slots are occupied\.$/, 'No free slot')
+    .replace(/^Insufficient resources\.$/, 'Not enough resources')
+    .replace(/\.$/, '');
   const technologyArtwork = (url: string, className: string): HTMLImageElement => {
     const image = document.createElement('img');
     image.className = className;
@@ -624,8 +633,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         tabIcon.append(createIcon(category.icon));
       }
       const tabCopy = el('span', 'ifg-tech__tab-copy');
-      tabCopy.append(el('span', undefined, category.label), el('small', undefined,
-        liveLines.length ? `${liveLines.length} active ${liveLines.length === 1 ? 'program' : 'programs'}` : 'Future service'));
+      tabCopy.append(el('span', undefined, category.label));
       tab.append(tabIcon, tabCopy, el('b', undefined, categoryLevel === null ? 'Soon' : romanLevel(categoryLevel)));
       tab.onclick = () => {
         selectedTechTab = category.id;
@@ -664,23 +672,20 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const branchIcon = el('span', 'ifg-tech__branch-icon');
       branchIcon.append(technologyArtwork(model.branch.iconUrl, ''));
       const branchCopy = el('div', 'ifg-tech__branch-copy');
-      const filing = el('span', 'ifg-tech__filing');
-      filing.append(el('span', undefined, model.branch.fileCode), el('span', undefined, `Current standard ${romanLevel(model.currentLevel)}`));
-      branchCopy.append(filing, el('h3', undefined, model.branch.title), el('p', undefined, model.branch.summary), el('small', undefined, model.branch.discipline));
+      branchCopy.append(el('h3', undefined, model.branch.title), el('small', undefined, romanLevel(model.currentLevel)));
       hero.append(branchIcon, branchCopy);
       tree.append(hero);
     }
     const timeline = el('div', 'ifg-tech__timeline');
-    timeline.append(el('span', undefined, 'Available technology'));
-    for (let level = 1; level <= 8; level += 1) timeline.append(el('b', undefined, `Level ${level}`));
+    timeline.append(el('span'));
+    for (let level = 1; level <= 8; level += 1) timeline.append(el('b', undefined, romanLevel(level)));
     tree.append(timeline);
 
     for (const line of current.lines) {
       const row = el('section', `ifg-tech__line${line.comingSoon ? ' is-coming-soon' : ''}`);
       row.dataset.techLine = line.id;
       const label = el('header', 'ifg-tech__line-label');
-      label.append(createIcon(line.icon), el('strong', undefined, line.shortLabel));
-      label.append(el('small', undefined, line.comingSoon ? 'Future troop line' : line.description));
+      label.append(createIcon(line.icon), el('strong', undefined, line.label));
       row.append(label);
       const track = el('div', 'ifg-tech__track');
       const branch = line.technology;
@@ -706,7 +711,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           slot !== null && slot.branch === branch && slot.targetLevel === candidate));
         node.setAttribute('aria-pressed', String(branch === selectedTechnology && candidate === selectedTechnologyLevel));
         node.setAttribute('aria-label', branch && level
-          ? `${line.label}, Level ${romanLevel(candidate)}, ${level.name}, ${visualState}`
+          ? `${line.label}, Level ${romanLevel(candidate)}, ${visualState}`
           : `${line.label}, Level ${romanLevel(candidate)}, coming soon`);
         if (level) {
           const nodeVisual = el('span', 'ifg-tech__node-visual');
@@ -714,10 +719,10 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           if (candidate > 1 && branch !== 'resourceBuildings' && branch !== 'training') {
             nodeVisual.append(createRankInsignia(candidate, 'ifg-tech__node-rank'));
           }
-          node.append(nodeVisual, el('strong', undefined, romanLevel(candidate)), el('span', 'ifg-tech__node-name', level.name),
-            el('small', undefined, level.hours === 0 ? 'Baseline' : `${level.hours}h`));
+          node.append(nodeVisual, el('strong', undefined, romanLevel(candidate)),
+            el('small', undefined, level.hours === 0 ? 'Base' : `${level.hours}h`));
         } else {
-          node.append(createIcon(line.icon), el('strong', undefined, romanLevel(candidate)), el('small', undefined, 'Planned'));
+          node.append(createIcon(line.icon), el('strong', undefined, romanLevel(candidate)));
         }
         if (branch === 'resourceBuildings' && candidate < 8) {
           cell.append(el('i', 'ifg-tech__dependency'));
@@ -726,7 +731,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
           title: `${line.label} · Level ${candidate}`,
           description: branch
             ? technologyLevelUnlockText(branch, candidate)
-            : `${line.description} This technology line is coming soon.`,
+            : 'Coming soon',
           status: branch
             ? visualState === 'completed' || visualState === 'current' ? 'Unlocked'
               : visualState === 'available' ? 'Next'
@@ -747,33 +752,22 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       if (line.comingSoon) row.append(el('div', 'ifg-tech__coming-soon', 'Coming soon'));
       tree.append(row);
     }
-    if (futureCategory) tree.append(el('div', 'ifg-tech__future-veil', `${current.label} technology coming soon`));
+    if (futureCategory) tree.append(el('div', 'ifg-tech__future-veil', `${current.label} · Coming soon`));
 
     if (!futureCategory) {
       const detail = el('section', 'ifg-tech__detail');
       const detailVisual = el('figure', 'ifg-tech__visual');
-      detailVisual.append(
-        technologyArtwork(model.inspected.visualUrl, ''),
-        el('figcaption', undefined, `${model.branch.fileCode} / field plate ${romanLevel(model.inspected.level)}`),
-      );
+      detailVisual.append(technologyArtwork(model.inspected.visualUrl, ''));
       const detailCopy = el('div', 'ifg-tech__briefing');
-      const stateLabels: Record<TechnologyLevelVisualState, string> = {
-        completed: 'Established doctrine',
-        current: 'Current national standard',
-        available: 'Available for development',
-        researching: 'Development in progress',
-        locked: 'Preceding level required',
-      };
       const detailLead = el('span', 'ifg-tech__detail-lead');
-      detailLead.append(el('span', undefined, `Level ${romanLevel(model.inspected.level)}`), el('span', undefined, stateLabels[model.inspected.state]));
-      detailCopy.append(detailLead, el('h4', undefined, model.inspected.name), el('p', undefined, model.inspected.summary));
+      detailLead.append(el('b', undefined, `${model.branch.title} ${romanLevel(model.inspected.level)}`), el('span', undefined, technologyStateLabel[model.inspected.state]));
+      detailCopy.append(detailLead);
       const facts = document.createElement('dl');
       facts.className = 'ifg-tech__facts';
       facts.append(
-        el('dt', undefined, 'Authorization'), el('dd', undefined, model.inspected.authorization),
-        el('dt', undefined, 'Unlocks'), el('dd', undefined, technologyLevelUnlockText(model.branch.id, model.inspected.level)),
-        el('dt', undefined, 'Measured effect'), el('dd', undefined, model.inspected.effect),
-        el('dt', undefined, 'Development time'), el('dd', undefined, model.inspected.hours === 0 ? 'Established at campaign start' : `${model.inspected.hours} campaign hours`),
+        el('dt', undefined, 'Effect'), el('dd', undefined, model.inspected.effect),
+        el('dt', undefined, 'Unlock'), el('dd', undefined, technologyLevelUnlockText(model.branch.id, model.inspected.level)),
+        el('dt', undefined, 'Time'), el('dd', undefined, model.inspected.hours === 0 ? 'Base' : `${model.inspected.hours}h`),
       );
       detailCopy.append(facts);
       detail.append(detailVisual, detailCopy);
@@ -782,7 +776,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     const rail = el('aside', 'ifg-tech__rail');
     const researchPanel = el('section', 'ifg-tech__rail-section ifg-tech__research');
-    researchPanel.append(el('h3', undefined, 'Current research'));
+    researchPanel.append(el('h3', undefined, 'Research'));
     for (let slotIndex = 0; slotIndex < 2; slotIndex += 1) {
       const active = state.technology.slots[slotIndex] ?? null;
       const slot = el('article', `ifg-tech__slot${active ? ' is-active' : ''}`);
@@ -791,8 +785,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         const activeIcon = el('span', 'ifg-tech__slot-icon');
         activeIcon.append(technologyArtwork(activeBranch.iconUrl, ''));
         const slotCopy = el('span');
-        slotCopy.append(el('b', undefined, `${activeBranch.title} · Level ${romanLevel(active.targetLevel)}`),
-          el('small', undefined, `${Math.round(active.progress * 100)}% · ${formatEta(active.etaSeconds)} remaining`));
+        slotCopy.append(el('b', undefined, `${activeBranch.title} ${romanLevel(active.targetLevel)}`),
+          el('small', undefined, `${Math.round(active.progress * 100)}% · ${formatEta(active.etaSeconds)}`));
         const bar = el('span', 'ifg-tech__bar');
         const fill = el('i');
         fill.style.width = `${Math.round(active.progress * 100)}%`;
@@ -802,7 +796,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       } else {
         slot.append(createIcon('objectives', 'ifg-tech__slot-icon'));
         const slotCopy = el('span');
-        slotCopy.append(el('b', undefined, `Free research slot #${slotIndex + 1}`), el('small', undefined, 'Select an available technology'));
+        slotCopy.append(el('b', undefined, `Slot ${slotIndex + 1}`), el('small', undefined, 'Empty'));
         slot.append(slotCopy);
       }
       researchPanel.append(slot);
@@ -810,8 +804,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     if (futureCategory) {
       const futureDetails = el('section', 'ifg-tech__rail-section ifg-tech__details ifg-tech__future-details');
-      futureDetails.append(el('h3', undefined, `${current.label} development`), createIcon(current.icon),
-        el('strong', undefined, 'Coming soon'), el('p', undefined, 'This service branch is reserved for a future expansion. Its technology, units and costs are not yet active.'));
+      futureDetails.append(el('h3', undefined, current.label), createIcon(current.icon),
+        el('strong', undefined, 'Coming soon'));
       rail.append(researchPanel, futureDetails);
       workspace.append(tree, rail);
       techBody.replaceChildren(workspace);
@@ -823,31 +817,19 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     const quote = state.technology.levelQuotes[selectedTechnology][selectedTechnologyLevel - 1]
       ?? state.technology.quotes[selectedTechnology];
     const details = el('section', 'ifg-tech__rail-section ifg-tech__details');
-    details.append(el('h3', undefined, 'Authorization order'));
-    const detailHero = el('div', 'ifg-tech__detail-hero');
-    const selectedVisual = el('span', 'ifg-tech__detail-visual');
-    selectedVisual.append(technologyArtwork(model.branch.iconUrl, ''));
-    if (selectedTechnologyLevel > 1 && selectedTechnology !== 'resourceBuildings' && selectedTechnology !== 'training') selectedVisual.append(createRankInsignia(selectedTechnologyLevel, 'ifg-tech__detail-rank'));
-    detailHero.append(selectedVisual);
-    const detailCopy = el('span');
-    detailCopy.append(el('b', undefined, `${model.branch.title} · Level ${romanLevel(model.inspected.level)}`),
-      el('small', undefined, model.inspected.authorization));
-    detailHero.append(detailCopy); details.append(detailHero);
     const unlocks = el('div', 'ifg-tech__unlocks');
-    unlocks.append(el('small', undefined, 'Operational effect'), el('strong', undefined, model.inspected.effect),
-      el('small', undefined, 'Unlocks'));
     const unlockGrid = el('div', 'ifg-tech__unlock-grid');
     for (const unlock of technologyUnlocks(selectedTechnology, selectedTechnologyLevel)) {
       const tile = el('button', 'ifg-tech__unlock'); tile.type = 'button';
       tile.dataset.techFocus = `unlock:${unlock.kind}:${unlock.id}:${unlock.level}`;
       const visual = el('span', 'ifg-tech__unlock-visual');
-      visual.append(unlock.kind === 'unit' ? createUnitPortrait(unlock.id, unlock.label) : createIcon(FACILITY_ICON[unlock.id] ?? 'industry'));
+      visual.append(unlock.kind === 'unit' ? createUnitPortrait(unlock.id, unlock.label) : createIcon(FACILITY_ICON[unlock.id]));
       if (unlock.level > 1) visual.append(createRankInsignia(unlock.level, 'ifg-tech__unlock-rank'));
-      tile.append(visual, el('b', undefined, unlock.label), el('small', undefined, `Level ${unlock.level}`));
+      tile.append(visual, el('b', undefined, unlock.label), el('small', undefined, romanLevel(unlock.level)));
       tile.addEventListener('click', () => unlock.kind === 'unit' ? dossier.openUnit(unlock.id) : dossier.openBuilding(unlock.id, unlock.level));
       unlockGrid.append(tile);
     }
-    unlocks.append(unlockGrid, el('p', undefined, technologyLevelUnlockText(selectedTechnology, selectedTechnologyLevel)));
+    unlocks.append(unlockGrid);
     details.append(unlocks);
     const costRow = el('div', 'ifg-tech__costs');
     for (const resource of ['funds', 'food', 'metal', 'oil'] as const) {
@@ -859,17 +841,17 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       costRow.append(item);
     }
     const duration = el('span');
-    duration.append(createIcon('objectives'), el('b', undefined, `${quote.hours} game h`));
+    duration.append(createIcon('objectives'), el('b', undefined, `${quote.hours}h`));
     costRow.append(duration);
     details.append(costRow);
     const action = el('button', 'ifg-tech__start');
     action.type = 'button';
     action.dataset.techFocus = 'authorize';
     action.disabled = !model.canResearch;
-    action.textContent = model.canResearch ? `Authorize Level ${romanLevel(model.inspected.level)}` : (model.blockedReason ?? 'Unavailable');
+    action.textContent = model.canResearch ? `Research ${romanLevel(model.inspected.level)}` : 'Locked';
     action.onclick = () => actions.researchTechnology(selectedTechnology);
     details.append(action);
-    if (model.blockedReason) details.append(el('small', 'ifg-tech__blocked', model.blockedReason));
+    if (model.blockedReason) details.append(el('small', 'ifg-tech__blocked', compactBlockedReason(model.blockedReason)));
     rail.append(researchPanel, details);
     workspace.append(tree, rail);
     techBody.replaceChildren(workspace);

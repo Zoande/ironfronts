@@ -34,6 +34,21 @@ describe('technology tree presentation', () => {
     expect(css).toContain('.ifg-dossier__card');
   });
 
+  it('keeps the visible technology UI terse and uses game building art', () => {
+    expect(ui).toContain("techHead.append(el('h2', undefined, 'Technology'))");
+    expect(ui).not.toContain('Technology dossiers');
+    expect(ui).not.toContain('Directorate of technical development');
+    expect(ui).not.toContain('model.branch.summary');
+    expect(ui).not.toContain('model.inspected.summary');
+    expect(ui).not.toContain('model.inspected.name');
+    expect(ui).toContain("el('b', undefined, `Slot ${slotIndex + 1}`)");
+    expect(ui).toContain("el('small', undefined, 'Empty')");
+    expect(ui).toContain('createIcon(FACILITY_ICON[unlock.id])');
+    expect(ui).not.toContain("FACILITY_ICON[unlock.id] ?? 'industry'");
+    expect(css).not.toMatch(/\.ifg-tech__briefing\s*\{[^}]*border-left:\s*4px/s);
+    expect(css).toMatch(/\.ifg-tech\s*\{[^}]*grid-template-rows:\s*48px 58px/s);
+  });
+
   it('ships placeholder infantry lines and a wired resource dependency branch', () => {
     expect(ui).toContain("id: 'militia'");
     expect(ui).toContain("id: 'commandos'");
@@ -44,6 +59,6 @@ describe('technology tree presentation', () => {
     expect(css).toContain('.ifg-tech__dependency');
     expect(css).toMatch(/\.ifg-tech__dependency\s*\{[^}]*width: 100%;[^}]*border-left:/s);
     expect(ui).toContain("icon: 'unit-infantry'");
-    expect(ui).toContain("shortLabel: 'Mobile Support', icon: 'unit-armored-car'");
+    expect(ui).toContain("technology: 'hybrid', label: 'Support', icon: 'unit-armored-car'");
   });
 });
