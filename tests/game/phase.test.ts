@@ -58,22 +58,32 @@ describe('stepPhaseProgression', () => {
 });
 
 describe('buildOptions phase gating', () => {
-  // fixture()'s province 10 already has a Barracks built, so it never
-  // appears in buildOptions regardless of phase (already-built buildings are
-  // filtered out for that reason, not a phase reason) — these tests use
-  // province 11, which starts with none.
-  it('nothing is offered at province 11 before any qualifying industry exists (Phase I)', () => {
+  // buildOptions is the full building catalog — it never drops a building for
+  // being the wrong phase, it flags it with a reason. Province 11 starts with
+  // none built, and the fixture country has no funds, so every option also
+  // fails affordability; the phase gate is visible only in its `reason` text.
+  it('flags Tank Plant / Ordnance with a phase reason at province 11 before any qualifying industry exists (Phase I)', () => {
     const ctx = fixture();
     ctx.state.countries[1].phase = 1;
-    const ids = buildOptions(ctx, 11, 1).map((o) => o.id).sort();
-    expect(ids).toEqual(['barracks']);
+    const opts = buildOptions(ctx, 11, 1);
+    const reasonFor = (id: string) => opts.find((o) => o.id === id)?.reason;
+    expect(reasonFor('barracks')).toBe('Insufficient resources.'); // phase 1 met
+    expect(reasonFor('tankPlant')).toBe('Requires phase 2.');
+    expect(reasonFor('ordnance')).toBe('Requires phase 2.');
+    // Missile Site also requires Hybrid technology Level 8, checked before
+    // phase — that gate wins regardless of the country's phase.
+    expect(reasonFor('missileSite')).toBe('Requires Hybrid technology Level 8.');
   });
 
-  it('offers every building at province 11 once the country reaches Phase III', () => {
+  it('clears the phase reason for Tank Plant / Ordnance at province 11 once the country reaches Phase III', () => {
     const ctx = fixture();
     ctx.state.countries[1].phase = 3;
-    const ids = buildOptions(ctx, 11, 1).map((o) => o.id).sort();
-    expect(ids).toEqual(['barracks', 'missileSite', 'ordnance', 'tankPlant']);
+    const opts = buildOptions(ctx, 11, 1);
+    const reasonFor = (id: string) => opts.find((o) => o.id === id)?.reason;
+    expect(reasonFor('barracks')).toBe('Insufficient resources.');
+    expect(reasonFor('tankPlant')).toBe('Insufficient resources.'); // phase met, only cost blocks it now
+    expect(reasonFor('ordnance')).toBe('Insufficient resources.');
+    expect(reasonFor('missileSite')).toBe('Requires Hybrid technology Level 8.'); // tech gate persists regardless of phase
   });
 
   it('BUILDING_REQUIRED_PHASE matches the intended tiering', () => {
