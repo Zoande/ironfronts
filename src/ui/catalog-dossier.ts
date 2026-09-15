@@ -66,6 +66,19 @@ export interface CatalogDossier {
   close(): void;
 }
 
+type CatalogDossierEscapeEvent = Pick<KeyboardEvent, 'key' | 'preventDefault' | 'stopPropagation'>;
+
+export function consumeCatalogDossierEscape(
+  event: CatalogDossierEscapeEvent,
+  close: () => void,
+): boolean {
+  if (event.key !== 'Escape') return false;
+  event.preventDefault();
+  event.stopPropagation();
+  close();
+  return true;
+}
+
 export function createCatalogDossier(
   unit: (id: string) => CatalogRecord | undefined,
   building: (id: string) => CatalogRecord | undefined,
@@ -107,11 +120,7 @@ export function createCatalogDossier(
   };
   close.onclick = shut; overlay.onclick = (event) => { if (event.target === overlay) shut(); };
   overlay.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      shut();
-      return;
-    }
+    if (consumeCatalogDossierEscape(event, shut)) return;
     if (event.key !== 'Tab') return;
     const focusable = Array.from(overlay.querySelectorAll<HTMLElement>(
       'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
