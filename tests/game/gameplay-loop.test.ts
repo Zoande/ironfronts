@@ -5,6 +5,7 @@ import { stackUnitCount } from '../../src/game/units/army';
 import { buildScenarioSelection } from '../../src/game/scenario-catalog';
 import { CATALOG_COUNTRY_BY_NAME } from '../../src/game/data/countries.generated';
 import { loadWorld, type LoadedWorld } from './load-world';
+import { nearestNode } from '../../src/game/movement/graph';
 
 const SPAIN = CATALOG_COUNTRY_BY_NAME.get('spain')!.id;
 let world: LoadedWorld;
@@ -38,41 +39,47 @@ describe('gameplay vertical slice', () => {
     expect(startNode).toBeGreaterThanOrEqual(0);
   });
 
-  it('engineers extract a controlled deposit into the stockpile', () => {
+  it('engineers extract from an owned province economy into the stockpile', () => {
     const s = spainSession();
-    const node = Object.values(s.state.resourceNodes).find(
-      (n) => n.controllerCountryId === SPAIN && n.accessNodeId >= 0 && n.remaining > 0,
-    );
-    expect(node).toBeDefined();
-    // Place an engineer stack directly on the access node.
+    // Extraction is now a province-center assignment (economy.ts /
+    // extraction.ts), not a point-deposit an army sits on: find an owned
+    // province whose economy already produces some physical resource.
+    let provinceId: number | undefined; let resource: 'food' | 'stone' | 'metal' | 'oil' | undefined;
+    for (const province of world.provinces) {
+      if (s.state.provinceOwners[province.id] !== SPAIN) continue;
+      const economy = s.state.provinceEconomies?.[province.id];
+      const found = (['food', 'stone', 'metal', 'oil'] as const).find((key) => (economy?.baseProduction[key] ?? 0) > 0);
+      if (found) { provinceId = province.id; resource = found; break; }
+    }
+    expect(provinceId).toBeDefined();
+    const province = world.provinces.find((p) => p.id === provinceId)!;
+    // Place an engineer stack on the province's own center graph node —
+    // extraction is now assigned by province, not by sitting on a deposit.
+    const centerNodeId = nearestNode(s.graph, province.center[0], province.center[1]);
+    expect(centerNodeId).toBeGreaterThanOrEqual(0);
     const engineers = {
       id: 'test-eng', ownerCountryId: SPAIN, name: 'Miners',
-      x: s.graph.nodeX[node!.accessNodeId], z: s.graph.nodeZ[node!.accessNodeId],
-      graphNodeId: node!.accessNodeId,
+      x: s.graph.nodeX[centerNodeId], z: s.graph.nodeZ[centerNodeId],
+      graphNodeId: centerNodeId,
       units: [{ typeId: 'engineer', count: 3, hp: 240, experience: 0 }],
       status: 'idle' as const, order: null, extractingNodeId: null,
     };
     s.state.armies['test-eng'] = engineers;
 
-    const before = s.state.countries[SPAIN].stockpile[node!.kind];
-    const remainingBefore = node!.remaining;
-    const start = s.orderExtract(SPAIN, 'test-eng');
+    const before = s.state.countries[SPAIN].stockpile[resource!];
+    const start = s.orderExtract(SPAIN, 'test-eng', resource);
     expect(start.ok).toBe(true);
     s.tick(6 / 1800);
-    expect(s.state.countries[SPAIN].stockpile[node!.kind]).toBeGreaterThan(before);
-    expect(node!.remaining).toBeLessThan(remainingBefore);
+    expect(s.state.countries[SPAIN].stockpile[resource!]).toBeGreaterThan(before);
   });
 
   it('a city produces a unit that spawns and auto-stacks', () => {
     const s = spainSession();
     // Find the player province with a tank plant (the capital).
-    const plantProvince = Object.entries(s.state.provinceBuildings)
-      .find(([, b]) => b.tankPlant > 0 && s.state.provinceOwners[Number([].concat()[0] ?? 0)] !== undefined);
     const pid = Number(Object.keys(s.state.provinceBuildings).find(
       (k) => s.state.provinceBuildings[Number(k)].tankPlant > 0 && s.ownsProvince(SPAIN, Number(k)),
     ));
     expect(Number.isFinite(pid)).toBe(true);
-    void plantProvince;
 
     const armiesBefore = Object.keys(s.state.armies).length;
     const fundsBefore = s.state.countries[SPAIN].stockpile.funds;
@@ -80,10 +87,14 @@ describe('gameplay vertical slice', () => {
     expect(order.ok).toBe(true);
     expect(s.state.countries[SPAIN].stockpile.funds).toBeLessThan(fundsBefore);
 
-    // light-tank buildTime 12h / scale 4 = 3 game-hours.
-    s.tick(5 / 1800);
-    const armiesAfter = Object.values(s.state.armies).filter((a) => a.ownerCountryId === SPAIN);
-    const hasLightTank = armiesAfter.some((a) => a.units.some((g) => g.typeId === 'light-tank'));
+    // Production is now work-based (buildWork / provinceEconomy productionCapacity
+    // / building level), not a fixed hour count — tick in bounded steps until done.
+    let hasLightTank = false;
+    for (let i = 0; i < 200 && !hasLightTank; i += 1) {
+      s.tick(1);
+      hasLightTank = Object.values(s.state.armies)
+        .some((a) => a.ownerCountryId === SPAIN && a.units.some((g) => g.typeId === 'light-tank'));
+    }
     expect(hasLightTank).toBe(true);
     expect(Object.keys(s.state.armies).length).toBeGreaterThanOrEqual(armiesBefore);
   });
@@ -156,8 +167,13 @@ describe('gameplay vertical slice', () => {
     expect(
       !s.state.armies['en-weak'] || s.state.armies['en-weak'].status === 'retreating',
     ).toBe(true);
-    // give capture a tick with no defender
-    for (let second=0; second<30 && s.state.provinceOwners[enemyProvince.id] !== SPAIN; second++) s.tick(1 / 3600);
+    // A survivor that only reached the retreat threshold (rather than being
+    // wiped outright) still has to physically clear COMBAT_SNAP before it stops
+    // "defending" the node — infantry retreat at 210 world-units/hour, so
+    // clearing 26 units takes ~450 in-game seconds; give it ample margin.
+    for (let second = 0; second < 900 && s.state.provinceOwners[enemyProvince.id] !== SPAIN; second += 1) {
+      s.tick(1 / 3600);
+    }
     expect(s.state.provinceOwners[enemyProvince.id]).toBe(SPAIN);
     expect(s.isAtWar(SPAIN, enemyId!)).toBe(true);
   });
@@ -256,7 +272,11 @@ describe('gameplay vertical slice', () => {
     army.status = 'moving';
     const startX = army.x;
     const startZ = army.z;
-    for (let i = 0; i < 30 && army.status === 'moving'; i += 1) s.tick(4 / 1800);
+    // Revalidation replans onto a short run of real, adjacent edges toward the
+    // frontier (it does not simply refuse the whole order), so give it enough
+    // simulated time to actually walk that short leg rather than a handful of
+    // sub-minute ticks.
+    for (let i = 0; i < 30 && army.status === 'moving'; i += 1) s.tick(1);
     expect(army.status).toBe('idle');
     expect(army.order).toBeNull();
     // It may have legally advanced toward the frontier, but it is not still

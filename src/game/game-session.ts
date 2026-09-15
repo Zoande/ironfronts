@@ -38,6 +38,7 @@ import { stepVictory } from './victory';
 import { stepAi } from './ai/simple-ai';
 import { applyCommand as runCommand, type CommandResult, type GameCommand } from './commands';
 import { wrappedDistance } from './geometry';
+import { guaranteeStrategicBaseline } from './resource-bootstrap';
 
 /** Longest game-time step a single `tick` will integrate; larger dt is accumulated
  *  so a stall can't teleport armies through provinces. */
@@ -328,6 +329,10 @@ export class GameSession {
       // The AI opponent now needs an economy too — give it the same strategic
       // baseline the player got at init (idempotent if its natural geography
       // already covers stone + metal).
+      guaranteeStrategicBaseline(
+        this.state.resourceNodes, { world: this.world, graph: this.graph, provinceOwners: this.state.provinceOwners },
+        best, this.state.seed,
+      );
     }
     return best;
   }
