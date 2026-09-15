@@ -320,9 +320,14 @@
   font-family: Bitter, Georgia, serif;
   animation: ifg-dip-open 150ms var(--ifg-ease);
 }
+.ifg-dip.is-closing { animation: ifg-dip-close 170ms var(--ifg-ease) forwards; pointer-events: none; }
 @keyframes ifg-dip-open {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: none; }
+}
+@keyframes ifg-dip-close {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateX(-8px); }
 }
 .ifg-dip__header {
   position: relative;
@@ -364,9 +369,11 @@
   flex: none;
   color: var(--ifg-dim);
   border: 1px solid var(--ifg-rule-soft) !important;
+  transition: color 140ms ease, border-color 140ms ease, transform 100ms ease;
 }
 .ifg-dip__close .ifg-icon { width: 15px; height: 15px; }
 .ifg-dip__close:hover { color: var(--ifg-text); border-color: var(--ifg-brass) !important; }
+.ifg-dip__close:active { transform: scale(0.92); }
 .ifg-dip__body {
   height: calc(100% - 60px);
   min-height: 0;
@@ -404,6 +411,7 @@
   background: rgba(9, 11, 8, 0.6);
   border: 1px solid var(--ifg-rule-soft);
   border-radius: 2px;
+  transition: border-color 140ms ease;
 }
 .ifg-dip__filter:focus-visible { outline: none; border-color: var(--ifg-brass); }
 .ifg-dip__filter::placeholder { color: var(--ifg-dim); }
@@ -435,13 +443,14 @@
   text-align: left;
   background: transparent !important;
   border-bottom: 1px solid var(--ifg-rule-soft) !important;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 .ifg-dip__country:hover { background: rgba(201, 164, 99, 0.07) !important; }
 .ifg-dip__country.is-selected {
   background: linear-gradient(90deg, rgba(201, 164, 99, 0.16), rgba(201, 164, 99, 0.025)) !important;
   box-shadow: inset -2px 0 0 rgba(201, 164, 99, 0.55);
 }
-.ifg-dip__signal { align-self: stretch; display: block; background: var(--ifg-dip-neutral); }
+.ifg-dip__signal { align-self: stretch; display: block; background: var(--ifg-dip-neutral); transition: background-color 220ms ease; }
 .ifg-dip__country[data-relation="allied"] .ifg-dip__signal { background: var(--ifg-dip-allied); }
 .ifg-dip__country[data-relation="war"] .ifg-dip__signal { background: var(--ifg-dip-war); }
 .ifg-dip__country-identity { min-width: 0; display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 7px; }
@@ -458,6 +467,7 @@
   background: rgba(120, 129, 115, 0.22);
   border: 1px solid var(--ifg-dip-neutral);
   border-radius: 2px;
+  transition: color 220ms ease, background-color 220ms ease, border-color 220ms ease;
 }
 .ifg-dip__country[data-relation="allied"] .ifg-dip__relation {
   color: #bcd8ea; background: rgba(94, 139, 171, 0.24); border-color: var(--ifg-dip-allied);
@@ -476,12 +486,22 @@
   border-radius: 9px;
   font-size: 9px;
   font-variant-numeric: tabular-nums;
+  animation: ifg-dip-pulse 2.2s ease-in-out infinite;
+}
+@keyframes ifg-dip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 164, 99, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(201, 164, 99, 0); }
 }
 .ifg-dip__cable {
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(110px, 1fr) auto;
+}
+.ifg-dip__cable.is-entering { animation: ifg-dip-cable-in 180ms var(--ifg-ease); }
+@keyframes ifg-dip-cable-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
 }
 .ifg-dip__cable-head {
   display: flex;
@@ -503,6 +523,7 @@
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.07em;
+  transition: color 220ms ease, border-color 220ms ease, background-color 220ms ease;
 }
 .ifg-dip__status[data-relation="allied"] { color: #9cc5e1; border-color: var(--ifg-dip-allied); }
 .ifg-dip__status[data-relation="war"] { color: #ee9a83; border-color: var(--ifg-dip-war); background: rgba(193, 93, 69, 0.1); }
@@ -515,6 +536,11 @@
 }
 .ifg-dip__message { max-width: 84%; margin: 0 0 8px; padding-left: 9px; border-left: 2px solid var(--ifg-dip-allied); }
 .ifg-dip__message.is-outgoing { margin-left: auto; border-left-color: var(--ifg-brass); }
+.ifg-dip__message.is-entering { animation: ifg-dip-message-in 220ms var(--ifg-ease) both; }
+@keyframes ifg-dip-message-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
 .ifg-dip__message small { display: block; color: var(--ifg-dim); font-size: 8px; letter-spacing: 0.045em; }
 .ifg-dip__message p { margin: 2px 0 0; color: #ddd7c8; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
 .ifg-dip__controls { max-height: 270px; overflow: auto; padding: 9px 13px 12px; border-top: 1px solid var(--ifg-rule); }
@@ -524,6 +550,11 @@
   background: linear-gradient(90deg, rgba(94, 139, 171, 0.14), rgba(201, 164, 99, 0.07));
   border: 1px solid rgba(94, 139, 171, 0.48);
   border-left: 3px solid var(--ifg-dip-allied);
+}
+.ifg-dip__proposal.is-entering { animation: ifg-dip-proposal-in 260ms var(--ifg-ease) both; }
+@keyframes ifg-dip-proposal-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 .ifg-dip__proposal-kind { margin: 0; color: #9cc5e1 !important; font-size: 8px !important; letter-spacing: 0.1em; }
 .ifg-dip__proposal h4 { margin: 3px 0; color: #ece7d8; font-family: "Special Elite", Georgia, serif; font-size: 14px; font-weight: 400; }
@@ -541,13 +572,24 @@
   background: rgba(45, 48, 41, 0.82) !important;
   border: 1px solid var(--ifg-rule-soft) !important;
   font-size: 9.5px !important;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease, opacity 140ms ease, transform 90ms ease;
 }
 .ifg-dip__action-icon { width: 15px; height: 15px; }
 .ifg-dip__action:not(:disabled):hover { color: var(--ifg-brass-lit) !important; border-color: var(--ifg-brass) !important; }
+.ifg-dip__action:not(:disabled):active { transform: translateY(1px); }
 .ifg-dip__action.is-primary { border-color: rgba(201, 164, 99, 0.55) !important; background: rgba(201, 164, 99, 0.12) !important; }
 .ifg-dip__action.is-hostile { color: #e69a85 !important; border-color: rgba(193, 93, 69, 0.48) !important; }
 .ifg-dip__action:disabled { opacity: 0.42; }
 .ifg-dip__pending, .ifg-dip__blocked, .ifg-dip__feedback { margin: 6px 0 0; font-size: 9.5px; line-height: 1.35; }
+/* Feedback is a one-shot server response (not a standing status like pending/
+   blocked, which get rebuilt every re-render for as long as they apply) — the
+   only one of the three where an entrance replaying each time it is drawn is
+   actually correct rather than a distracting flicker. */
+.ifg-dip__feedback { animation: ifg-dip-feedback-in 200ms var(--ifg-ease); }
+@keyframes ifg-dip-feedback-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
 .ifg-dip__pending { color: #a9bdcb; }
 .ifg-dip__blocked { color: #c09c85; }
 .ifg-dip__feedback { color: var(--ifg-brass-lit); }
@@ -568,6 +610,7 @@
   border: 1px solid var(--ifg-rule-soft);
   border-radius: 0;
   font: 10.5px/1.35 Bitter, Georgia, serif;
+  transition: border-color 140ms ease;
 }
 .ifg-dip__composer textarea::placeholder { color: #737970; }
 .ifg-dip__composer .ifg-dip__action { align-self: stretch; }
@@ -613,7 +656,20 @@
   .ifg-dip__country { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ifg-dip { animation: none; }
+  /* Keyframe motion off entirely; the JS side also skips the closing delay
+     (reducedMotion() check in diplomacy-panel.ts) so the panel still dismisses
+     immediately rather than sitting idle for a skipped animation's duration. */
+  .ifg-dip,
+  .ifg-dip.is-closing,
+  .ifg-dip__cable.is-entering,
+  .ifg-dip__message.is-entering,
+  .ifg-dip__proposal.is-entering,
+  .ifg-dip__feedback,
+  .ifg-dip__attention,
+  .ifg-dip__trade-form-icon.is-swapping { animation: none; }
+  /* Color/border easing stays — it is not spatial motion and still confirms
+     hover, selection and disabled state; only press-feedback transform goes. */
+  .ifg-dip__action:active, .ifg-dip__close:active { transform: none; }
 }
 
 /* ---- ally trade offers, embedded in the diplomacy cable panel ---- */
@@ -626,12 +682,18 @@
 .ifg-dip__trade-form { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--ifg-rule-soft); }
 .ifg-dip__trade-field { display: inline-flex; align-items: center; gap: 5px; }
 .ifg-dip__trade-form-icon { width: 16px; height: 16px; flex: none; }
+.ifg-dip__trade-form-icon.is-swapping { animation: ifg-dip-icon-swap 180ms var(--ifg-ease); }
+@keyframes ifg-dip-icon-swap {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: none; }
+}
 .ifg-dip__trade-select {
   padding: 5px 4px;
   color: var(--ifg-text);
   background: #0d0f0b;
   border: 1px solid var(--ifg-rule-soft);
   font: 10px Bitter, Georgia, serif;
+  transition: border-color 140ms ease;
 }
 .ifg-dip__trade-amount {
   width: 64px;
@@ -641,6 +703,7 @@
   border: 1px solid var(--ifg-rule-soft);
   font: 10.5px/1 Bitter, Georgia, serif;
   font-variant-numeric: tabular-nums;
+  transition: border-color 140ms ease;
 }
 .ifg-dip__trade-form .ifg-dip__action { width: 100%; margin-top: 8px; }
 

@@ -42,7 +42,22 @@ if (config.diagnosticsPath) {
 
 const loaded = await loadWorld(config.worldDirectory);
 const gamePersistence = new GamePersistence(config.gameDataPath);
-let persisted = await gamePersistence.load();
+let persisted: PersistedGame | null;
+try {
+  persisted = await gamePersistence.load();
+} catch (error) {
+  // load() parses the embedded GameState too (parseGameState), so a schema
+  // version bump (e.g. the GAME_STATE_VERSION reset) throws here rather than
+  // returning — the archive-and-retry safety net a few lines down only
+  // covers a save that loaded but failed runtime reconstruction. Without
+  // this, an old on-disk save crashes the server on every boot instead of
+  // being archived once and replaced by a fresh world.
+  const archivePath = await gamePersistence.archiveExisting();
+  log('warn', 'incompatible_save_archived', {
+    archivePath, reason: error instanceof Error ? error.message : String(error),
+  });
+  persisted = null;
+}
 const currentWorld = persisted?.gameVersion === GAME_VERSION && persisted.worldHash === loaded.hash;
 const migratableV2World = persisted?.gameVersion === 'world-at-war@2' && persisted.worldHash === loaded.legacyHash;
 if (persisted && (
