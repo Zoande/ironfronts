@@ -29,6 +29,7 @@ describe('technology tree presentation', () => {
     expect(ui).toContain('dossier.openUnit(unlock.id)');
     expect(ui).toContain('dossier.openBuilding(unlock.id, unlock.level)');
     expect(ui).toContain('createRankInsignia(candidate');
+    expect(ui).toContain("building('missileSite', 'Missile site')");
     expect(css).toContain('.ifg-tech__unlock-grid');
     expect(css).toContain('.ifg-dossier__card');
   });

@@ -90,6 +90,8 @@ describe('technology presentation', () => {
       .toContain('17/h passive · 11 engineers · 3.25× engineer output');
     expect(TECHNOLOGY_BRANCH_PRESENTATION.training.levels[3].effect)
       .toContain('2.05 work/h');
+    expect(TECHNOLOGY_BRANCH_PRESENTATION.training.levels[3].effect)
+      .toContain('authorized Missile Sites');
     expect(TECHNOLOGY_BRANCH_PRESENTATION.hybrid.levels[7].effect)
       .toContain('Missile Site authorization');
   });
@@ -155,5 +157,30 @@ describe('technology presentation', () => {
     expect(model.levels[2].state).toBe('available');
     expect(model.canResearch).toBe(false);
     expect(model.blockedReason).toBe('Both research slots are occupied.');
+  });
+
+  it('marks a dependency-blocked next level as locked instead of available', () => {
+    const base = technologyView(
+      { infantry: 3, resources: 2, resourceBuildings: 1, training: 2, hybrid: 1, armored: 1 },
+    );
+    const technology: TechnologyView = {
+      ...base,
+      quotes: {
+        ...base.quotes,
+        resources: { ...base.quotes.resources, lockedReason: 'Requires Resource Infrastructure Level 2.' },
+      },
+      levelQuotes: {
+        ...base.levelQuotes,
+        resources: base.levelQuotes.resources.map((quote) => quote.level === 3
+          ? { ...quote, lockedReason: 'Requires Resource Infrastructure Level 2.' }
+          : quote),
+      },
+    };
+
+    const model = buildTechnologyPanelModel(technology, 'resources', 3);
+
+    expect(model.levels[2].state).toBe('locked');
+    expect(model.canResearch).toBe(false);
+    expect(model.blockedReason).toBe('Requires Resource Infrastructure Level 2.');
   });
 });

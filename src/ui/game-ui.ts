@@ -128,7 +128,7 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
     { id: 'infrastructure', technology: 'resourceBuildings', label: 'Resource Infrastructure', shortLabel: 'Infrastructure', icon: 'resource-overlay', description: 'Advances fields, quarries, mines and oil pumps.', unlocks: 'Resource building tiers · prerequisite for advanced engineers' },
   ] },
   { id: 'training', label: 'Training', icon: 'industry', lines: [
-    { id: 'training', technology: 'training', label: 'Training & Industry', shortLabel: 'Facilities', icon: 'structure-barracks', description: 'Expands military training and production methods.', unlocks: 'Barracks · tank plants · ordnance workshops' },
+    { id: 'training', technology: 'training', label: 'Training & Industry', shortLabel: 'Facilities', icon: 'structure-barracks', description: 'Expands military training and production methods.', unlocks: 'Barracks · tank plants · ordnance workshops · authorized missile sites' },
   ] },
   { id: 'hybrid', label: 'Support', icon: 'unit-armored-car', lines: [
     { id: 'hybrid', technology: 'hybrid', label: 'Mobile Support', shortLabel: 'Mobile Support', icon: 'unit-armored-car', description: 'Coordinates reconnaissance vehicles and artillery support.', unlocks: 'Armored cars · artillery · strategic systems at VIII' },
@@ -155,7 +155,7 @@ function technologyUnlocks(branch: TechnologyBranch, level: number): readonly Te
     case 'infantry': return [unit('infantry', 'Infantry')];
     case 'resources': return [unit('engineer', 'Engineer')];
     case 'resourceBuildings': return [building('fields', 'Fields'), building('quarry', 'Quarry'), building('mine', 'Mine'), building('oilPump', 'Oil pump')];
-    case 'training': return [building('barracks', 'Barracks'), building('tankPlant', 'Tank plant'), building('ordnance', 'Ordnance')];
+    case 'training': return [building('barracks', 'Barracks'), building('tankPlant', 'Tank plant'), building('ordnance', 'Ordnance'), building('missileSite', 'Missile site')];
     case 'hybrid': return [unit('armored-car', 'Armored car'), unit('artillery', 'Artillery'), ...(level === 8 ? [building('missileSite', 'Missile site', 1)] : [])];
     case 'armored': return [unit('light-tank', 'Light tank'), unit('medium-tank', 'Medium tank')];
   }
@@ -501,12 +501,15 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   let techRenderKey = '';
   type TechnologyFocusTarget =
     | { readonly kind: 'tab'; readonly category: TechnologyCategory }
-    | { readonly kind: 'level'; readonly branch: TechnologyBranch; readonly level: number };
+    | { readonly kind: 'level'; readonly branch: TechnologyBranch; readonly level: number }
+    | { readonly kind: 'control'; readonly key: string };
   let requestedTechnologyFocus: TechnologyFocusTarget | null = null;
   const technologyFocusTarget = (element: Element | null): TechnologyFocusTarget | null => {
     if (!(element instanceof HTMLElement) || !technologyPanel.contains(element)) return null;
     const category = element.dataset.techCategory as TechnologyCategory | undefined;
     if (category) return { kind: 'tab', category };
+    const control = element.dataset.techFocus;
+    if (control) return { kind: 'control', key: control };
     const branch = element.dataset.techBranch as TechnologyBranch | undefined;
     const level = Number(element.dataset.techLevel);
     return branch && Number.isInteger(level) ? { kind: 'level', branch, level } : null;
@@ -515,8 +518,56 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (!target) return;
     const selector = target.kind === 'tab'
       ? `[data-tech-category="${target.category}"]`
-      : `[data-tech-branch="${target.branch}"][data-tech-level="${target.level}"]`;
-    technologyPanel.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true });
+      : target.kind === 'level'
+        ? `[data-tech-branch="${target.branch}"][data-tech-level="${target.level}"]`
+        : `[data-tech-focus="${target.key}"]`;
+    let control = technologyPanel.querySelector<HTMLButtonElement>(selector);
+    if (control?.disabled && target.kind === 'control' && target.key === 'authorize') {
+      control = technologyPanel.querySelector<HTMLButtonElement>(
+        `[data-tech-branch="${selectedTechnology}"][data-tech-level="${selectedTechnologyLevel}"]`,
+      );
+    }
+    control?.focus({ preventScroll: target.kind !== 'tab' });
+  };
+  interface TechnologyViewportState {
+    readonly tabsLeft: number;
+    readonly workspaceTop: number;
+    readonly treeTop: number;
+    readonly treeLeft: number;
+    readonly trackLeftByLine: ReadonlyMap<string, number>;
+  }
+  const captureTechnologyViewport = (): TechnologyViewportState | null => {
+    if (techBody.getAttribute('aria-labelledby') !== `ifg-tech-tab-${selectedTechTab}`) return null;
+    const workspace = techBody.querySelector<HTMLElement>('.ifg-tech__workspace');
+    const tree = techBody.querySelector<HTMLElement>('.ifg-tech__tree');
+    if (!workspace || !tree) return null;
+    const trackLeftByLine = new Map<string, number>();
+    for (const row of tree.querySelectorAll<HTMLElement>('[data-tech-line]')) {
+      const track = row.querySelector<HTMLElement>('.ifg-tech__track');
+      if (track) trackLeftByLine.set(row.dataset.techLine!, track.scrollLeft);
+    }
+    return {
+      tabsLeft: techTabs.scrollLeft,
+      workspaceTop: workspace.scrollTop,
+      treeTop: tree.scrollTop,
+      treeLeft: tree.scrollLeft,
+      trackLeftByLine,
+    };
+  };
+  const restoreTechnologyViewport = (
+    state: TechnologyViewportState | null,
+    workspace: HTMLElement,
+    tree: HTMLElement,
+  ): void => {
+    if (!state) return;
+    techTabs.scrollLeft = state.tabsLeft;
+    workspace.scrollTop = state.workspaceTop;
+    tree.scrollTop = state.treeTop;
+    tree.scrollLeft = state.treeLeft;
+    for (const row of tree.querySelectorAll<HTMLElement>('[data-tech-line]')) {
+      const track = row.querySelector<HTMLElement>('.ifg-tech__track');
+      if (track) track.scrollLeft = state.trackLeftByLine.get(row.dataset.techLine!) ?? 0;
+    }
   };
   const romanLevel = (level: number): string => ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'][level - 1] ?? String(level);
   const technologyArtwork = (url: string, className: string): HTMLImageElement => {
@@ -530,6 +581,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     return image;
   };
   const renderTechnology = (state: StrategicUiState): void => {
+    const viewportState = captureTechnologyViewport();
     const focusTarget = requestedTechnologyFocus ?? technologyFocusTarget(document.activeElement);
     requestedTechnologyFocus = null;
     const activeKey = state.technology.slots.map((active) => active
@@ -625,6 +677,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     for (const line of current.lines) {
       const row = el('section', `ifg-tech__line${line.comingSoon ? ' is-coming-soon' : ''}`);
+      row.dataset.techLine = line.id;
       const label = el('header', 'ifg-tech__line-label');
       label.append(createIcon(line.icon), el('strong', undefined, line.shortLabel));
       label.append(el('small', undefined, line.comingSoon ? 'Future troop line' : line.description));
@@ -647,7 +700,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         }
         node.dataset.state = visualState;
         node.classList.toggle('is-complete', Boolean(branch && candidate <= currentLevel));
-        node.classList.toggle('is-next', Boolean(branch && candidate === currentLevel + 1));
+        node.classList.toggle('is-next', Boolean(branch && visualState === 'available'));
         node.classList.toggle('is-selected', Boolean(branch === selectedTechnology && candidate === selectedTechnologyLevel));
         node.classList.toggle('is-researching', state.technology.slots.some((slot) =>
           slot !== null && slot.branch === branch && slot.targetLevel === candidate));
@@ -675,7 +728,9 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
             ? technologyLevelUnlockText(branch, candidate)
             : `${line.description} This technology line is coming soon.`,
           status: branch
-            ? candidate <= currentLevel ? 'Unlocked' : candidate === currentLevel + 1 ? 'Next' : 'Locked'
+            ? visualState === 'completed' || visualState === 'current' ? 'Unlocked'
+              : visualState === 'available' ? 'Next'
+                : visualState === 'researching' ? 'In development' : 'Locked'
             : 'Coming soon',
         }));
         if (branch) node.onclick = () => {
@@ -760,6 +815,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       rail.append(researchPanel, futureDetails);
       workspace.append(tree, rail);
       techBody.replaceChildren(workspace);
+      restoreTechnologyViewport(viewportState, workspace, tree);
       restoreTechnologyFocus(focusTarget);
       return;
     }
@@ -783,6 +839,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     const unlockGrid = el('div', 'ifg-tech__unlock-grid');
     for (const unlock of technologyUnlocks(selectedTechnology, selectedTechnologyLevel)) {
       const tile = el('button', 'ifg-tech__unlock'); tile.type = 'button';
+      tile.dataset.techFocus = `unlock:${unlock.kind}:${unlock.id}:${unlock.level}`;
       const visual = el('span', 'ifg-tech__unlock-visual');
       visual.append(unlock.kind === 'unit' ? createUnitPortrait(unlock.id, unlock.label) : createIcon(FACILITY_ICON[unlock.id] ?? 'industry'));
       if (unlock.level > 1) visual.append(createRankInsignia(unlock.level, 'ifg-tech__unlock-rank'));
@@ -797,6 +854,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       const amount = quote.cost[resource];
       if (!amount) continue;
       const item = el('span');
+      item.setAttribute('aria-label', `${resource === 'funds' ? 'Funds' : resource[0].toUpperCase() + resource.slice(1)} ${amount.toLocaleString()}`);
       item.append(createIcon(resource), el('b', undefined, amount.toLocaleString()));
       costRow.append(item);
     }
@@ -806,6 +864,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     details.append(costRow);
     const action = el('button', 'ifg-tech__start');
     action.type = 'button';
+    action.dataset.techFocus = 'authorize';
     action.disabled = !model.canResearch;
     action.textContent = model.canResearch ? `Authorize Level ${romanLevel(model.inspected.level)}` : (model.blockedReason ?? 'Unavailable');
     action.onclick = () => actions.researchTechnology(selectedTechnology);
@@ -814,6 +873,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     rail.append(researchPanel, details);
     workspace.append(tree, rail);
     techBody.replaceChildren(workspace);
+    restoreTechnologyViewport(viewportState, workspace, tree);
     restoreTechnologyFocus(focusTarget);
   };
 

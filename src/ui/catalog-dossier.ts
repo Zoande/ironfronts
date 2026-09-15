@@ -26,6 +26,9 @@ const BUILDING_UNLOCKS: Partial<Record<BuildingId, readonly [string, string][]>>
   tankPlant: [['armored-car', 'Armored car'], ['light-tank', 'Light tank'], ['medium-tank', 'Medium tank']],
   ordnance: [['artillery', 'Artillery']],
 };
+const RESOURCE_LABEL: Record<string, string> = {
+  funds: 'Funds', food: 'Food', metal: 'Metal', oil: 'Oil', manpower: 'Manpower', stone: 'Stone',
+};
 
 function n(record: CatalogRecord, key: string): number { return Number(record[key] ?? 0); }
 function object(record: CatalogRecord, key: string): Record<string, number> {
@@ -47,7 +50,9 @@ function costs(value: Record<string, number>): HTMLElement {
   for (const [resource, amount] of Object.entries(value)) {
     const icon = RESOURCE_ICON[resource as keyof typeof RESOURCE_ICON];
     if (!icon || amount <= 0) continue;
-    const item = document.createElement('span'); item.append(createIcon(icon), Object.assign(document.createElement('b'), { textContent: amount.toLocaleString() })); row.append(item);
+    const item = document.createElement('span');
+    item.setAttribute('aria-label', `${RESOURCE_LABEL[resource] ?? resource} ${amount.toLocaleString()}`);
+    item.append(createIcon(icon), Object.assign(document.createElement('b'), { textContent: amount.toLocaleString() })); row.append(item);
   }
   if (!row.childElementCount) row.textContent = 'No resource cost';
   return row;
@@ -72,8 +77,60 @@ export function createCatalogDossier(
   const title = document.createElement('h2');
   const close = document.createElement('button'); close.type = 'button'; close.className = 'ifg-dossier__close'; close.setAttribute('aria-label', 'Close information'); close.append(createIcon('close'));
   head.append(title, close); const body = document.createElement('div'); body.className = 'ifg-dossier__body'; card.append(head, body); overlay.append(card);
-  const shut = (): void => { overlay.hidden = true; };
+  let opener: HTMLElement | null = null;
+  const siblingInertState = new Map<HTMLElement, boolean>();
+  const shut = (): void => {
+    if (overlay.hidden) return;
+    overlay.hidden = true;
+    for (const [sibling, wasInert] of siblingInertState) sibling.inert = wasInert;
+    siblingInertState.clear();
+    const returnFocusKey = opener?.dataset.techFocus;
+    const returnFocus = opener?.isConnected
+      ? opener
+      : returnFocusKey
+        ? overlay.parentElement?.querySelector<HTMLElement>(`[data-tech-focus="${returnFocusKey}"]`) ?? null
+        : null;
+    opener = null;
+    returnFocus?.focus({ preventScroll: true });
+  };
+  const reveal = (): void => {
+    if (overlay.hidden) {
+      opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      for (const sibling of Array.from(overlay.parentElement?.children ?? [])) {
+        if (!(sibling instanceof HTMLElement) || sibling === overlay) continue;
+        siblingInertState.set(sibling, sibling.inert);
+        sibling.inert = true;
+      }
+      overlay.hidden = false;
+    }
+    queueMicrotask(() => close.focus({ preventScroll: true }));
+  };
   close.onclick = shut; overlay.onclick = (event) => { if (event.target === overlay) shut(); };
+  overlay.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      shut();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(overlay.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+    if (!focusable.length) {
+      event.preventDefault();
+      close.focus({ preventScroll: true });
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
 
   const hero = (visual: HTMLElement, name: string, subtitle: string, level: number): HTMLElement => {
     const result = document.createElement('div'); result.className = 'ifg-dossier__hero';
@@ -99,7 +156,7 @@ export function createCatalogDossier(
     body.replaceChildren(hero(createUnitPortrait(typeId, name), name, `${String(data.category ?? 'Unit')} · Level ${level}`, level),
       section('Unit overview', overview), section('Description', Object.assign(document.createElement('p'), { textContent: UNIT_ROLE_NOTE[family] ?? 'A field unit in the national order of battle.' })),
       section('Combat statistics', combat), section('Production cost', costs(object(data, 'buildCost')), upkeep));
-    overlay.hidden = false;
+    reveal();
   };
   const openBuilding = (rawId: string, explicitLevel?: number): void => {
     const id = rawId as BuildingId; const data = building(id); if (!data) return;
@@ -118,7 +175,7 @@ export function createCatalogDossier(
     body.replaceChildren(hero(createIcon(BUILDING_ICON[id] ?? 'industry'), name, `Structure · Level ${level}`, level),
       section('Description', Object.assign(document.createElement('p'), { textContent: BUILDING_DESCRIPTION[id] ?? 'A strategic provincial structure.' })),
       section('Attributes', overview), section('Unlocks', unlockGrid), section('Construction cost', costs(tier.cost ?? object(data, 'cost'))));
-    overlay.hidden = false;
+    reveal();
   };
   return { element: overlay, isOpen: () => !overlay.hidden, openUnit, openBuilding, close: shut };
 }

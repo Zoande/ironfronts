@@ -137,7 +137,7 @@ export function technologyLevelEffectText(branch: TechnologyBranch, level: numbe
     case 'training': {
       const rate = UNIT_PRODUCTION_RATE_BY_LEVEL[safeLevel];
       return `Facility Tier ${safeLevel}: ${rate} work/h (${multiplier(rate, UNIT_PRODUCTION_RATE_BY_LEVEL[1])} throughput) `
-        + 'for Barracks, Tank Plant, and Ordnance Workshop.';
+        + 'for Barracks, Tank Plant, Ordnance Workshop, and authorized Missile Sites.';
     }
     case 'hybrid':
       return `Armored Car and Artillery Level ${safeLevel}: ${unitEffect('armored-car', safeLevel)}`
@@ -148,7 +148,11 @@ export function technologyLevelEffectText(branch: TechnologyBranch, level: numbe
 }
 
 export function technologyLevelUnlockText(branch: TechnologyBranch, level: number): string {
-  if (level === 1) return 'Baseline — always available.';
+  if (level === 1) {
+    return branch === 'training'
+      ? 'Baseline Tier 1 military facilities; Missile Sites also require Mobile Support Level VIII.'
+      : 'Baseline — always available.';
+  }
   switch (branch) {
     case 'infantry':
       return `Infantry Level ${level} — also needs Barracks Tier ${level}.`;
@@ -159,7 +163,7 @@ export function technologyLevelUnlockText(branch: TechnologyBranch, level: numbe
     case 'resourceBuildings':
       return `Tier ${level} fields, quarries, mines and oil pumps where local resource potential supports it.`;
     case 'training':
-      return `Tier ${level} Barracks, Tank Plant and Ordnance Workshop.`;
+      return `Tier ${level} Barracks, Tank Plant, Ordnance Workshop, and Missile Site; Missile Sites also require Mobile Support Level VIII.`;
     case 'hybrid':
       return level === 8
         ? 'Armored Car & Artillery Level 8, and the Missile Site.'
@@ -335,10 +339,14 @@ export function buildTechnologyPanelModel(
   const currentLevel = technology.levels[selectedBranch];
   const selectedResearch = technology.slots.find((slot) => slot?.branch === selectedBranch) ?? undefined;
   const activeTarget = selectedResearch?.targetLevel;
-  const levels = branch.levels.map((level) => ({
-    ...level,
-    state: technologyLevelState(currentLevel, level.level, activeTarget),
-  }));
+  const levels = branch.levels.map((level) => {
+    const state = technologyLevelState(currentLevel, level.level, activeTarget);
+    const levelQuote = technology.levelQuotes[selectedBranch][level.level - 1];
+    return {
+      ...level,
+      state: state === 'available' && levelQuote?.lockedReason ? 'locked' as const : state,
+    };
+  });
   const safeInspection = Math.max(1, Math.min(8, Math.round(inspectedLevel)));
   const inspected = levels[safeInspection - 1];
   const active = selectedResearch ? {
