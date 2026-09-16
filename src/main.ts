@@ -528,6 +528,13 @@ async function startGame(token: number): Promise<void> {
     pushNotification('warning', title, body);
   });
   activeSession = session;
+  const persistedNotifications = loadPersistedNotifications(session.state.viewerCountryId);
+  if (persistedNotifications) {
+    uiStore.patch({
+      notificationHistory: persistedNotifications.history,
+      notificationsLastReadAt: persistedNotifications.lastReadAt,
+    });
+  }
 
   // Keep the complete renderer/world module graph out of the lobby bundle.
   // This import is the first point at which world rendering code is loaded.
@@ -706,7 +713,11 @@ async function startGame(token: number): Promise<void> {
       const open = uiStore.get().activeSidePanel === id;
       uiStore.patch({ activeSidePanel: open ? null : id });
       if (id === 'trade' && !open) uiStore.patch({ market: { busy: false, feedback: null } });
-      if (id === 'events' && open) uiStore.patch({ notificationsLastReadAt: Date.now() });
+      if (id === 'events' && open) {
+        const lastReadAt = Date.now();
+        uiStore.patch({ notificationsLastReadAt: lastReadAt });
+        savePersistedNotifications(session.state.viewerCountryId, uiStore.get().notificationHistory, lastReadAt);
+      }
       if (id === 'diplomacy' && !open) {
         const selected = uiStore.get().diplomacy.selectedCountryId
           ?? Object.values(session.state.countries)
@@ -2969,6 +2980,38 @@ function clearAllNotificationTimers(): void {
  *  much larger than, the toast stack's display cap below. */
 const NOTIFICATION_HISTORY_CAP = 150;
 
+/** The server never replays past events on reconnect (see gameplay-gateway's
+ *  baseline message — it carries no event backlog), so without this the
+ *  notification centre would come back empty on every page refresh. Scoped
+ *  per country since one browser can hold sessions for several accounts. */
+function notificationStorageKey(countryId: number): string {
+  return `ironfronts:notifications:v1:${countryId}`;
+}
+
+function loadPersistedNotifications(countryId: number): { history: GameNotification[]; lastReadAt: number } | null {
+  const storage = safeLocalStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(notificationStorageKey(countryId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { history?: GameNotification[]; lastReadAt?: number };
+    if (!Array.isArray(parsed.history)) return null;
+    return { history: parsed.history, lastReadAt: parsed.lastReadAt ?? 0 };
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedNotifications(countryId: number, history: readonly GameNotification[], lastReadAt: number): void {
+  const storage = safeLocalStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(notificationStorageKey(countryId), JSON.stringify({ history, lastReadAt }));
+  } catch {
+    // Storage full or unavailable (private browsing) — the in-memory history still works this session.
+  }
+}
+
 function pushHistory(
   kind: GameNotification['kind'], title: string, body: string | undefined,
   sticky: boolean, focus: { x: number; z: number } | undefined,
@@ -2979,6 +3022,10 @@ function pushHistory(
   };
   const history = [...uiStore.get().notificationHistory, entry].slice(-NOTIFICATION_HISTORY_CAP);
   uiStore.patch({ notificationHistory: history });
+  const countryId = activeSession?.state.viewerCountryId;
+  if (countryId !== undefined && countryId !== null) {
+    savePersistedNotifications(countryId, history, uiStore.get().notificationsLastReadAt);
+  }
 }
 
 function pushNotification(
