@@ -28,6 +28,17 @@ import type {
   TechnologyCategory, TradeLegView, UiStore,
 } from '../ui-state';
 
+// Backdrop art for the technology panel, one per branch (see technologyArtworkKey
+// below for the id -> filename mapping). Not every branch has art yet, so lookups
+// are optional — the panel falls back to its plain background when art is missing.
+const technologyBackdropAssets = import.meta.glob('../assets/technology/backdrop-*.jpg', {
+  eager: true, query: '?url', import: 'default',
+}) as Record<string, string>;
+const technologyBackdropUrl = (branch: TechnologyBranch): string | undefined => {
+  const key = branch === 'resourceBuildings' ? 'resource-buildings' : branch;
+  return technologyBackdropAssets[`../assets/technology/backdrop-${key}.jpg`];
+};
+
 export interface GameUiActions {
   setMapMode(mode: MapMode): void;
   clearSelection(): void;
@@ -526,6 +537,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (selectedTechnologyLevel === 0) {
       selectedTechnologyLevel = Math.min(8, state.technology.levels[selectedTechnology] + 1);
     }
+    const backdrop = technologyBackdropUrl(selectedTechnology);
+    techBody.style.setProperty('--ifg-tech-backdrop', backdrop ? `url("${backdrop}")` : 'none');
     techTabs.replaceChildren(...TECHNOLOGY_CATEGORIES.map((category) => {
       const tab = el('button', 'ifg-tech__tab');
       tab.type = 'button';

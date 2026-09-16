@@ -2752,8 +2752,26 @@
   background-size: 32px 32px, 32px 32px, auto, auto;
 }
 .ifg-tech__tabs { grid-template-columns: repeat(5, minmax(120px, 1fr)); background: rgba(8, 10, 8, .62); }
-.ifg-tech__body { display: block; height: 100%; min-height: 0; padding: 0; overflow: hidden; }
-.ifg-tech__workspace { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100%; min-height: 0; }
+.ifg-tech__body { position: relative; display: block; height: 100%; min-height: 0; padding: 0; overflow: hidden; }
+/* Per-branch backdrop art (--ifg-tech-backdrop, set from shell/game-ui.ts).
+ * `contain` on the art layer only — never `cover` — so a smaller source image
+ * is never upscaled/stretched past its own resolution; it just shows at its
+ * best size against the plain panel background instead of the whole area.
+ * The gradient sits on its own layer so it can safely use `cover`. */
+.ifg-tech__body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    linear-gradient(180deg, rgba(8, 10, 7, .5), rgba(8, 10, 7, .9)),
+    var(--ifg-tech-backdrop, none);
+  background-repeat: no-repeat, no-repeat;
+  background-position: center, center top;
+  background-size: cover, contain;
+  pointer-events: none;
+}
+.ifg-tech__workspace { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: 100%; min-height: 0; }
 .ifg-tech__tree { min-width: 0; overflow: auto; padding: 0 22px 30px; scrollbar-gutter: stable; }
 .ifg-tech__timeline,
 .ifg-tech__line { display: grid; grid-template-columns: 138px minmax(720px, 1fr); min-width: 858px; }
