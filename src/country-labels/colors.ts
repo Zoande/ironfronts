@@ -1,4 +1,4 @@
-import type { CountryRecord } from '../types';
+import type { CountryRecord } from '../rendering/types';
 
 export function buildCountryColorBuffer(countries: CountryRecord[]): Float32Array {
   const maximumId = Math.max(0, ...countries.map((country) => country.id));

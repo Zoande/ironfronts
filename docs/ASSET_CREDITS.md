@@ -206,6 +206,7 @@ centered on 256x256 transparent RGBA canvases for runtime use.
 | `src/ui/assets/icons/ironfronts/unit-armored-car-icon.png` | Armored-car production button |
 | `src/ui/assets/icons/ironfronts/unit-light-tank-icon.png` | Light-tank production button |
 | `src/ui/assets/icons/ironfronts/unit-medium-tank-icon.png` | Medium-tank production button |
+| `src/ui/assets/icons/ironfronts/unit-artillery-icon.png` | Generated artillery production button |
 | `src/ui/assets/icons/ironfronts/structure-barracks-icon.png` | Barracks build button |
 | `src/ui/assets/icons/ironfronts/structure-tank-plant-icon.png` | Tank-plant build button |
 | `src/ui/assets/icons/ironfronts/structure-ordnance-icon.png` | Ordnance-works build button |

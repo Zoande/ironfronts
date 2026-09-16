@@ -7,7 +7,7 @@ const integer = z.number().int().nonnegative();
 const point = z.object({ x: finite, z: finite });
 const buildingId = z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']);
 const stockpile = z.object({ funds: finite, manpower: finite, food: finite, stone: finite, metal: finite, oil: finite });
-const country = z.object({ id: integer, name: z.string(), color: z.string(), controller: z.enum(['player', 'ai', 'neutral']), controllerUsername: z.string().optional(), alive: z.boolean() });
+const country = z.object({ id: integer, name: z.string(), color: z.string(), controller: z.enum(['player', 'ai', 'neutral']), alive: z.boolean() });
 const buildings = z.object({ barracks: integer.max(8), tankPlant: integer.max(8), ordnance: integer.max(8), missileSite: integer.max(8) });
 const queue = z.object({ id: z.string(), ownerCountryId: integer, progressWork: nonnegative.optional(), totalWork: finite.positive().optional(), progressHours: nonnegative.optional(), totalHours: finite.positive().optional(), targetTier: integer.optional(), workRate: finite.positive().optional() });
 const unitQueue = queue.extend({ unitTypeId: z.string() });
@@ -62,7 +62,6 @@ const tradeLeg = z.object({ resource: z.enum(['funds', 'manpower', 'food', 'ston
 const resourceTradeProposal = z.object({ id: z.string(), fromCountryId: integer, toCountryId: integer,
   offer: tradeLeg, request: tradeLeg, status: z.enum(['pending', 'accepted', 'declined', 'withdrawn']),
   createdAtTick: integer, resolvedAtTick: integer.optional() });
-const outcome = z.object({ result: z.enum(['victory', 'defeat']), reason: z.string(), atGameHours: nonnegative });
 const weather = z.object({ mode: z.enum(['automatic', 'forced-clear', 'forced-rain']), raining: z.boolean(),
   scheduleDay: z.string(), rainStartMinute: integer.max(1439), rainDurationMinutes: integer.min(60).max(120) });
 export const projectionSchema = z.object({ simulationTick: integer, timeline: timeline.optional(), viewerCountryId: integer,
@@ -76,11 +75,10 @@ export const projectionSchema = z.object({ simulationTick: integer, timeline: ti
   provinceEconomies: record(z.unknown()).optional(), resourceNodes: record(resource).optional(),
   ownCountry: ownCountry.nullable(), relations: record(z.enum(['peace', 'allied', 'war'])),
   weather: weather.optional(),
-  diplomacy: z.object({ messages: z.array(diplomacyMessage), proposals: z.array(diplomacyProposal), tradeProposals: z.array(resourceTradeProposal) }).optional(),
-  outcome: outcome.optional() });
+  diplomacy: z.object({ messages: z.array(diplomacyMessage), proposals: z.array(diplomacyProposal), tradeProposals: z.array(resourceTradeProposal) }).optional() });
 const collectionSchemas = projectionSchema.pick({ countries: true, provinceOwners: true, provinceBuildings: true, provinceActions: true,
   productionQueues: true, constructionQueues: true, rallyPoints: true, armies: true, provinceEconomies: true, relations: true });
-const delta = z.object({ changed: projectionSchema.pick({ simulationTick: true, timeline: true, viewerCountryId: true, startCamera: true, ownCountry: true, weather: true, diplomacy: true, outcome: true }).partial(),
+const delta = z.object({ changed: projectionSchema.pick({ simulationTick: true, timeline: true, viewerCountryId: true, startCamera: true, ownCountry: true, weather: true, diplomacy: true }).partial(),
   upserts: collectionSchemas.partial(), removals: z.object(Object.fromEntries(Object.keys(collectionSchemas.shape).map((key) => [key, z.array(z.string()).optional()]))),
   redactions: z.array(z.string()) });
 const profile = z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative });

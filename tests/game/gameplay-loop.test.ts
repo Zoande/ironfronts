@@ -16,6 +16,17 @@ function spainSession(): GameSession {
 }
 
 describe('gameplay vertical slice', () => {
+  it('continues simulating after the player loses every province', () => {
+    const s = spainSession();
+    for (const provinceId of Object.keys(s.state.provinceOwners)) {
+      if (s.state.provinceOwners[Number(provinceId)] === SPAIN) s.state.provinceOwners[Number(provinceId)] = 0;
+    }
+    const before = s.gameTimeHours;
+    s.tick(1 / 1800);
+    expect(s.gameTimeHours).toBeGreaterThan(before);
+    expect(s.state).not.toHaveProperty('outcome');
+  });
+
   it('an ordered army moves along the road graph and stops when told', () => {
     const s = spainSession();
     const army = Object.values(s.state.armies).find((a) => a.ownerCountryId === SPAIN)!;

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
 const html = readFileSync(path.join(root, 'index.html'), 'utf8');
-const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 
 describe('debug visual clock link', () => {
   it('offers one combined date/time and timezone section', () => {

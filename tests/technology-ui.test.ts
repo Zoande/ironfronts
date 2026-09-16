@@ -3,8 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const ui = readFileSync(path.join(root, 'src/ui/game-ui.ts'), 'utf8');
-const css = readFileSync(path.join(root, 'src/ui/game-ui.css'), 'utf8');
+const ui = readFileSync(path.join(root, 'src/ui/shell/game-ui.ts'), 'utf8');
+const css = readFileSync(path.join(root, 'src/ui/styles/game-ui.css'), 'utf8');
 
 describe('technology tree presentation', () => {
   it('renders horizontal level tracks with two current-research slots and details', () => {

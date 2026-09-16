@@ -3,8 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const gameUi = readFileSync(path.join(root, 'src/ui/game-ui.ts'), 'utf8');
-const mainTs = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
+const gameUi = readFileSync(path.join(root, 'src/ui/shell/game-ui.ts'), 'utf8');
+const mainTs = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
 
 describe('0 A.D.-style production/construction queue', () => {
   it('updates persistent progress nodes instead of rebuilding them on every tick', () => {

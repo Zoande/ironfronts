@@ -34,8 +34,9 @@ The browser never receives the game server's full state. The auth service never 
 | `packages/game-core` | Browser-free exports for authoritative game rules |
 | `src/game` | Plain game state and domain systems used by game-core |
 | `src/client` | Browser auth API, connection, replica, clock, and remote-session adapter |
+| `src/app` | Browser bootstrap, launch lifecycle, and game orchestration |
 | `src/ui`, `src/menu` | In-game HUD and pre-game menu |
-| `src/renderer*.ts`, `src/shaders` | WebGPU renderer facade, frame/pipeline support, and WGSL programs |
+| `src/rendering`, `src/renderer.ts`, `src/shaders` | WebGPU implementation, stable renderer facade, and WGSL programs |
 | `src/audio` | Web Audio buses, ambience/effects, and music state machine |
 | `scripts/world`, `scripts/infrastructure` | Deterministic world compiler stages |
 | `scripts/qa` | Shared Playwright browser/report helpers |
@@ -79,6 +80,7 @@ The generator writes a versioned `world.json` plus binary artifacts. The game se
 - Generator and QA scripts do not import browser runtime modules.
 - Shader modules remain independent of renderer orchestration and domain code.
 - Complex command/combat behavior belongs in focused submodules behind stable facades.
+- UI and rendering modules may not depend on application orchestration under `src/app`.
 
 These constraints are partly enforced by `tests/architecture.test.ts`.
 

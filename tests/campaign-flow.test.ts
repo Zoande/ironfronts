@@ -88,18 +88,13 @@ describe('campaign flow — dossier then nation overlay', () => {
     expect(menu).toMatch(/confirmNation\?\.addEventListener\('click',[\s\S]{0,120}deployFromPicker\(selectedCountryId\)/);
   });
 
-  it('New Campaign is a safe preview once a campaign exists, but Continue still launches', () => {
-    // previewOnly === (a country is already assigned). The picker paths
-    // (Join + map Enter) go through deployFromPicker, which no-ops in
-    // preview mode; Continue calls deploy() directly and is never gated.
-    expect(menu).toContain('const previewOnly = assignedCountry !== null');
-    expect(menu).toContain('async function deployFromPicker(');
-    const picker = menu.slice(menu.indexOf('async function deployFromPicker('), menu.indexOf('async function deployFromPicker(') + 500);
-    expect(picker).toMatch(/if \(previewOnly\)[\s\S]+return;[\s\S]+\}\s*\n\s*await deploy\(countryId\)/);
-    // Continue's listener calls the unguarded deploy, not deployFromPicker.
+  it('disables New Campaign once a campaign exists, but Continue still launches', () => {
+    expect(menu).toContain('const hasCampaign = assignedCountry !== null');
+    expect(menu).toContain('newCampaign.disabled = hasCampaign');
+    expect(menu).toContain("newCampaign.classList.toggle('is-disabled', hasCampaign)");
     expect(menu).toContain("continueButton.addEventListener('click', () => void deploy(assignedCountry.id))");
-    // New Campaign card is no longer hard-disabled when assigned.
-    expect(menu).toContain('newCampaign.disabled = false');
+    expect(menu).not.toContain('previewOnly');
+    expect(html).not.toContain('ifm-registry-preview');
   });
 
   it('supports keyboard selection and joining from the map', () => {

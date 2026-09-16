@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
  * cheap, GPU-free regression test against exactly that mistake: it doesn't
  * exercise WebGPU, just cross-checks the two source files' text.
  */
-const sceneMeshes = readFileSync(path.join(process.cwd(), 'src/scene-meshes.ts'), 'utf8');
+const sceneMeshes = readFileSync(path.join(process.cwd(), 'src/rendering/scene-meshes.ts'), 'utf8');
 const propsShader = readFileSync(path.join(process.cwd(), 'src/shaders/props.ts'), 'utf8');
 
 // Archetype 7 is the final catch-all `else` branch (not an explicit

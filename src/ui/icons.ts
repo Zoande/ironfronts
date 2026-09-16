@@ -42,7 +42,7 @@ export type IconName =
   | 'node-stone' | 'node-metal' | 'node-oil' | 'resource-water'
   | 'cmd-move' | 'cmd-attack' | 'cmd-retreat' | 'cmd-split' | 'cmd-stop' | 'cmd-extract'
   | 'cmd-patrol' | 'cmd-garrison'
-  | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank'
+  | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank' | 'unit-artillery'
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
   | 'tech-militia' | 'tech-commandos'
@@ -107,6 +107,7 @@ const ICONS: Record<IconName, IconDef> = {
   'unit-armored-car': { kind: 'img', value: ironfrontsPng('unit-armored-car-icon') },
   'unit-light-tank': { kind: 'img', value: ironfrontsPng('unit-light-tank-icon') },
   'unit-medium-tank': { kind: 'img', value: ironfrontsPng('unit-medium-tank-icon') },
+  'unit-artillery': { kind: 'img', value: ironfrontsPng('unit-artillery-icon') },
   'marker-infantry': { kind: 'img', value: ironfrontsPng('marker-infantry') },
   'marker-engineer': { kind: 'img', value: ironfrontsPng('marker-engineer') },
   'marker-armored-car': { kind: 'img', value: ironfrontsPng('marker-armored-car') },

@@ -3,8 +3,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = process.cwd();
-const main = readFileSync(path.join(root, 'src/main.ts'), 'utf8');
-const audio = readFileSync(path.join(root, 'src/audio/audio-manager.ts'), 'utf8');
+const main = readFileSync(path.join(root, 'src/app/bootstrap.ts'), 'utf8');
+const audio = readFileSync(path.join(root, 'src/audio/engine/audio-manager.ts'), 'utf8');
 const styles = readFileSync(path.join(root, 'src/styles.css'), 'utf8');
 const html = readFileSync(path.join(root, 'index.html'), 'utf8');
 
@@ -116,7 +116,7 @@ describe('reload / Continue lockout', () => {
       expect(main).toContain('function withTimeout<T>(');
       expect(main).toMatch(/withTimeout\(\s*joinGame/);
       expect(main).toMatch(/withTimeout\(\s*\n?\s*GameConnection\.open/);
-      expect(main).toMatch(/withTimeout\(import\('\.\/renderer'\)/);
+      expect(main).toContain("withTimeout(import('../renderer')");
       expect(main).toMatch(/withTimeout\(\s*\n?\s*renderer\.initialize/);
       expect(main).toMatch(/withTimeout\(bootstrapGameSession/);
     });

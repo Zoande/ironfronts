@@ -23,7 +23,7 @@ small-size legibility, painted/stamped styling, registry, and credits.
 - The older `feat/callofwar-army-markers` already existed at an older commit,
   so the `-v2` branch avoids rewriting it.
 - Do not continue this work on `main`.
-- Preserve the route scratch layout in `src/main.ts`: 8 floats per segment,
+- Preserve the route scratch layout in `src/app/bootstrap.ts`: 8 floats per segment,
   with fraction at +5, retreat at +6, and arrow at +7.
 
 ## Implementation

@@ -110,8 +110,6 @@ export interface PublicCountry {
   name: string;
   color: string;
   controller: 'player' | 'ai' | 'neutral';
-  /** Display name of the controlling account, when `controller` is 'player'. */
-  controllerUsername?: string;
   alive: boolean;
 }
 
@@ -290,11 +288,6 @@ export interface PlayerProjection {
     tradeProposals: ResourceTradeProposal[];
   };
   /** Set once the campaign is decided from the viewer's point of view. */
-  outcome?: {
-    result: 'victory' | 'defeat';
-    reason: string;
-    atGameHours: number;
-  };
 }
 
 /**

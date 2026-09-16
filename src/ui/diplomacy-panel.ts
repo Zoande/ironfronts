@@ -77,10 +77,9 @@ function tradeLegChip(leg: TradeLegView): HTMLElement {
 
 function tradeProposalCard(
   proposal: TradeProposalView, viewerCountryId: number | null, actions: DiplomacyPanelActions, busy: boolean,
-  entering: boolean,
 ): HTMLElement {
   const outgoing = proposal.fromCountryId === viewerCountryId;
-  const card = node('section', `ifg-dip__proposal ifg-dip__proposal--trade${entering ? ' is-entering' : ''}`);
+  const card = node('section', 'ifg-dip__proposal ifg-dip__proposal--trade');
   const row = node('div', 'ifg-dip__trade-row');
   row.append(
     tradeLegChip(outgoing ? proposal.offer : proposal.request),
@@ -134,7 +133,6 @@ function tradeOfferForm(
   offerSelect.setAttribute('aria-label', 'You give — resource');
   offerSelect.addEventListener('change', () => {
     const next = createIcon(tradeResourceIcon(offerSelect.value as TradeResourceKey), 'ifg-dip__trade-form-icon');
-    next.classList.add('is-swapping');
     offerIcon.replaceWith(next);
     offerIcon = next;
   });
@@ -153,7 +151,6 @@ function tradeOfferForm(
   requestSelect.setAttribute('aria-label', 'You get — resource');
   requestSelect.addEventListener('change', () => {
     const next = createIcon(tradeResourceIcon(requestSelect.value as TradeResourceKey), 'ifg-dip__trade-form-icon');
-    next.classList.add('is-swapping');
     requestIcon.replaceWith(next);
     requestIcon = next;
   });
@@ -226,20 +223,6 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
   let renderedView: DiplomacyView | null = null;
   let wasOpen = false;
 
-  // Closing plays a short exit animation instead of vanishing on the spot —
-  // matches DIP_CLOSE_MS in game-ui.css's .ifg-dip.is-closing keyframe.
-  const DIP_CLOSE_MS = 170;
-  const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  let closeTimer: number | null = null;
-
-  // Tracks continuity across renders so entrance motion only plays for genuinely
-  // new content (a cable that just arrived, a proposal that just landed) — never
-  // replayed for the whole list on every unrelated re-render.
-  let lastSelectedCountryId: number | null = null;
-  let lastMessageCount = 0;
-  const seenProposalIds = new Set<string>();
-  const seenTradeProposalIds = new Set<string>();
-
   const render = (open: boolean, view: DiplomacyView): void => {
     if (open === wasOpen && view === renderedView) return;
     const activeDraft = body.querySelector<HTMLTextAreaElement>('.ifg-dip__composer textarea');
@@ -249,29 +232,8 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
     }
 
     const opening = open && !wasOpen;
-    const closing = !open && wasOpen;
     wasOpen = open;
     renderedView = view;
-
-    if (closeTimer !== null) { window.clearTimeout(closeTimer); closeTimer = null; }
-
-    if (closing) {
-      panel.classList.remove('is-open');
-      if (reducedMotion()) {
-        panel.hidden = true;
-        panel.classList.remove('is-closing');
-      } else {
-        panel.classList.add('is-closing');
-        closeTimer = window.setTimeout(() => {
-          panel.hidden = true;
-          panel.classList.remove('is-closing');
-          closeTimer = null;
-        }, DIP_CLOSE_MS);
-      }
-      return;
-    }
-
-    panel.classList.remove('is-closing');
     panel.hidden = !open;
     panel.classList.toggle('is-open', open);
     if (!open) return;
@@ -348,13 +310,8 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
     roster.append(list);
     applyFilter();
 
+    const cable = node('section', 'ifg-dip__cable');
     const country = view.countries.find((entry) => entry.id === view.selectedCountryId) ?? null;
-    // Only crossfade the cable pane when the selection itself changed — not on
-    // every incidental refresh (a busy-flag toggle, a tick-driven state patch)
-    // while looking at the same country, which would read as flicker.
-    const switchedCountry = (country?.id ?? null) !== lastSelectedCountryId;
-    lastSelectedCountryId = country?.id ?? null;
-    const cable = node('section', `ifg-dip__cable${switchedCountry ? ' is-entering' : ''}`);
     if (!country) {
       const empty = node('div', 'ifg-dip__empty-cable');
       empty.append(createIcon('diplomacy'), node('h3', undefined, 'Select a country'),
@@ -366,8 +323,7 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
       identity.append(createFlag(country.name, country.color, 'command'));
       const identityCopy = node('div');
       identityCopy.append(node('h3', undefined, country.name));
-      const controller = country.controller === 'player'
-        ? (country.controllerUsername ? `Player command — ${country.controllerUsername}` : 'Player command')
+      const controller = country.controller === 'player' ? 'Player command'
         : country.controller === 'ai' ? 'Military administration' : 'Unclaimed command';
       identityCopy.append(node('p', undefined, controller));
       identity.append(identityCopy);
@@ -381,23 +337,16 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
       if (view.messages.length === 0) {
         messages.append(node('p', 'ifg-dip__empty', 'No cables exchanged on this circuit.'));
       } else {
-        // A cable that just arrived (or was just sent) slides in; the rest of
-        // the log, re-rendered every tick regardless, stays put.
-        const newSince = switchedCountry ? Infinity : lastMessageCount;
-        view.messages.forEach((message, index) => {
+        for (const message of view.messages) {
           const outgoing = message.fromCountryId === view.viewerCountryId;
-          const entering = index >= newSince;
-          const item = node('article', `ifg-dip__message ${outgoing ? 'is-outgoing' : 'is-incoming'}${entering ? ' is-entering' : ''}`);
-          const sender = outgoing ? 'Your office'
-            : country.controllerUsername ? `${country.name} (${country.controllerUsername})` : country.name;
+          const item = node('article', `ifg-dip__message ${outgoing ? 'is-outgoing' : 'is-incoming'}`);
           item.append(
-            node('small', undefined, `${sender} / tick ${message.sentAtTick.toLocaleString()}`),
+            node('small', undefined, `${outgoing ? 'Your office' : country.name} / tick ${message.sentAtTick.toLocaleString()}`),
             node('p', undefined, message.body),
           );
           messages.append(item);
-        });
+        }
       }
-      lastMessageCount = view.messages.length;
 
       const pendingIncoming = view.proposals.filter((proposal) =>
         proposal.status === 'pending' && proposal.toCountryId === view.viewerCountryId);
@@ -408,9 +357,7 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
 
       const controls = node('div', 'ifg-dip__controls');
       for (const proposal of pendingIncoming) {
-        const entering = !seenProposalIds.has(proposal.id);
-        seenProposalIds.add(proposal.id);
-        const sheet = node('section', `ifg-dip__proposal${entering ? ' is-entering' : ''}`);
+        const sheet = node('section', 'ifg-dip__proposal');
         sheet.append(
           node('p', 'ifg-dip__proposal-kind', proposalLabel(proposal)),
           node('h4', undefined, proposal.kind === 'alliance' ? 'Join forces?' : 'End hostilities?'),
@@ -454,9 +401,7 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
       if (country.relation === 'allied') {
         const pendingTrades = view.tradeProposals.filter((proposal) => proposal.status === 'pending');
         for (const proposal of pendingTrades) {
-          const entering = !seenTradeProposalIds.has(proposal.id);
-          seenTradeProposalIds.add(proposal.id);
-          controls.append(tradeProposalCard(proposal, view.viewerCountryId, actions, busy, entering));
+          controls.append(tradeProposalCard(proposal, view.viewerCountryId, actions, busy));
         }
         if (!blocked) controls.append(tradeOfferForm(country.id, tradeDraft(country.id), actions, busy));
       }

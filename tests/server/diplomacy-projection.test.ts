@@ -54,6 +54,7 @@ describe('private diplomacy projection', () => {
     const alpha = runtime.projection(1);
     const beta = runtime.projection(2);
     const minor = runtime.projection(3);
+    expect(alpha).not.toHaveProperty('outcome');
     expect(alpha.diplomacy?.messages.map((message) => message.body))
       .toEqual(['alpha to beta', 'beta to alpha']);
     expect(beta.diplomacy?.messages.map((message) => message.body))
