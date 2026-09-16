@@ -23,6 +23,7 @@ export function projectFor(
       name: country.name,
       color: country.color,
       controller: country.controller,
+      controllerUsername: country.controllerUsername,
       alive: aliveCountries.has(country.id),
     };
   }

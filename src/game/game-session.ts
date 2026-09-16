@@ -337,10 +337,11 @@ export class GameSession {
     return best;
   }
 
-  claimCountry(countryId: number): boolean {
+  claimCountry(countryId: number, username?: string): boolean {
     const country = this.state.countries[countryId];
     if (!country) return false;
     country.controller = 'player';
+    if (username) country.controllerUsername = username;
     return true;
   }
 

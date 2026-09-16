@@ -366,7 +366,8 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
       identity.append(createFlag(country.name, country.color, 'command'));
       const identityCopy = node('div');
       identityCopy.append(node('h3', undefined, country.name));
-      const controller = country.controller === 'player' ? 'Player command'
+      const controller = country.controller === 'player'
+        ? (country.controllerUsername ? `Player command — ${country.controllerUsername}` : 'Player command')
         : country.controller === 'ai' ? 'Military administration' : 'Unclaimed command';
       identityCopy.append(node('p', undefined, controller));
       identity.append(identityCopy);
@@ -387,8 +388,10 @@ export function createDiplomacyPanel(actions: DiplomacyPanelActions): DiplomacyP
           const outgoing = message.fromCountryId === view.viewerCountryId;
           const entering = index >= newSince;
           const item = node('article', `ifg-dip__message ${outgoing ? 'is-outgoing' : 'is-incoming'}${entering ? ' is-entering' : ''}`);
+          const sender = outgoing ? 'Your office'
+            : country.controllerUsername ? `${country.name} (${country.controllerUsername})` : country.name;
           item.append(
-            node('small', undefined, `${outgoing ? 'Your office' : country.name} / tick ${message.sentAtTick.toLocaleString()}`),
+            node('small', undefined, `${sender} / tick ${message.sentAtTick.toLocaleString()}`),
             node('p', undefined, message.body),
           );
           messages.append(item);

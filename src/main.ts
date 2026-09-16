@@ -702,10 +702,11 @@ async function startGame(token: number): Promise<void> {
       uiStore.patch({ frameRateCap: cap });
     },
     navSelect: (id) => {
-      if (id !== 'diplomacy' && id !== 'research' && id !== 'trade') return;
+      if (id !== 'diplomacy' && id !== 'research' && id !== 'trade' && id !== 'events') return;
       const open = uiStore.get().activeSidePanel === id;
       uiStore.patch({ activeSidePanel: open ? null : id });
       if (id === 'trade' && !open) uiStore.patch({ market: { busy: false, feedback: null } });
+      if (id === 'events' && open) uiStore.patch({ notificationsLastReadAt: Date.now() });
       if (id === 'diplomacy' && !open) {
         const selected = uiStore.get().diplomacy.selectedCountryId
           ?? Object.values(session.state.countries)
@@ -2921,9 +2922,11 @@ function drainSessionEvents(session: RemoteGameSession): void {
     if (cap.toCountryId !== player && cap.fromCountryId !== player) continue;
     const to = session.state.countries[cap.toCountryId]?.name ?? '?';
     const from = session.state.countries[cap.fromCountryId]?.name ?? '?';
+    const center = activeRenderer?.provinceCenter(cap.provinceId);
     pushNotification('combat',
       cap.toCountryId === player ? 'Province captured' : 'Province lost',
-      cap.toCountryId === player ? `Taken from ${from}` : `${to} took it from you`);
+      cap.toCountryId === player ? `Taken from ${from}` : `${to} took it from you`,
+      center ? { focus: { x: center[0], z: center[1] } } : {});
   }
 }
 
@@ -2962,6 +2965,22 @@ function clearAllNotificationTimers(): void {
   notificationTimers.clear();
 }
 
+/** Persistent event log cap (the notification centre) — independent of, and
+ *  much larger than, the toast stack's display cap below. */
+const NOTIFICATION_HISTORY_CAP = 150;
+
+function pushHistory(
+  kind: GameNotification['kind'], title: string, body: string | undefined,
+  sticky: boolean, focus: { x: number; z: number } | undefined,
+): void {
+  const entry: GameNotification = {
+    id: `nh-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    kind, title, body, at: Date.now(), sticky, focus,
+  };
+  const history = [...uiStore.get().notificationHistory, entry].slice(-NOTIFICATION_HISTORY_CAP);
+  uiStore.patch({ notificationHistory: history });
+}
+
 function pushNotification(
   kind: GameNotification['kind'], title: string, body?: string,
   options: { sticky?: boolean; focus?: { x: number; z: number } } = {},
@@ -2969,6 +2988,7 @@ function pushNotification(
   const sticky = isSticky(kind, options.sticky);
   const previous = uiStore.get().notifications;
   const delay = autoDismissDelay(kind, options.sticky);
+  pushHistory(kind, title, body, sticky, options.focus);
 
   // Fold a burst of identical events (same kind + title, e.g. "Province captured"
   // through an offensive) into the existing toast with a running "×N" tally
@@ -3013,6 +3033,7 @@ function sameDiplomacyView(previous: DiplomacyView, next: DiplomacyView): boolea
       const candidate = next.countries[index];
       return country.id === candidate.id && country.name === candidate.name
         && country.color === candidate.color && country.controller === candidate.controller
+        && country.controllerUsername === candidate.controllerUsername
         && country.alive === candidate.alive && country.relation === candidate.relation
         && country.unreadCount === candidate.unreadCount
         && country.incomingProposalCount === candidate.incomingProposalCount;
@@ -3068,6 +3089,14 @@ function diplomacySignature(projection: RemoteGameSession['state']): string {
   return `${relations}|${messages}|${proposals}|${tradeProposals}|${countries}`;
 }
 
+/** "France (Zoande)" when the country is player-held and we know the account's
+ *  username, otherwise just the country name — for diplomacy toasts/labels. */
+function countryLabel(projection: RemoteGameSession['state'], countryId: number): string {
+  const country = projection.countries[countryId];
+  if (!country) return 'Foreign office';
+  return country.controllerUsername ? `${country.name} (${country.controllerUsername})` : country.name;
+}
+
 function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: number): void {
   const projection = session.state;
   const diplomacy = projection.diplomacy ?? { messages: [], proposals: [], tradeProposals: [] };
@@ -3082,7 +3111,7 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
     const key = `message:${message.id}`;
     if (!announcedDiplomacyItems.has(key) && message.toCountryId === projection.viewerCountryId) {
       pushNotification('diplomacy', 'Incoming diplomatic cable',
-        `${projection.countries[message.fromCountryId]?.name ?? 'Foreign office'} sent a message.`);
+        `${countryLabel(projection, message.fromCountryId)} sent a message.`);
       announcedDiplomacyItems.add(key);
     }
   }
@@ -3090,14 +3119,14 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
     const key = `proposal:${proposal.id}`;
     const previousStatus = diplomacyProposalStatuses.get(proposal.id);
     if (previousStatus && previousStatus !== proposal.status && proposal.fromCountryId === projection.viewerCountryId) {
-      const other = projection.countries[proposal.toCountryId]?.name ?? 'Foreign office';
+      const other = countryLabel(projection, proposal.toCountryId);
       pushNotification('diplomacy', 'Diplomatic proposal resolved', `${other} ${proposal.status} your ${proposal.kind} proposal.`);
     }
     diplomacyProposalStatuses.set(proposal.id, proposal.status);
     if (!announcedDiplomacyItems.has(key) && proposal.toCountryId === projection.viewerCountryId
       && proposal.status === 'pending') {
       pushNotification('diplomacy', 'Diplomatic proposal received',
-        `${projection.countries[proposal.fromCountryId]?.name ?? 'Foreign office'} sent a ${proposal.kind} proposal.`);
+        `${countryLabel(projection, proposal.fromCountryId)} sent a ${proposal.kind} proposal.`);
       announcedDiplomacyItems.add(key);
     }
   }
@@ -3105,14 +3134,14 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
     const key = `trade:${proposal.id}`;
     const previousStatus = tradeProposalStatuses.get(proposal.id);
     if (previousStatus && previousStatus !== proposal.status && proposal.fromCountryId === projection.viewerCountryId) {
-      const other = projection.countries[proposal.toCountryId]?.name ?? 'Foreign office';
+      const other = countryLabel(projection, proposal.toCountryId);
       pushNotification('diplomacy', 'Trade offer resolved', `${other} ${proposal.status} your trade offer.`);
     }
     tradeProposalStatuses.set(proposal.id, proposal.status);
     if (!announcedDiplomacyItems.has(key) && proposal.toCountryId === projection.viewerCountryId
       && proposal.status === 'pending') {
       pushNotification('diplomacy', 'Trade offer received',
-        `${projection.countries[proposal.fromCountryId]?.name ?? 'Foreign office'} sent a trade offer.`);
+        `${countryLabel(projection, proposal.fromCountryId)} sent a trade offer.`);
       announcedDiplomacyItems.add(key);
     }
   }
@@ -3144,6 +3173,7 @@ function syncDiplomacyView(session: RemoteGameSession, selectedCountryId?: numbe
           && proposal.fromCountryId === country.id).length;
       return {
         id: country.id, name: country.name, color: country.color, controller: country.controller,
+        controllerUsername: country.controllerUsername,
         alive: country.alive, relation: diplomacyRelation(session, country.id),
         unreadCount: messages.filter((message) => message.toCountryId === projection.viewerCountryId
           && !readDiplomacyMessages.has(message.id)).length,

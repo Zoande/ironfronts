@@ -68,6 +68,11 @@ export interface CountryState {
   readonly name: string;
   readonly color: string;
   controller: ControllerType;
+  /** Display name of the account controlling this country, when `controller`
+   *  is 'player' — lets clients show "France (Zoande)" instead of a bare
+   *  generic "Player command". Undefined for AI/neutral, and for saves from
+   *  before this field existed (no GAME_VERSION bump; purely cosmetic). */
+  controllerUsername?: string;
   stockpile: Stockpile;
   /** Passive per-game-hour income, recomputed by the economy system. */
   income: Stockpile;

@@ -110,6 +110,8 @@ export interface PublicCountry {
   name: string;
   color: string;
   controller: 'player' | 'ai' | 'neutral';
+  /** Display name of the controlling account, when `controller` is 'player'. */
+  controllerUsername?: string;
   alive: boolean;
 }
 

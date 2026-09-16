@@ -165,7 +165,7 @@ export type NavId =
   | 'armies' | 'provinces' | 'production' | 'research'
   | 'diplomacy' | 'economy' | 'intelligence' | 'events' | 'trade';
 
-export type SidePanelId = 'diplomacy' | 'research' | 'trade';
+export type SidePanelId = 'diplomacy' | 'research' | 'trade' | 'events';
 export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
 /** Tabs include future presentation-only services that have no server branch yet. */
 export type TechnologyCategory = Exclude<TechnologyBranch, 'resourceBuildings'> | 'navy' | 'airforce';
@@ -186,6 +186,8 @@ export interface DiplomacyCountryView {
   readonly name: string;
   readonly color: string;
   readonly controller: 'player' | 'ai' | 'neutral';
+  /** Display name of the account controlling this country, when player-held. */
+  readonly controllerUsername?: string;
   readonly alive: boolean;
   readonly relation: DiplomacyRelation;
   /** Messages received since this cable was last opened. */
@@ -388,6 +390,12 @@ export interface StrategicUiState {
   readonly selectedProvince: SelectedProvince | null;
   readonly selectedArmy: ArmyStackView | null;
   readonly notifications: readonly GameNotification[];
+  /** Every notification ever raised this session, newest last, capped — the
+   *  toast stack above only ever shows the last few and auto-expires them. */
+  readonly notificationHistory: readonly GameNotification[];
+  /** epoch ms watermark; history entries after this are "unread". Advances
+   *  when the notification centre is closed. */
+  readonly notificationsLastReadAt: number;
   /** One non-modal command drawer at a time; the map remains visible behind it. */
   readonly activeSidePanel: SidePanelId | null;
   readonly diplomacy: DiplomacyView;
@@ -430,6 +438,8 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
     selectedProvince: null,
     selectedArmy: null,
     notifications: [],
+    notificationHistory: [],
+    notificationsLastReadAt: 0,
     activeSidePanel: null,
     diplomacy: {
       viewerCountryId: null,

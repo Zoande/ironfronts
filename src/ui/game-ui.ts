@@ -17,6 +17,7 @@ import { createFlag } from './flags';
 import { createIcon, RESOURCE_ICON, type IconName } from './icons';
 import { createDiplomacyPanel } from './diplomacy-panel';
 import { createTradePanel, type MarketResource } from './trade-panel';
+import { createNotificationCenter } from './notification-center';
 import { buildNotification } from './notifications';
 import { groupQueueItems, type QueueGroup } from './queue-presentation';
 import {
@@ -91,7 +92,7 @@ const DOCK_SECTIONS: ReadonlyArray<{ id: NavId; label: string; icon: IconName }>
   { id: 'diplomacy', label: 'Diplomacy', icon: 'diplomacy' },
   { id: 'trade', label: 'Trade', icon: 'trade' },
   { id: 'economy', label: 'Economy', icon: 'economy' },
-  { id: 'events', label: 'Objectives', icon: 'objectives' },
+  { id: 'events', label: 'Notifications', icon: 'events' },
 ];
 
 const RESOURCE_CHIPS: ReadonlyArray<{ key: keyof ProvinceResourceTotals; label: string; icon: IconName }> = [
@@ -424,10 +425,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
   dock.setAttribute('aria-label', 'Command');
 
   const dockButtons = new Map<NavId, HTMLButtonElement>();
+  let notificationBadge: HTMLElement | null = null;
   for (const section of DOCK_SECTIONS) {
     const b = el('button', 'ifg-dock__btn');
     b.type = 'button';
-    const available = section.id === 'research' || section.id === 'diplomacy' || section.id === 'trade';
+    const available = section.id === 'research' || section.id === 'diplomacy' || section.id === 'trade'
+      || section.id === 'events';
     b.disabled = !available;
     b.dataset.nav = section.id;
     b.title = `${section.label} — not available yet`;
@@ -439,12 +442,19 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
         b.setAttribute('aria-controls', 'ifg-technology-panel');
       } else if (section.id === 'trade') {
         b.setAttribute('aria-controls', 'ifg-trade-panel');
+      } else if (section.id === 'events') {
+        b.setAttribute('aria-controls', 'ifg-notecenter-panel');
       } else {
         b.setAttribute('aria-controls', 'ifg-diplomacy-panel');
       }
       b.setAttribute('aria-expanded', 'false');
     }
     b.append(createIcon(section.icon), el('span', 'ifg-dock__tip', section.label));
+    if (section.id === 'events') {
+      notificationBadge = el('span', 'ifg-dock__badge');
+      notificationBadge.hidden = true;
+      b.append(notificationBadge);
+    }
     b.addEventListener('click', () => actions.navSelect(section.id));
     dockButtons.set(section.id, b);
   }
@@ -467,6 +477,11 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     close: () => actions.navSelect('trade'),
     buy: actions.marketBuy,
     sell: actions.marketSell,
+  });
+
+  const notificationCenter = createNotificationCenter({
+    close: () => actions.navSelect('events'),
+    focusWorld: actions.focusWorld,
   });
 
   // ---------------- technology tree + two authoritative research slots ----------------
@@ -1214,7 +1229,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (event.target === overlay) actions.togglePause(false);
   });
 
-  root.append(topbar, dock, diplomacyPanel.element, tradePanel.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, dossier.element, overlay);
+  root.append(topbar, dock, diplomacyPanel.element, tradePanel.element, notificationCenter.element, technologyPanel, modeCluster, notifyStack, pvCommandBar, provinceCard, armyCard, pvPicker, dossier.element, overlay);
   document.body.append(root);
 
   const onKey = (event: KeyboardEvent): void => {
@@ -1278,6 +1293,19 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
     technologyPanel.hidden = !technologyOpen;
     if (technologyOpen) renderTechnology(state);
+    const eventsOpen = state.activeSidePanel === 'events';
+    const eventsDockButton = dockButtons.get('events');
+    if (eventsDockButton) {
+      eventsDockButton.classList.toggle('is-on', eventsOpen);
+      eventsDockButton.setAttribute('aria-expanded', String(eventsOpen));
+      eventsDockButton.setAttribute('aria-pressed', String(eventsOpen));
+    }
+    notificationCenter.render(eventsOpen, state.notificationHistory, state.notificationsLastReadAt);
+    if (notificationBadge) {
+      const unread = state.notificationHistory.filter((entry) => entry.at > state.notificationsLastReadAt).length;
+      notificationBadge.textContent = unread > 99 ? '99+' : String(unread);
+      notificationBadge.hidden = unread === 0;
+    }
     if (renderedSidePanel === 'diplomacy' && state.activeSidePanel === null) {
       diplomacyDockButton?.focus({ preventScroll: true });
     }
@@ -1286,6 +1314,9 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     }
     if (renderedSidePanel === 'research' && state.activeSidePanel === null) {
       technologyDockButton?.focus({ preventScroll: true });
+    }
+    if (renderedSidePanel === 'events' && state.activeSidePanel === null) {
+      eventsDockButton?.focus({ preventScroll: true });
     }
     renderedSidePanel = state.activeSidePanel;
     for (const [id, button] of dockButtons) {

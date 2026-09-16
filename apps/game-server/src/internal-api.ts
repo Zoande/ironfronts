@@ -67,7 +67,8 @@ export function createInternalApiServer(options: InternalApiOptions) {
           sendJson(response, 400, { error: 'accountId and countryId are required.' });
           return;
         }
-        const result = options.runtime.join(input.accountId, Number(input.countryId));
+        const username = typeof input.username === 'string' ? input.username : undefined;
+        const result = options.runtime.join(input.accountId, Number(input.countryId), username);
         if (result.ok) await options.afterJoin();
         sendJson(response, result.ok ? 200 : 409, result);
         if (result.ok) options.log('info', 'country_claimed', { countryId: result.countryId });

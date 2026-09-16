@@ -69,7 +69,9 @@ export class GameRuntime {
     };
   }
 
-  join(accountId: string, countryId: number): { ok: true; countryId: number } | { ok: false; reason: string } {
+  join(
+    accountId: string, countryId: number, username?: string,
+  ): { ok: true; countryId: number } | { ok: false; reason: string } {
     const existing = this.seatsByAccount.get(accountId);
     if (existing !== undefined) return existing === countryId
       ? { ok: true, countryId: existing }
@@ -83,7 +85,7 @@ export class GameRuntime {
     if (this.accountsByCountry.has(countryId)) return { ok: false, reason: 'Country is already claimed.' };
     this.seatsByAccount.set(accountId, countryId);
     this.accountsByCountry.set(countryId, accountId);
-    this.session.claimCountry(countryId);
+    this.session.claimCountry(countryId, username);
     return { ok: true, countryId };
   }
 
