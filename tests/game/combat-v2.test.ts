@@ -55,8 +55,7 @@ describe('v2 continuous combat', () => {
       light: light * COMBAT_DAMAGE_SCALE,
       heavy: heavy * COMBAT_DAMAGE_SCALE,
     });
-    // Only the base (level-1) roster — per-level scaling is covered by technology.test.ts.
-    expect(UNIT_TYPES.filter((unit) => unit.level === 1).map((unit) => [unit.id, unit.attack, unit.defense])).toEqual([
+    expect(UNIT_TYPES.map((unit) => [unit.id, unit.attack, unit.defense])).toEqual([
       ['infantry', rate(8, 4.4, 2.4), rate(6, 3.3, 1.8)],
       ['engineer', rate(1.8, 0.9, 0.45), rate(2.4, 1.2, 0.6)],
       ['armored-car', rate(6.6, 4.2, 2.1), rate(7.7, 4.9, 2.45)],

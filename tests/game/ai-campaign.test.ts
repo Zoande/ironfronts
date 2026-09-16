@@ -52,9 +52,7 @@ describe('AI on a live campaign', () => {
 
     // A clear capital surplus reaches the live mobilise/split path directly;
     // long-run economy pacing is covered by focused economy and production tests.
-    // AI planning is cadence-gated (GAME_PACE.clock.aiPlanningHours = 0.25h), so
-    // the tick must cross that threshold at least once to actually run stepAi.
-    session.tick(0.26);
+    session.tick(3 / 1800);
 
     const situation = assess(
       session, aiMemory(session.state), ai, indexArmies(session.state), indexProvinces(session),

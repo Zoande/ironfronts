@@ -3,10 +3,10 @@ import { GameSession } from '../../src/game/game-session';
 import { HOURS_PER_WARHEAD, stepWarheads } from '../../src/game/strike';
 import { emptyStockpile, relationOf, setRelation } from '../../src/game/game-state';
 import { BUILDINGS, queueBuilding } from '../../src/game/construction';
-import { initialTechnologyLevels } from '../../src/game/technology';
 import { buildScenarioSelection } from '../../src/game/scenario-catalog';
 import { CATALOG_COUNTRY_BY_NAME } from '../../src/game/data/countries.generated';
 import { loadWorld, type LoadedWorld } from './load-world';
+import { PROTOTYPE_HOURS_PER_HOUR } from '../../src/game/time';
 
 const SPAIN = CATALOG_COUNTRY_BY_NAME.get('spain')!.id;
 let world: LoadedWorld;
@@ -60,13 +60,13 @@ function strikeableForeignProvince(s: GameSession) {
 
 describe('strategic strike', () => {
   it('enforces the late-game strategic-infrastructure investment', () => {
-    expect(BUILDINGS.ordnance).toMatchObject({
-      label: 'Ordnance Workshop', kind: 'military',
-      cost: { funds: 2_500, stone: 450, metal: 350 }, buildWork: 12, buildTimeHours: 12,
+    expect(BUILDINGS.ordnance).toEqual({
+      label: 'Ordnance Workshop', cost: { funds: 1_600, stone: 480, metal: 640 },
+      buildTimeHours: 480 / (4 * PROTOTYPE_HOURS_PER_HOUR),
     });
-    expect(BUILDINGS.missileSite).toMatchObject({
-      label: 'Missile Site', kind: 'military',
-      cost: { funds: 5_000, stone: 900, metal: 900 }, buildWork: 27, buildTimeHours: 27,
+    expect(BUILDINGS.missileSite).toEqual({
+      label: 'Missile Site', cost: { funds: 2_400, stone: 720, metal: 960 },
+      buildTimeHours: 720 / (4 * PROTOTYPE_HOURS_PER_HOUR),
     });
 
     for (const buildingId of ['ordnance', 'missileSite'] as const) {
@@ -76,10 +76,6 @@ describe('strategic strike', () => {
       s.state.provinceBuildings[province.id] = {
         barracks: 0, tankPlant: 0, ordnance: 0, missileSite: 0,
       };
-      // Missile Site also gates on Hybrid technology Level 8 and phase 3 —
-      // this test is about cost gating, so clear those gates up front.
-      s.state.countries[SPAIN].technologies = { ...initialTechnologyLevels(), hybrid: 8 };
-      s.state.countries[SPAIN].phase = 3;
       s.state.countries[SPAIN].stockpile = { ...cost, metal: cost.metal - 1 };
 
       expect(queueBuilding(s, province.id, buildingId, SPAIN)).toMatchObject({ ok: false });

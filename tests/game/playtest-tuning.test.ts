@@ -36,41 +36,39 @@ describe('opening economy is lean but non-zero', () => {
     // Old prototype: 20 funds / 5 food. Must be materially higher so a
     // starting stockpile buys only a handful, not dozens.
     expect(infantry.cost.funds).toBeGreaterThanOrEqual(150);
-    expect(infantry.cost.food).toBeGreaterThanOrEqual(25);
-    expect(infantry.cost.manpower).toBe(45);
+    expect(infantry.cost.food).toBeGreaterThanOrEqual(75);
+    // Manpower gate is left alone — the stockpile already makes it binding.
+    expect(infantry.cost.manpower).toBe(40);
   });
 
   it('prices the base tank as a five-figure-relative commitment above infantry, with a preserved tier gap to medium tanks', () => {
     expect(lightTank.cost.funds!).toBeGreaterThanOrEqual(800);
-    // Tanks carry no food cost under the current resource overhaul — only
-    // funds/metal/oil scale with tier.
-    expect(lightTank.cost.food).toBeUndefined();
-    expect(lightTank.cost.metal).toBe(140);
-    expect(lightTank.cost.oil).toBe(55);
+    expect(lightTank.cost.food).toBeGreaterThanOrEqual(200);
+    // Physical inputs (metal/oil) are untouched by the rebalance.
+    expect(lightTank.cost.metal).toBe(70);
+    expect(lightTank.cost.oil).toBe(35);
 
     expect(mediumTank.cost.funds!).toBeGreaterThan(lightTank.cost.funds!);
-    expect(mediumTank.cost.food).toBeUndefined();
-    expect(mediumTank.cost.metal).toBe(260);
-    expect(mediumTank.cost.oil).toBe(110);
+    expect(mediumTank.cost.food!).toBeGreaterThan(lightTank.cost.food!);
+    expect(mediumTank.cost.metal).toBe(120);
+    expect(mediumTank.cost.oil).toBe(60);
     // Roughly preserve the old ~1.8x light->medium funds tier gap.
     const tierGap = mediumTank.cost.funds! / lightTank.cost.funds!;
     expect(tierGap).toBeGreaterThan(1.4);
     expect(tierGap).toBeLessThan(2.2);
   });
 
-  it('tiers opening affordability: infantry > light tank > medium tank', () => {
-    // The resource overhaul added per-hour upkeep, so the opening stockpile
-    // is now a sustainment buffer rather than the sole cap on army size —
-    // absolute affordable counts are higher than the pre-upkeep pass. What
-    // this guards is the tiering staying intact, and armor staying a real
-    // commitment rather than a turn-one horde.
-    const inf = affordableCount(SELECTABLE_START_STOCKPILE, infantry.cost);
-    const light = affordableCount(SELECTABLE_START_STOCKPILE, lightTank.cost);
-    const medium = affordableCount(SELECTABLE_START_STOCKPILE, mediumTank.cost);
-    expect(inf).toBeGreaterThan(light);
-    expect(light).toBeGreaterThan(medium);
-    expect(medium).toBeLessThanOrEqual(1);
-    expect(inf).toBeLessThan(20);
+  it('funds a fresh selectable country for a handful of infantry from its stockpile alone, not a horde', () => {
+    const count = affordableCount(SELECTABLE_START_STOCKPILE, infantry.cost);
+    expect(count).toBeGreaterThanOrEqual(2);
+    expect(count).toBeLessThanOrEqual(4);
+  });
+
+  it('leaves a selectable country able to afford at most one light tank up front', () => {
+    const count = affordableCount(SELECTABLE_START_STOCKPILE, lightTank.cost);
+    expect(count).toBeLessThanOrEqual(1);
+    // And nowhere near a medium tank straight away.
+    expect(affordableCount(SELECTABLE_START_STOCKPILE, mediumTank.cost)).toBe(0);
   });
 
   it('keeps every selectable-stockpile resource real and playable (never zero)', () => {

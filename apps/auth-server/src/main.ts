@@ -152,8 +152,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'POST' && url.pathname === '/v2/game/join') {
       const input = joinGameSchema.parse(await body(request));
       const joined = await gameRequest<{ ok: true; countryId: number }>('/internal/v2/join', {
-        method: 'POST',
-        body: JSON.stringify({ accountId: account.id, countryId: input.countryId, username: account.username }),
+        method: 'POST', body: JSON.stringify({ accountId: account.id, countryId: input.countryId }),
       });
       sendJson(response, 200, { assignment: { gameId: GAME_ID, countryId: joined.countryId } });
       return;
