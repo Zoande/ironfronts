@@ -108,9 +108,8 @@ describe('Spain "World at War" initialisation', () => {
     session.tick(6 / 1800);
     expect(session.gameTimeHours).toBeCloseTo(6 / 1800, 5);
     expect(session.state.countries[SPAIN_ID].stockpile.funds).toBeGreaterThan(before);
-    // stone/metal/oil now carry a small passive baseline from owned resource
-    // buildings even with no engineers assigned to extraction (resource-production.ts)
-    expect(session.state.countries[SPAIN_ID].income.metal).toBeGreaterThanOrEqual(0);
+    // stone/metal/oil are physical-only — no passive gain
+    expect(session.state.countries[SPAIN_ID].income.metal).toBe(0);
   });
 
 });

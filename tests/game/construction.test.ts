@@ -114,12 +114,10 @@ describe('stepConstruction', () => {
 });
 
 describe('buildableBuildings', () => {
-  it('lists the three tech-available buildings for an owned urban province, none once built', () => {
+  it('lists the four buildings for an owned urban province, none once built', () => {
     const s = state();
     const c = ctx(s);
-    // Missile Site additionally requires Hybrid technology Level 8, which this
-    // country starts without — it only appears once that research completes.
-    expect(buildableBuildings(c, 10, 1).sort()).toEqual(['barracks', 'ordnance', 'tankPlant']);
+    expect(buildableBuildings(c, 10, 1).sort()).toEqual(['barracks', 'missileSite', 'ordnance', 'tankPlant']);
     s.provinceBuildings[10] = { barracks: 1, tankPlant: 1, ordnance: 1, missileSite: 1 };
     expect(buildableBuildings(c, 10, 1)).toEqual([]);
   });
@@ -131,29 +129,23 @@ describe('buildableBuildings', () => {
 });
 
 describe('buildOptions', () => {
-  it('still offers every building the country cannot afford, flagged unaffordable', () => {
-    // buildOptions is the full catalog for an owned province — it never
-    // drops a building, only flags why it isn't buildable right now.
+  it('still offers a building the country cannot afford, flagged unaffordable', () => {
     const s = state();
     s.countries[1].stockpile = { ...emptyStockpile(), funds: 0, stone: 0, metal: 0 };
     const opts = buildOptions(ctx(s), 10, 1);
-    expect(opts.map((o) => o.id).sort()).toEqual(
-      ['barracks', 'fields', 'mine', 'missileSite', 'oilPump', 'ordnance', 'quarry', 'tankPlant'],
-    );
+    expect(opts.map((o) => o.id).sort()).toEqual(['barracks', 'missileSite', 'ordnance', 'tankPlant']);
     expect(opts.every((o) => !o.affordable)).toBe(true);
     expect(buildableBuildings(ctx(s), 10, 1)).toEqual([]); // none actually startable
   });
 
-  it('excludes a building from buildableBuildings once its next tier outpaces research', () => {
+  it('drops a building once it is built or queued', () => {
     const s = state();
     const c = ctx(s);
     queueBuilding(c, 10, 'barracks', 1);
-    // Barracks now targets tier 2, which needs Training technology Level 2 —
-    // buildOptions still lists it (with that reason); buildableBuildings does not.
-    expect(buildableBuildings(c, 10, 1).sort()).toEqual(['ordnance', 'tankPlant']);
+    expect(buildOptions(c, 10, 1).map((o) => o.id).sort()).toEqual(['missileSite', 'ordnance', 'tankPlant']);
   });
 
-  it('offers nothing buildable in a rural province', () => {
-    expect(buildableBuildings(ctx(state(), false), 10, 1)).toEqual([]);
+  it('is empty for a rural province', () => {
+    expect(buildOptions(ctx(state(), false), 10, 1)).toEqual([]);
   });
 });

@@ -27,7 +27,6 @@ import { mulberry32, hashString } from './rng';
 import { qualifyingPhaseFromBuildings } from './phase';
 import { createProvinceEconomies } from './economy/resource-generation';
 import { ensureCountryEconomy } from './economy/shortages';
-import { bootstrapResources } from './resource-bootstrap';
 
 /**
  * Every selectable (five-city) country starts on this identical footing.
@@ -191,7 +190,7 @@ export function initGameState(
     .map(([countryId]) => countryId)
     .sort((a, b) => a - b);
   const eligible = new Set(eligibleCountryIds);
-  const initializationCountryId = selection.playerCountryId;
+  const initializationCountryId = eligibleCountryIds[0] ?? byOwner.keys().next().value ?? 0;
   const countries: Record<number, CountryState> = {};
   for (const countryId of byOwner.keys()) {
     countries[countryId] = makeCountryState(
@@ -260,9 +259,6 @@ export function initGameState(
   // multiplayer server would call `guaranteeStrategicBaseline` per participant.
   // Every other neutral nation keeps whatever scarce natural geography it has.
   const provinceEconomies = createProvinceEconomies(world, seed, eligibleCountryIds);
-  const resourceBootstrap = bootstrapResources(
-    world.resourceNodes, world, graph, provinceOwners, [initializationCountryId], seed,
-  );
 
   // ---- starting armies ----------------------------------------
   const armies: Record<string, ArmyStack> = {};
@@ -337,7 +333,7 @@ export function initGameState(
     battles: {},
     battleFronts: {},
     provinceEconomies,
-    resourceNodes: resourceBootstrap.nodes,
+    resourceNodes: {},
     relations: {},
     provinceDevastation: {},
     diplomacyMessages: {},
@@ -386,9 +382,9 @@ export function initGameState(
     graph,
     diagnostics: {
       eligibleCountryIds,
-      reachableResourceNodes: resourceBootstrap.diagnostics.reachable,
-      unreachableResourceNodes: resourceBootstrap.diagnostics.unreachable,
-      guaranteedDeposits: resourceBootstrap.guarantees,
+      reachableResourceNodes: 0,
+      unreachableResourceNodes: 0,
+      guaranteedDeposits: [],
       totalArmies: Object.keys(armies).length,
       startCameras,
     },
