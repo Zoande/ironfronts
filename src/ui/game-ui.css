@@ -2658,7 +2658,7 @@
 .ifg-province-picker__thumb img,
 .ifg-province-picker__thumb svg { width: 100%; height: 100%; object-fit: contain; }
 .ifg-province-picker__copy { display: flex; flex-direction: column; min-width: 0; gap: 5px; }
-.ifg-province-picker__copy b { overflow: hidden; font-family: var(--ifg-serif); text-overflow: ellipsis; white-space: nowrap; }
+.ifg-province-picker__copy b { min-width: 0; font-family: var(--ifg-serif); line-height: 1.2; overflow-wrap: break-word; }
 .ifg-province-picker__copy small { color: var(--ifg-dim); line-height: 1.3; }
 .ifg-province-picker__cost { display: flex; flex-wrap: wrap; gap: 3px 8px; }
 .ifg-province-picker__cost-chip { display: inline-flex; align-items: center; gap: 3px; }
