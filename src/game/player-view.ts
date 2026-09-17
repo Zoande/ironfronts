@@ -81,7 +81,8 @@ export interface PlayerArmyView {
    *  it (it owns the graph); [] here. */
   readonly moveRoute?: ReadonlyArray<{ readonly x: number; readonly z: number }>;
   readonly moveRoadRoute?: ReadonlyArray<{
-    readonly edgeId: number; readonly from: number; readonly to: number; readonly startDistance: number;
+    readonly edgeId: number; readonly from: number; readonly to: number;
+    readonly startDistance: number; readonly endDistance?: number;
   }>;
   readonly moveIntent?: 'move' | 'attack';
   /** Current visible movement leg. The client can animate continuously toward

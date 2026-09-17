@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildLandGraph, edgePositionFrom } from '../../src/game/movement/graph';
-import { currentMovementLeg, remainingOrderTravelHours, stepMovement } from '../../src/game/units/movement';
-import { makeGroup, type ArmyStack } from '../../src/game/units/army';
+import { currentMovementLeg, issueMoveOrder, remainingOrderTravelHours, stepMovement } from '../../src/game/units/movement';
+import { makeGroup, type ArmyStack, type MoveOrder } from '../../src/game/units/army';
 import { orderRouteForClient, roadRouteForClient } from '../../apps/game-server/src/projection';
 import { GAME_STATE_VERSION, emptyStockpile, type GameState } from '../../src/game/game-state';
 import { TERRAIN_CLASS, type CanonicalRoadNetwork, type WorldData } from '../../src/game/world-data';
@@ -67,6 +67,22 @@ describe('canonical road movement', () => {
     expect(roadRouteForClient(army.order!, ctx.graph, 0)).toEqual([
       { edgeId: 0, from: 0, to: 1, startDistance: 0 },
     ]);
+  });
+
+  it('stops and renders at the clicked point between road nodes', () => {
+    const ctx = context();
+    const army = ctx.state.armies.a;
+    army.order = null;
+    army.status = 'idle';
+    expect(issueMoveOrder(ctx, army.id, 0, 50).ok).toBe(true);
+    const order = ctx.state.armies[army.id].order as MoveOrder | null;
+    expect(order?.roadDestination).toMatchObject({ edgeId: 0, distanceAlongEdge: 50 });
+    expect(orderRouteForClient(order!, ctx.graph, army.x, army.z)?.at(-1)).toEqual({ x: 0, z: 50 });
+    stepMovement(ctx, 100);
+    expect(army.status).toBe('idle');
+    expect(army.x).toBeCloseTo(0, 6);
+    expect(army.z).toBeCloseTo(50, 6);
+    expect(army.edge).toMatchObject({ edgeId: 0, distanceAlongEdge: 50 });
   });
 
   it('captures an undefended enemy center crossed en route to a later target', () => {

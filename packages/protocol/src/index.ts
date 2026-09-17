@@ -195,7 +195,7 @@ export interface ProjectedArmy {
   moveRoute?: ReadonlyArray<{ x: number; z: number }>;
   /** Compact canonical route; the client expands stable edges from its verified world package. */
   moveRoadRoute?: ReadonlyArray<{
-    edgeId: number; from: number; to: number; startDistance: number;
+    edgeId: number; from: number; to: number; startDistance: number; endDistance?: number;
   }>;
   moveIntent?: 'move' | 'attack';
   /** Full authoritative wall-clock estimate to the final order destination. */

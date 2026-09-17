@@ -380,7 +380,7 @@ export class WorldRenderer {
   /** Expand compact server route references from this client's verified copy
    * of the canonical centerline package. */
   expandRoadRoute(
-    steps: ReadonlyArray<{ edgeId: number; from: number; to: number; startDistance: number }> | undefined,
+    steps: ReadonlyArray<{ edgeId: number; from: number; to: number; startDistance: number; endDistance?: number }> | undefined,
     startX: number, startZ: number,
   ): Array<{ x: number; z: number }> | undefined {
     if (!steps?.length || !this.roadNetwork || !this.roadCenterlines) return undefined;
@@ -395,20 +395,36 @@ export class WorldRenderer {
         z: this.roadCenterlines![(edge.pointOffset + index) * 2 + 1],
       }));
       if (step.from === edge.to) points.reverse();
-      let remaining = Math.max(0, step.startDistance), index = 1;
-      while (index < points.length) {
+      const startDistance = Math.max(0, Math.min(edge.length, step.startDistance));
+      const endDistance = Math.max(startDistance, Math.min(edge.length, step.endDistance ?? edge.length));
+      let consumed = 0;
+      const clipped: Array<{ x: number; z: number }> = [];
+      for (let index = 1; index < points.length; index += 1) {
         const a = points[index - 1], b = points[index];
         let dx = b.x - a.x;
         if (dx > width / 2) dx -= width;
         else if (dx < -width / 2) dx += width;
         const length = Math.hypot(dx, b.z - a.z);
-        if (remaining <= length) {
-          const t = length > 0 ? remaining / length : 0;
-          const x = ((a.x + dx * t) % width + width) % width;
-          result.push({ x, z: a.z + (b.z - a.z) * t }, ...points.slice(index));
-          break;
+        const overlapStart = Math.max(startDistance, consumed);
+        const overlapEnd = Math.min(endDistance, consumed + length);
+        if (length > 0 && overlapEnd >= overlapStart - 1e-6) {
+          const pointAt = (distance: number) => {
+            const t = Math.max(0, Math.min(1, (distance - consumed) / length));
+            return { x: ((a.x + dx * t) % width + width) % width,
+              z: a.z + (b.z - a.z) * t };
+          };
+          if (!clipped.length) clipped.push(pointAt(overlapStart));
+          clipped.push(pointAt(overlapEnd));
         }
-        remaining -= length; index += 1;
+        consumed += length;
+        if (consumed >= endDistance - 1e-6) break;
+      }
+      for (const point of clipped) {
+        const last = result[result.length - 1];
+        let dx = point.x - last.x;
+        if (dx > width / 2) dx -= width;
+        else if (dx < -width / 2) dx += width;
+        if (Math.hypot(dx, point.z - last.z) > 1e-5) result.push(point);
       }
     }
     return result;
@@ -471,7 +487,7 @@ export class WorldRenderer {
     if (!defaultPlayer) throw new Error('The world has no countries');
     this.playerCountryId = defaultPlayer.id;
     this.camera.configureWorld(this.manifest.world.width, this.manifest.world.height);
-    this.camera.minimumAltitude = this.manifest.terrain.maxHeight + 82;
+    this.camera.minimumAltitude = this.manifest.terrain.maxHeight + 42;
 
     report('Requesting WebGPU device', 0.1);
     this.adapter = (await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })

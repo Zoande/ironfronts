@@ -13,7 +13,7 @@ export class StrategyCamera {
   distance = 8_900;
   yaw = 0;
   pitch = 0.78;
-  minDistance = 180;
+  minDistance = 90;
   maxDistance = 10_800;
   minimumAltitude = 300;
   worldWidth = 13_562;

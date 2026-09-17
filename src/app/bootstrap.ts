@@ -1563,8 +1563,9 @@ function syncArmyMarkers(
           targetZ: armyMotionRaw.targetZ + huddle.z,
         }
       : armyMotionRaw;
-    const moveRoute = army.moveRoute
-      ?? renderer.expandRoadRoute(army.moveRoadRoute, army.x, army.z);
+    const moveRoute = army.moveRoute?.length
+      ? army.moveRoute
+      : renderer.expandRoadRoute(army.moveRoadRoute, army.x, army.z);
 
     // Authoritative route polyline for the SELECTED own army only (move = cream,
     // attack = red, retreating = amber). Other armies' routes stay hidden so the
@@ -2061,7 +2062,7 @@ function attackOrderAt(
   clientX: number, clientY: number,
 ): QueuedAttackOrder | { kind: 'invalid'; reason: string } {
   const ground = renderer.groundPointAt(clientX, clientY);
-  const provinceId = renderer.provinceIdAt(clientX, clientY);
+  const provinceId = ground ? renderer.provinceIdAtWorld(ground[0], ground[1]) : -1;
   const centerProvinceId = renderer.pickProvinceCenterAt(clientX, clientY);
   // Province centres win over co-located army markers. Use the exact centre,
   // not the marker's offset click point, so the authoritative target agrees.

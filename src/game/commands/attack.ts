@@ -6,7 +6,7 @@ import { unitType } from '../units/unit-catalog';
 import { issueMoveOrder } from '../units/movement';
 import type { ExactMoveGoal } from '../movement/orders';
 import type { ArmyStack } from '../units/army';
-import type { LandGraph } from '../movement/graph';
+import { nearestRoadPosition, type LandGraph } from '../movement/graph';
 import { routeFromArmy } from '../movement/position';
 import { combinedGraph } from '../movement/naval';
 import { computeArmyVisibility } from '../visibility';
@@ -50,7 +50,7 @@ function reachableProvinceNode(
     ?? reachableIn(ctx.graph, true) ?? reachableIn(merged, true);
   return goal === null
     ? { ok: false, reason: 'Attack route unavailable.' }
-    : { ...goal, x: ctx.graph.nodeX[goal.nodeId], z: ctx.graph.nodeZ[goal.nodeId] };
+    : { ...goal, x: ctx.graph.nodeX[goal.nodeId!], z: ctx.graph.nodeZ[goal.nodeId!] };
 }
 
 export function issueAttack(ctx: SimContext, command: AttackCommand): CommandResult {
@@ -84,7 +84,23 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
     if (provinceOwner > 0 && relationOf(ctx.state, army.ownerCountryId, provinceOwner) === 'allied') {
       return { ok: false, reason: 'That province belongs to an ally — move there instead.' };
     }
-    const destination = reachableProvinceNode(ctx, army, province.id, destinationX, destinationZ);
+    const centerClick = hasClickPoint && wrappedDistance(
+      destinationX, destinationZ, province.center[0], province.center[1], ctx.world.width,
+    ) <= 0.01;
+    const merged = combinedGraph(ctx.graph);
+    const exactRoad = hasClickPoint && !centerClick
+      ? nearestRoadPosition(
+        ctx.graph, destinationX, destinationZ, 600, -1,
+        (x, z) => ctx.world.provinceAt(x, z) === province.id,
+      ) ?? nearestRoadPosition(
+        merged, destinationX, destinationZ, 600, -1,
+        (x, z) => ctx.world.provinceAt(x, z) === province.id,
+      ) : null;
+    const destination = exactRoad
+      ? { graph: ctx.graph.component[army.graphNodeId] === ctx.graph.component[exactRoad.from]
+          ? ctx.graph : merged,
+        roadPosition: exactRoad, x: exactRoad.x, z: exactRoad.z }
+      : reachableProvinceNode(ctx, army, province.id, destinationX, destinationZ);
     if ('ok' in destination) return destination;
     return issueMoveOrder(
       ctx, army.id, destination.x, destination.z, 'attack',

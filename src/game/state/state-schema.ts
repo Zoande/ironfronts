@@ -16,6 +16,7 @@ const signedStockpile = z.object({ funds: number, manpower: number, food: number
 const unit = z.string().refine((value) => UNIT_TYPE_BY_ID.has(value), 'Unknown unit type');
 const building = z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']);
 const order = z.object({ path: z.array(id), destX: number, destZ: number, intent: z.enum(['move', 'attack']), edgeProgress: positive,
+  roadDestination: z.object({ edgeId: id, from: id, to: id, distanceAlongEdge: positive }).optional(),
   target: z.discriminatedUnion('kind', [point.extend({ kind: z.literal('position') }),
     z.object({ kind: z.literal('province'), provinceId: id, x: number.optional(), z: number.optional() }),
     z.object({ kind: z.literal('army'), armyId: z.string(), lastKnownX: number, lastKnownZ: number })]).optional() });

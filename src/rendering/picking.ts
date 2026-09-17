@@ -19,7 +19,9 @@ export function pickTerrainPoint(
   let high = Math.max(0, (-2 - ray.origin[1]) / ray.direction[1]);
   if (high < low) [low, high] = [high, low];
 
-  for (let iteration = 0; iteration < 8; iteration += 1) {
+  // Twelve bisections keep close-zoom orders pinned to the visible terrain
+  // pixel instead of drifting several world units on steep ground.
+  for (let iteration = 0; iteration < 12; iteration += 1) {
     const distance = (low + high) * 0.5;
     vec3.scaleAndAdd(result, ray.origin, ray.direction, distance);
     if (result[1] > sampleHeight(result[0], result[2])) low = distance;

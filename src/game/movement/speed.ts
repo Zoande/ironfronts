@@ -93,11 +93,11 @@ function landSegmentHours(
 
 function landRoadHours(
   session: SimContext, army: ArmyStack, graph: LandGraph, from: number, to: number,
-  prospectiveWars: ReadonlySet<number> = new Set(), startDistance = 0,
+  prospectiveWars: ReadonlySet<number> = new Set(), startDistance = 0, endDistance = Infinity,
 ): number {
   const edgeId = edgeIdBetween(graph, from, to);
   if (edgeId < 0) return Infinity;
-  const points = edgePolyline(graph, edgeId, from, startDistance);
+  const points = edgePolyline(graph, edgeId, from, startDistance, endDistance);
   let hours = 0;
   for (let i = 1; i < points.length; i += 1) hours += landSegmentHours(
     session, army, points[i - 1].x, points[i - 1].z, points[i].x, points[i].z, prospectiveWars,
@@ -158,7 +158,11 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
       const start = to === edge.to ? edge.from : edge.to;
       const startDistance = start === army.edge.from
         ? distanceFromArmyEdgeOrigin : edge.length - distanceFromArmyEdgeOrigin;
-      hours += landRoadHours(session, army, session.graph, start, to, new Set(), startDistance);
+      const endDistance = order.path.length === 1 && order.roadDestination?.edgeId === edgeId
+        ? (start === order.roadDestination.from
+          ? order.roadDestination.distanceAlongEdge
+          : edge.length - order.roadDestination.distanceAlongEdge) : Infinity;
+      hours += landRoadHours(session, army, session.graph, start, to, new Set(), startDistance, endDistance);
       fromNode = to;
       fromX = session.graph.nodeX[to];
       fromZ = session.graph.nodeZ[to];
@@ -175,7 +179,14 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
         fromX, fromZ, toX, toZ, session.world.width,
       ));
     } else {
-      hours += landRoadHours(session, army, session.graph, fromNode, to);
+      const edgeId = edgeIdBetween(session.graph, fromNode, to);
+      const edge = session.graph.edges[edgeId];
+      const endDistance = pathIndex === order.path.length - 1
+        && order.roadDestination?.edgeId === edgeId && edge
+        ? (fromNode === order.roadDestination.from
+          ? order.roadDestination.distanceAlongEdge
+          : edge.length - order.roadDestination.distanceAlongEdge) : Infinity;
+      hours += landRoadHours(session, army, session.graph, fromNode, to, new Set(), 0, endDistance);
     }
     fromNode = to;
     fromX = toX;
@@ -192,8 +203,9 @@ export function currentMovementLeg(session: SimContext, army: ArmyStack): Curren
   if (!order?.path.length || army.status === 'engaged'
     || army.status === 'embarking' || army.status === 'disembarking') return null;
   const targetNode = order.path[0];
-  const targetX = session.graph.nodeX[targetNode];
-  const targetZ = session.graph.nodeZ[targetNode];
+  const finalPartial = order.path.length === 1 && order.roadDestination?.to === targetNode;
+  const targetX = finalPartial ? order.destX : session.graph.nodeX[targetNode];
+  const targetZ = finalPartial ? order.destZ : session.graph.nodeZ[targetNode];
   const terrainScale = army.status === 'atSea'
     ? ROAD_BONUS
     : landMovementSpeedMultiplierAt(session, army.ownerCountryId, army.x, army.z);
@@ -207,9 +219,15 @@ export function currentMovementLeg(session: SimContext, army: ArmyStack): Curren
         const edgeId = army.edge!.edgeId ?? edgeIdBetween(session.graph, army.edge!.from, army.edge!.to);
         const length = session.graph.edges[edgeId]?.length ?? 0;
         const progress = army.edge!.distanceAlongEdge ?? order.edgeProgress;
-        return targetNode === army.edge!.to ? length - progress : progress;
+        const destination = finalPartial && order.roadDestination?.edgeId === edgeId
+          ? (army.edge!.from === order.roadDestination.from
+            ? order.roadDestination.distanceAlongEdge
+            : length - order.roadDestination.distanceAlongEdge) : null;
+        return destination !== null ? Math.abs(destination - progress)
+          : targetNode === army.edge!.to ? length - progress : progress;
       })()
-      : (session.graph.edges[edgeIdBetween(session.graph, army.graphNodeId, targetNode)]?.length
+      : (finalPartial ? order.roadDestination!.distanceAlongEdge
+        : session.graph.edges[edgeIdBetween(session.graph, army.graphNodeId, targetNode)]?.length
         ?? wrappedDistance(army.x, army.z, targetX, targetZ, session.world.width)),
   };
 }

@@ -97,7 +97,10 @@ export function projectFor(
       if (leg && leg.worldUnitsPerGameHour > 0) {
         const route = !source!.order?.path.length ? undefined
           : orderRouteForClient(
-            { path: [source!.order.path[0]] }, graph, source!.x, source!.z, source!.edge,
+            { path: [source!.order.path[0]],
+              ...(source!.order.path.length === 1 && source!.order.roadDestination
+                ? { roadDestination: source!.order.roadDestination } : {}) },
+            graph, source!.x, source!.z, source!.edge,
           ) ?? undefined;
         projected = {
           ...projected,
@@ -294,7 +297,7 @@ export function bearingLabel(dx: number, dz: number): string {
  * order carries no path (e.g. an already-arrived order still being cleaned up).
  */
 export function orderRouteForClient(
-  order: { path: readonly number[] },
+  order: { path: readonly number[]; roadDestination?: { edgeId: number; from: number; to: number; distanceAlongEdge: number } },
   graph: LandGraph | { nodeX: ArrayLike<number>; nodeZ: ArrayLike<number> },
   armyX: number, armyZ: number,
   occupied?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null,
@@ -316,7 +319,12 @@ export function orderRouteForClient(
       const start = to === edge.to ? edge.from : edge.to;
       const rawProgress = firstOccupied ? (occupied.distanceAlongEdge ?? 0) : 0;
       const progress = firstOccupied && occupied.from !== start ? edge.length - rawProgress : rawProgress;
-      route.push(...edgePolyline(graph, edgeId, start, progress).slice(1));
+      const end = order.path[order.path.length - 1] === to
+        && order.roadDestination?.edgeId === edgeId
+        ? (start === order.roadDestination.from
+          ? order.roadDestination.distanceAlongEdge
+          : edge.length - order.roadDestination.distanceAlongEdge) : Infinity;
+      route.push(...edgePolyline(graph, edgeId, start, progress, end).slice(1));
     } else route.push({ x: graph.nodeX[to], z: graph.nodeZ[to] });
     from = to;
   }
@@ -352,12 +360,12 @@ export function rallyRouteForClient(
 /** Stable edge references for full client route rendering. Sea routes fall
  * back to explicit world points because they are not road centerlines. */
 export function roadRouteForClient(
-  order: { path: readonly number[] }, graph: LandGraph,
+  order: { path: readonly number[]; roadDestination?: { edgeId: number; from: number; to: number; distanceAlongEdge: number } }, graph: LandGraph,
   startNode: number,
   occupied?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null,
-): Array<{ edgeId: number; from: number; to: number; startDistance: number }> | null {
+): Array<{ edgeId: number; from: number; to: number; startDistance: number; endDistance?: number }> | null {
   if (!order.path.length) return null;
-  const route: Array<{ edgeId: number; from: number; to: number; startDistance: number }> = [];
+  const route: Array<{ edgeId: number; from: number; to: number; startDistance: number; endDistance?: number }> = [];
   let from = occupied?.from ?? startNode;
   for (let i = 0; i < order.path.length; i += 1) {
     const to = order.path[i];
@@ -370,7 +378,12 @@ export function roadRouteForClient(
     const start = to === edge.to ? edge.from : edge.to;
     const rawProgress = firstOccupied ? (occupied.distanceAlongEdge ?? 0) : 0;
     const startDistance = firstOccupied && occupied.from !== start ? edge.length - rawProgress : rawProgress;
-    route.push({ edgeId, from: start, to, startDistance });
+    const endDistance = i === order.path.length - 1 && order.roadDestination?.edgeId === edgeId
+      ? (start === order.roadDestination.from
+        ? order.roadDestination.distanceAlongEdge
+        : edge.length - order.roadDestination.distanceAlongEdge) : edge.length;
+    route.push({ edgeId, from: start, to, startDistance,
+      ...(endDistance < edge.length - 1e-6 ? { endDistance } : {}) });
     from = to;
   }
   return route;

@@ -46,6 +46,11 @@ export interface MoveOrder {
   /** World-space destination (the last node's position), for marker/HUD. */
   readonly destX: number;
   readonly destZ: number;
+  /** Optional exact stop point on the final road edge, oriented from `from`. */
+  readonly roadDestination?: {
+    readonly edgeId: number; readonly from: number; readonly to: number;
+    readonly distanceAlongEdge: number;
+  };
   /** 'move' = cream route, 'attack' = red route. */
   readonly intent: 'move' | 'attack';
   /** Typed strategic target. Unit targets are re-pathed while detected. */

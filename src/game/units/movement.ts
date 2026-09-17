@@ -47,7 +47,7 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
     const target = Object.values(session.state.armies).find((other) => other !== army
       && other.ownerCountryId === army.ownerCountryId
       && other.status === 'idle' && !other.order && !other.battleFrontIds?.length
-      && (other.graphNodeId === army.graphNodeId
+      && ((!army.edge && !other.edge && other.graphNodeId === army.graphNodeId)
         || wrappedDistance(other.x, other.z, army.x, army.z, worldWidth) < MERGE_RADIUS));
     if (target) {
       mergeStacks(target, army);
@@ -108,13 +108,27 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
       );
       const roadEdge = graph.edges[edgeId];
       const forward = targetNode === army.edge.to;
-      const targetX = graph.nodeX[targetNode];
-      const targetZ = graph.nodeZ[targetNode];
-      const segmentLength = forward
-        ? roadEdge.length - army.edge.distanceAlongEdge : army.edge.distanceAlongEdge;
+      const exactStop = order.path.length === 1 && order.roadDestination?.edgeId === edgeId
+        && order.roadDestination.to === targetNode;
+      const exactDistance = exactStop
+        ? (army.edge.from === order.roadDestination!.from
+          ? order.roadDestination!.distanceAlongEdge
+          : roadEdge.length - order.roadDestination!.distanceAlongEdge)
+        : null;
+      const targetX = exactStop ? order.destX : graph.nodeX[targetNode];
+      const targetZ = exactStop ? order.destZ : graph.nodeZ[targetNode];
+      const segmentLength = exactDistance !== null
+        ? Math.abs(exactDistance - army.edge.distanceAlongEdge)
+        : forward ? roadEdge.length - army.edge.distanceAlongEdge : army.edge.distanceAlongEdge;
       if (segmentLength <= 1e-9) {
         army.x = targetX;
         army.z = targetZ;
+        if (exactStop) {
+          army.edge.distanceAlongEdge = exactDistance!;
+          order.path.shift();
+          order.edgeProgress = 0;
+          continue;
+        }
         army.lastGraphNodeId = army.graphNodeId;
         army.graphNodeId = targetNode;
         army.edge = null;
@@ -130,7 +144,8 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
       const requested = Math.min(segmentLength, budget * speedScale);
       const requestedPosition = edgePositionFrom(
         graph, edgeId, army.edge.from,
-        army.edge.distanceAlongEdge + (forward ? requested : -requested),
+        army.edge.distanceAlongEdge + ((exactDistance !== null
+          ? exactDistance >= army.edge.distanceAlongEdge : forward) ? requested : -requested),
       );
       const advance = contactDistance(
         session, army, requestedPosition.x, requestedPosition.z, requested, positions,
@@ -139,6 +154,13 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
       if (advance >= segmentLength - 1e-9) {
         army.x = targetX;
         army.z = targetZ;
+        if (exactStop) {
+          army.edge.distanceAlongEdge = exactDistance!;
+          order.path.shift();
+          order.edgeProgress = 0;
+          budget -= segmentLength / Math.max(speedScale, 0.01);
+          continue;
+        }
         army.lastGraphNodeId = army.edge && targetNode === army.edge.from
           ? army.edge.to : army.graphNodeId;
         army.edge = null;
@@ -149,7 +171,8 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         if (capture) captures.push(capture);
         budget -= segmentLength / Math.max(speedScale, 0.01);
       } else {
-        army.edge.distanceAlongEdge += forward ? advance : -advance;
+        army.edge.distanceAlongEdge += (exactDistance !== null
+          ? exactDistance >= army.edge.distanceAlongEdge : forward) ? advance : -advance;
         const point = edgePositionFrom(
           graph, edgeId, army.edge.from, army.edge.distanceAlongEdge,
         );

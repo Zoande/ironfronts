@@ -229,7 +229,7 @@ export function edgePositionFrom(
 }
 
 export function edgePolyline(
-  graph: LandGraph, edgeId: number, from: number, startDistance = 0,
+  graph: LandGraph, edgeId: number, from: number, startDistance = 0, endDistance = Infinity,
 ): Array<{ x: number; z: number }> {
   const edge = graph.edges?.[edgeId];
   if (!edge) {
@@ -237,8 +237,10 @@ export function edgePolyline(
     if (!pair) return [];
     const points = from === pair.from ? [pair.from, pair.to] : [pair.to, pair.from];
     const result = points.map((node) => ({ x: graph.nodeX[node], z: graph.nodeZ[node] }));
-    return startDistance > 0
-      ? [edgePositionFrom(graph, edgeId, from, startDistance), result[1]] : result;
+    const length = wrappedDistance(result[0].x, result[0].z, result[1].x, result[1].z, graph.width);
+    const start = Math.max(0, Math.min(length, startDistance));
+    const end = Math.max(start, Math.min(length, endDistance));
+    return [edgePositionFrom(graph, edgeId, from, start), edgePositionFrom(graph, edgeId, from, end)];
   }
   const points: Array<{ x: number; z: number }> = [];
   for (let i = 0; i < edge.pointCount; i += 1) points.push({
@@ -246,7 +248,8 @@ export function edgePolyline(
     z: graph.centerlines[(edge.pointOffset + i) * 2 + 1],
   });
   if (from === edge.to) points.reverse();
-  if (startDistance <= 0) return points;
+  const clippedEnd = Math.max(startDistance, Math.min(edge.length, endDistance));
+  if (startDistance <= 0 && clippedEnd >= edge.length) return points;
   const start = edgePositionFrom(graph, edgeId, from, startDistance);
   let consumed = 0, index = 1;
   while (index < points.length) {
@@ -254,7 +257,66 @@ export function edgePolyline(
     if (consumed + segment >= startDistance - 1e-6) break;
     consumed += segment; index += 1;
   }
-  return [start, ...points.slice(index)];
+  const result = [start];
+  let distance = consumed;
+  for (let i = index; i < points.length; i += 1) {
+    const segment = wrappedDistance(points[i - 1].x, points[i - 1].z, points[i].x, points[i].z, graph.width);
+    if (distance + segment >= clippedEnd - 1e-6) break;
+    result.push(points[i]);
+    distance += segment;
+  }
+  const end = edgePositionFrom(graph, edgeId, from, clippedEnd);
+  const last = result[result.length - 1];
+  if (wrappedDistance(last.x, last.z, end.x, end.z, graph.width) > 1e-6) result.push(end);
+  return result;
+}
+
+export interface RoadPosition {
+  readonly edgeId: number;
+  readonly from: number;
+  readonly to: number;
+  /** Distance measured from `from` along the canonical centerline. */
+  readonly distanceAlongEdge: number;
+  readonly x: number;
+  readonly z: number;
+  readonly distanceToRoad: number;
+}
+
+/** Exact closest point on the rendered canonical road network. */
+export function nearestRoadPosition(
+  graph: LandGraph, x: number, z: number, maxDistance = Infinity,
+  restrictComponent = -1, accept?: (x: number, z: number) => boolean,
+): RoadPosition | null {
+  let best: RoadPosition | null = null;
+  let bestErrorSq = maxDistance * maxDistance;
+  for (const edge of graph.edges) {
+    if (restrictComponent >= 0 && graph.component[edge.from] !== restrictComponent) continue;
+    const points = edgePolyline(graph, edge.id, edge.from);
+    let consumed = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      const a = points[i - 1];
+      let dx = points[i].x - a.x;
+      if (dx > graph.width / 2) dx -= graph.width;
+      else if (dx < -graph.width / 2) dx += graph.width;
+      let px = x - a.x;
+      if (px > graph.width / 2) px -= graph.width;
+      else if (px < -graph.width / 2) px += graph.width;
+      const dz = points[i].z - a.z;
+      const lengthSq = dx * dx + dz * dz;
+      const t = lengthSq > 0 ? Math.max(0, Math.min(1, (px * dx + (z - a.z) * dz) / lengthSq)) : 0;
+      const worldX = wrapX(a.x + dx * t, graph.width);
+      const worldZ = a.z + dz * t;
+      const errorSq = (px - dx * t) ** 2 + (z - worldZ) ** 2;
+      if (errorSq < bestErrorSq && (!accept || accept(worldX, worldZ))) {
+        bestErrorSq = errorSq;
+        best = { edgeId: edge.id, from: edge.from, to: edge.to,
+          distanceAlongEdge: consumed + Math.sqrt(lengthSq) * t,
+          x: worldX, z: worldZ, distanceToRoad: Math.sqrt(errorSq) };
+      }
+      consumed += Math.sqrt(lengthSq);
+    }
+  }
+  return best;
 }
 
 /** Closest distance along an oriented centerline to a cached world position. */
