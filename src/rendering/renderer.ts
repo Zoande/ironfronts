@@ -1461,6 +1461,22 @@ export class WorldRenderer {
     return this.provinceCenterById.get(provinceId) ?? null;
   }
 
+  /** Province whose settlement/centre node is under the pointer. This is
+   * deliberately resolved separately from army markers so a garrison cannot
+   * make the province centre impossible to target. */
+  pickProvinceCenterAt(clientX: number, clientY: number): number | null {
+    const ground = this.groundPointAt(clientX, clientY);
+    if (!ground) return null;
+    const provinceId = this.provinceIdAt(clientX, clientY);
+    const center = this.provinceCenterById.get(provinceId);
+    if (!center) return null;
+    let dx = center[0] - ground[0];
+    if (dx > this.manifest.world.width / 2) dx -= this.manifest.world.width;
+    else if (dx < -this.manifest.world.width / 2) dx += this.manifest.world.width;
+    const radius = Math.max(28, this.camera.distance * 0.045);
+    return Math.hypot(dx, center[1] - ground[1]) <= radius ? provinceId : null;
+  }
+
   /** Army stack marker under a screen coordinate (nearest within a
    *  zoom-scaled world radius), or null. */
   pickArmyAt(clientX: number, clientY: number): string | null {

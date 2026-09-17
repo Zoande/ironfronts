@@ -6,13 +6,17 @@ import { leadingEdgeValid } from '../movement/position';
 import { contactDistance } from '../movement/contact';
 import { movementEdgeAllowed } from '../movement/policy';
 import { revalidateOrder } from '../movement/pursuit';
-import { TERRAIN_SPEED, ROAD_BONUS, STRATEGIC_MOVEMENT_SCALE } from '../movement/speed';
+import { landMovementSpeedMultiplierAt, STRATEGIC_MOVEMENT_SCALE } from '../movement/speed';
 import { beginNavalCrossing, isNavalStatus, isSeaEdge, stepNavalCrossing } from '../movement/naval';
 import { wrappedDistance } from '../geometry';
 import { computeArmyVisibility } from '../visibility';
 import { relationOf } from '../game-state';
 import { GAME_PACE } from '../pacing';
-export { currentMovementLeg, type CurrentMovementLeg } from '../movement/speed';
+import { captureProvinceAtArmyNode, type CaptureEvent } from '../combat/capture';
+export {
+  currentMovementLeg, remainingOrderTravelHours, movementEdgeTravelCost,
+  ENEMY_LAND_SPEED_MULTIPLIER, type CurrentMovementLeg,
+} from '../movement/speed';
 export { movementEdgeAllowed, warsRequiredForPath } from '../movement/policy';
 export { issueMoveOrder, issueStop, type MoveOrderResult } from '../movement/orders';
 export { retreatPaths, issueRetreatOrder, type RetreatPath } from '../movement/retreat';
@@ -52,8 +56,9 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
 }
 
 /** Advance every ordered stack, including explicit timed naval crossings. */
-export function stepMovement(session: SimContext, dtHours: number): void {
+export function stepMovement(session: SimContext, dtHours: number): CaptureEvent[] {
   const { graph, world } = session;
+  const captures: CaptureEvent[] = [];
   const positions = new SpatialIndex(Object.values(session.state.armies), world.width);
   const arrivedIds = new Set<string>();
   const visibilityByCountry = new Map<number, ReturnType<typeof computeArmyVisibility>>();
@@ -103,10 +108,13 @@ export function stepMovement(session: SimContext, dtHours: number): void {
         army.edge = null;
         order.path.shift();
         order.edgeProgress = 0;
+        const capture = captureProvinceAtArmyNode(session, army);
+        if (capture) captures.push(capture);
         continue;
       }
-      const speedScale = (TERRAIN_SPEED[world.terrainClassAt(army.x, army.z)] ?? 0.9)
-        * ROAD_BONUS;
+      const speedScale = landMovementSpeedMultiplierAt(
+        session, army.ownerCountryId, army.x, army.z,
+      );
       const requested = Math.min(segmentLength, budget * speedScale);
       const advance = contactDistance(session, army, targetX, targetZ, requested, positions);
       if (advance <= 1e-9) break;
@@ -119,6 +127,8 @@ export function stepMovement(session: SimContext, dtHours: number): void {
         army.graphNodeId = targetNode;
         order.path.shift();
         order.edgeProgress = 0;
+        const capture = captureProvinceAtArmyNode(session, army);
+        if (capture) captures.push(capture);
         budget -= segmentLength / Math.max(speedScale, 0.01);
       } else {
         const ratio = advance / segmentLength;
@@ -158,4 +168,5 @@ export function stepMovement(session: SimContext, dtHours: number): void {
     }
   }
   mergeArrivedStacks(session, arrivedIds);
+  return captures;
 }

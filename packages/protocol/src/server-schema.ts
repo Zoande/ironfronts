@@ -31,6 +31,7 @@ const army = point.extend({
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']), inSupply: z.boolean(), speed: nonnegative,
     groups: z.array(z.object({ typeId: z.string(), count: integer, health: nonnegative.max(1) })) }).nullable(),
   moveOrder: point.nullable(), moveRoute: z.array(point).optional(), moveIntent: z.enum(['move', 'attack']).optional(),
+  arrival: z.object({ remainingMs: nonnegative, sampledAtEpochMs: finite }).optional(),
   motion: z.object({ targetX: finite, targetZ: finite, durationMs: nonnegative, progress: nonnegative.max(1).optional(), route: z.array(point).optional(), sampledAtEpochMs: finite.optional(), generation: integer.optional() }).optional(),
   navalPhase: z.object({ kind: z.enum(['embarking', 'disembarking']), durationMs: nonnegative,
     remainingMs: nonnegative, sampledAtEpochMs: finite }).optional(),

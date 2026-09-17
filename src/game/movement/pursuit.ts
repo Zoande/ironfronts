@@ -6,6 +6,7 @@ import { movementEdgeAllowed } from './policy';
 import { routeFromArmy, leadingEdgeValid } from './position';
 import { closestReachablePath } from './pathfind';
 import { combinedGraph, isSeaEdge } from './naval';
+import { movementEdgeTravelCost } from './speed';
 
 function targetPoint(session: SimContext, army: ArmyStack, order: MoveOrder,
   visibility = computeArmyVisibility(session.state, session.world, army.ownerCountryId)): [number, number] {
@@ -50,16 +51,25 @@ export function revalidateOrder(session: SimContext, army: ArmyStack, order: Mov
 
   let routeGraph = session.graph;
   let path = targetNode >= 0
-    ? routeFromArmy(session, army, targetNode, edgeAllowed, routeGraph)
+    ? routeFromArmy(
+      session, army, targetNode, edgeAllowed, routeGraph,
+      movementEdgeTravelCost(session, army, routeGraph),
+    )
     : null;
   if (!path && targetNode >= 0) {
     routeGraph = merged;
-    path = routeFromArmy(session, army, targetNode, edgeAllowed, routeGraph);
+    path = routeFromArmy(
+      session, army, targetNode, edgeAllowed, routeGraph,
+      movementEdgeTravelCost(session, army, routeGraph),
+    );
   }
   if (!path) {
-    const nearest = closestReachablePath(routeGraph, army.graphNodeId, targetX, targetZ, edgeAllowed);
+    const cost = movementEdgeTravelCost(session, army, routeGraph);
+    const nearest = closestReachablePath(
+      routeGraph, army.graphNodeId, targetX, targetZ, edgeAllowed, cost,
+    );
     path = routeFromArmy(
-      session, army, nearest[nearest.length - 1], edgeAllowed, routeGraph,
+      session, army, nearest[nearest.length - 1], edgeAllowed, routeGraph, cost,
     ) ?? [army.graphNodeId];
   }
   order.path.splice(0, order.path.length, ...path.slice(1));

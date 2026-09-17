@@ -305,14 +305,20 @@ let pendingSplitGroups: Array<{ typeId: string; count: number }> | null = null;
 let selectedProvinceId: number | null = null;
 let selectedProvinceName = '';
 let selectedProvinceTerrain = '';
-// Shift-click waypoint queue (client-side only — the server has no notion of
-// a multi-leg order). Each army's queued destinations wait until the army
+type QueuedArmyOrder =
+  | { kind: 'move'; x: number; z: number }
+  | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
+  | { kind: 'attackArmy'; targetArmyId: string };
+type QueuedAttackOrder = Exclude<QueuedArmyOrder, { kind: 'move' }>;
+// Shift-click order queue (client-side only — the server has no notion of
+// a multi-leg order). Each army's queued moves/attacks wait until the army
 // reports 'idle' (its current order finished) before the next one is issued.
 // `armyWaypointIssuing` guards against re-firing the same waypoint on every
 // subsequent 'change' event while the just-sent order is still in flight and
 // the army's locally-known status has not yet flipped away from 'idle'.
-const armyWaypointQueues = new Map<string, Array<{ x: number; z: number }>>();
+const armyWaypointQueues = new Map<string, QueuedArmyOrder[]>();
 const armyWaypointIssuing = new Set<string>();
+const lastArmyOrderMode = new Map<string, 'move' | 'attack'>();
 const authenticated = await getSession().catch((): SessionResponse => ({ authenticated: false }));
 if (!authenticated.authenticated || !authenticated.account) {
   window.location.replace('/login.html');
@@ -1291,6 +1297,7 @@ async function bootstrapGameSession(
     armyMotionInterpolator.clear();
     armyWaypointQueues.clear();
     armyWaypointIssuing.clear();
+    lastArmyOrderMode.clear();
     clearAllNotificationTimers();
     session.dispose();
     window.removeEventListener('keydown', onKey);
@@ -2002,11 +2009,33 @@ function armStrike(session: RemoteGameSession): void {
 /** A one-shot red reticle that snaps onto the click point and fades. Pure DOM,
  *  no renderer pipeline — the immediate "acknowledged" cue for an attack order. */
 let attackFlashEl: HTMLDivElement | null = null;
-/** Shift-click adds a waypoint instead of issuing the move immediately. */
-function queueWaypoint(armyId: string, x: number, z: number): void {
+/** Shift-click appends a typed move/attack after the active order. */
+function queueWaypoint(armyId: string, order: QueuedArmyOrder): void {
   const queue = armyWaypointQueues.get(armyId) ?? [];
-  queue.push({ x, z });
+  queue.push(order);
   armyWaypointQueues.set(armyId, queue);
+}
+
+function issueQueuedArmyOrder(
+  session: RemoteGameSession, armyId: string, order: QueuedArmyOrder,
+): { ok: boolean; reason?: string } {
+  const rejected = (reason: string): void => {
+    armyWaypointIssuing.delete(armyId);
+    pushNotification('warning', 'Queued order failed', reason);
+    advanceWaypointQueues(session);
+  };
+  if (order.kind === 'move') {
+    return session.orderMove(armyId, order.x, order.z, 'move', undefined, rejected);
+  }
+  const accepted = (): void => {
+    void audio.playUiCue('confirm');
+    pushNotification('information', 'Queued attack underway', 'Your force is advancing to the next target.');
+  };
+  return order.kind === 'attackArmy'
+    ? session.orderAttackArmy(armyId, order.targetArmyId, accepted, rejected)
+    : session.orderAttackProvince(
+      armyId, order.provinceId, order.x, order.z, accepted, rejected,
+    );
 }
 
 /** Fire the next queued waypoint once an army's current order has finished. */
@@ -2020,9 +2049,39 @@ function advanceWaypointQueues(session: RemoteGameSession): void {
     const next = queue.shift()!;
     if (!queue.length) armyWaypointQueues.delete(armyId);
     armyWaypointIssuing.add(armyId);
-    const result = session.orderMove(armyId, next.x, next.z, 'move');
+    const result = issueQueuedArmyOrder(session, armyId, next);
     if (!result.ok) armyWaypointIssuing.delete(armyId);
   }
+}
+
+function attackOrderAt(
+  renderer: WorldRenderer, session: RemoteGameSession, selectedId: string,
+  clientX: number, clientY: number,
+): QueuedAttackOrder | { kind: 'invalid'; reason: string } {
+  const ground = renderer.groundPointAt(clientX, clientY);
+  const provinceId = renderer.provinceIdAt(clientX, clientY);
+  const centerProvinceId = renderer.pickProvinceCenterAt(clientX, clientY);
+  // Province centres win over co-located army markers. Use the exact centre,
+  // not the marker's offset click point, so the authoritative target agrees.
+  if (centerProvinceId !== null && !session.ownsProvince(centerProvinceId)) {
+    const center = renderer.provinceCenter(centerProvinceId);
+    if (center) return {
+      kind: 'attackProvince', provinceId: centerProvinceId, x: center[0], z: center[1],
+    };
+  }
+  const targetArmyId = renderer.pickArmyAt(clientX, clientY);
+  const pickedTarget = targetArmyId && targetArmyId !== selectedId
+    ? session.army(targetArmyId) : null;
+  if (targetArmyId && targetArmyId !== selectedId && pickedTarget && !pickedTarget.own) {
+    return { kind: 'attackArmy', targetArmyId };
+  }
+  if (!ground || provinceId < 0) {
+    return { kind: 'invalid', reason: 'Aim at an enemy army or a province centre to attack.' };
+  }
+  if (session.ownsProvince(provinceId)) {
+    return { kind: 'invalid', reason: "That is your own territory — you can't attack it." };
+  }
+  return { kind: 'attackProvince', provinceId, x: ground[0], z: ground[1] };
 }
 
 function flashAttackTarget(clientX: number, clientY: number): void {
@@ -2080,18 +2139,31 @@ function handleMapClick(
   //    order instead, and keeps the Move command armed for more waypoints —
   //    like 0ad's shift-click move queue. A plain click always still cancels
   //    aiming and issues (or replaces) the immediate order.
-  if (targetingMode === 'move' && shiftKey && selectedArmyId && session.ownsArmy(selectedArmyId)) {
-    const ground = renderer.groundPointAt(clientX, clientY);
-    if (ground) {
-      queueWaypoint(selectedArmyId, ground[0], ground[1]);
+  const queuedMode = shiftKey && selectedArmyId && session.ownsArmy(selectedArmyId)
+    ? (targetingMode === 'move' || targetingMode === 'attack'
+      ? targetingMode : lastArmyOrderMode.get(selectedArmyId))
+    : undefined;
+  if (queuedMode && selectedArmyId) {
+    const queued = queuedMode === 'move'
+      ? (() => {
+        const ground = renderer.groundPointAt(clientX, clientY);
+        return ground ? { kind: 'move' as const, x: ground[0], z: ground[1] }
+          : { kind: 'invalid' as const, reason: 'Choose a destination on land.' };
+      })()
+      : attackOrderAt(renderer, session, selectedArmyId, clientX, clientY);
+    if (queued.kind === 'invalid') {
+      pushNotification('warning', 'Invalid queued order', queued.reason);
+    } else {
+      queueWaypoint(selectedArmyId, queued);
+      lastArmyOrderMode.set(selectedArmyId, queuedMode);
       advanceWaypointQueues(session);
-      void audio.playUiCue('move');
-      pushNotification('information', 'Waypoint queued',
-        'Shift-click to add more, or click without Shift to stop aiming.');
+      void audio.playUiCue(queuedMode === 'move' ? 'move' : 'confirm');
+      pushNotification('information', `${queuedMode === 'move' ? 'Move' : 'Attack'} queued`,
+        'Shift-click to add more orders; they will execute in sequence.');
       syncArmyMarkers(session, renderer);
       refreshSelectedArmy(session);
-      return true;
     }
+    return true;
   }
   if ((targetingMode === 'move' || targetingMode === 'split')
     && selectedArmyId && session.ownsArmy(selectedArmyId)) {
@@ -2107,6 +2179,7 @@ function handleMapClick(
         void audio.playUiCue('move');
         // A fresh, unqueued order supersedes anything still waiting.
         armyWaypointQueues.delete(selectedArmyId);
+        if (targetingMode === 'move') lastArmyOrderMode.set(selectedArmyId, 'move');
       }
       awaitingMoveTarget = false;
       targetingMode = null;
@@ -2117,8 +2190,10 @@ function handleMapClick(
     }
   }
   if (targetingMode === 'attack' && selectedArmyId && session.ownsArmy(selectedArmyId)) {
-    const targetArmyId = renderer.pickArmyAt(clientX, clientY);
-    const pickedTarget = targetArmyId && targetArmyId !== selectedArmyId ? session.army(targetArmyId) : null;
+    const attack = attackOrderAt(renderer, session, selectedArmyId, clientX, clientY);
+    const targetArmyId = attack.kind === 'attackArmy' ? attack.targetArmyId : null;
+    const ground = attack.kind === 'attackProvince' ? [attack.x, attack.z] as const : [0, 0] as const;
+    const provinceId = attack.kind === 'attackProvince' ? attack.provinceId : -1;
     // Fired once the server accepts the order — which is *after* any "Declare
     // war?" confirmation but still before combat opens. Do not run it
     // before acceptance: a cancelled war declaration must not leave the player
@@ -2130,24 +2205,19 @@ function handleMapClick(
       pushNotification('information', 'Attack order issued',
         'Your force is advancing to engage.');
     };
-    const result = targetArmyId && targetArmyId !== selectedArmyId && pickedTarget && !pickedTarget.own
-      ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
-      : (() => {
-        const ground = renderer.groundPointAt(clientX, clientY);
-        const provinceId = renderer.provinceIdAt(clientX, clientY);
-        if (!ground || provinceId < 0) {
-          return { ok: false as const, reason: 'Aim at an enemy army or a province centre to attack.' };
-        }
-        if (session.ownsProvince(provinceId)) {
-          return { ok: false as const, reason: "That is your own territory — you can't attack it." };
-        }
-        return session.orderAttackProvince(
-          selectedArmyId!, provinceId, ground[0], ground[1], acknowledgeAttack,
+    const result = attack.kind === 'invalid'
+      ? { ok: false as const, reason: attack.reason }
+      : targetArmyId
+        ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
+        : session.orderAttackProvince(
+          selectedArmyId, provinceId, ground[0], ground[1], acknowledgeAttack,
         );
-      })();
     if (!result.ok) {
       const { title, body } = describeOrderFailure(result.reason ?? 'Invalid target.');
       pushNotification('warning', title, body);
+    } else {
+      armyWaypointQueues.delete(selectedArmyId);
+      lastArmyOrderMode.set(selectedArmyId, 'attack');
     }
     targetingMode = null;
     syncArmyMarkers(session, renderer);
@@ -2305,6 +2375,9 @@ function handleArmyCommand(command: ArmyPanelCommand): void {
     return;
   }
   if (command === 'stop') {
+    armyWaypointQueues.delete(selectedArmyId);
+    armyWaypointIssuing.delete(selectedArmyId);
+    lastArmyOrderMode.delete(selectedArmyId);
     session.orderStop(selectedArmyId);
     awaitingMoveTarget = false;
     targetingMode = null;
@@ -2354,6 +2427,10 @@ function refreshSelectedArmy(
     ? Math.max(0, view.navalPhase.remainingMs - navalElapsedMs) : 0;
   const movementRemainingMs = view.motion
     ? Math.max(0, motionDurationMs - motionElapsedMs) : 0;
+  const arrivalElapsedMs = view.arrival
+    ? Math.max(0, Date.now() - view.arrival.sampledAtEpochMs) : 0;
+  const arrivalRemainingMs = view.arrival
+    ? Math.max(0, view.arrival.remainingMs - arrivalElapsedMs) : undefined;
   const movementProgress = view.motion && motionDurationMs > 0
     ? Math.min(1, (view.motion.progress ?? 0)
       + motionElapsedMs / (motionDurationMs / Math.max(0.0001, 1 - (view.motion.progress ?? 0))))
@@ -2370,8 +2447,10 @@ function refreshSelectedArmy(
     : view.status === 'disembarking' ? 'disembarking'
     : view.status === 'moving' ? 'moving'
     : view.status === 'extracting' ? 'extracting' : 'holding';
-  const activityRemainingSeconds = view.navalPhase ? navalRemainingMs / 1_000
-    : battle?.estimatedRealSeconds ?? (view.motion ? movementRemainingMs / 1_000 : undefined);
+  const activityRemainingSeconds = battle?.estimatedRealSeconds
+    ?? (arrivalRemainingMs !== undefined ? arrivalRemainingMs / 1_000
+      : view.navalPhase ? navalRemainingMs / 1_000
+        : view.motion ? movementRemainingMs / 1_000 : undefined);
   const activityProgress = view.navalPhase
     ? Math.min(1, Math.max(0, 1 - navalRemainingMs / Math.max(1, view.navalPhase.durationMs)))
     : battle ? combatProgress : movementProgress;
@@ -2416,7 +2495,7 @@ function refreshSelectedArmy(
       activityDurationSeconds,
       activityProgress,
       activitySampledAtEpochMs: Date.now(),
-      arrivalSeconds: view.motion ? Math.max(0, (motionDurationMs - motionElapsedMs) / 1_000) : undefined,
+      arrivalSeconds: arrivalRemainingMs !== undefined ? arrivalRemainingMs / 1_000 : undefined,
       movementProgress,
       own: view.own,
       canExtract: session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,

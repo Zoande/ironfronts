@@ -13,15 +13,20 @@ import { MinHeap } from './min-heap';
 import { wrappedDistance } from '../geometry';
 
 export type EdgeAllowed = (from: number, to: number) => boolean;
+export type EdgeCost = (from: number, to: number, geometricCost: number) => number;
 
 export function findPath(
   graph: LandGraph, start: number, goal: number, edgeAllowed?: EdgeAllowed,
+  edgeCost?: EdgeCost,
 ): number[] | null {
   if (start < 0 || goal < 0 || start >= graph.nodeCount || goal >= graph.nodeCount) return null;
   if (start === goal) return [start];
   if (graph.component[start] !== graph.component[goal]) return null;
 
-  const h = (node: number): number => wrappedDistance(
+  // A caller-supplied cost may include terrain, hostile-territory and naval
+  // handling time. There is no generally admissible geometric heuristic for
+  // that, so weighted searches deliberately become Dijkstra searches.
+  const h = edgeCost ? (_node: number): number => 0 : (node: number): number => wrappedDistance(
     graph.nodeX[node], graph.nodeZ[node], graph.nodeX[goal], graph.nodeZ[goal], graph.width,
   );
 
@@ -54,7 +59,9 @@ export function findPath(
       const next = neighbours[k];
       if (closed[next]) continue;
       if (edgeAllowed && !edgeAllowed(current, next)) continue;
-      const tentative = gScore[current] + costs[k];
+      const stepCost = edgeCost ? edgeCost(current, next, costs[k]) : costs[k];
+      if (!Number.isFinite(stepCost) || stepCost < 0) continue;
+      const tentative = gScore[current] + stepCost;
       if (tentative < gScore[next]) {
         gScore[next] = tentative;
         cameFrom[next] = current;
@@ -68,10 +75,10 @@ export function findPath(
 /** Reachable node geometrically closest to a target, plus the path to it. */
 export function closestReachablePath(
   graph: LandGraph, start: number, targetX: number, targetZ: number,
-  edgeAllowed?: EdgeAllowed,
+  edgeAllowed?: EdgeAllowed, edgeCost?: EdgeCost,
 ): number[] {
   if (start < 0 || start >= graph.nodeCount) return [];
-  const { distance, parent } = shortestPaths(graph, start, edgeAllowed);
+  const { distance, parent } = shortestPaths(graph, start, edgeAllowed, edgeCost);
   let best = start;
   let bestTarget = wrappedDistance(graph.nodeX[start], graph.nodeZ[start], targetX, targetZ, graph.width);
   for (let node = 0; node < graph.nodeCount; node++) {
@@ -98,7 +105,9 @@ export function pathLength(graph: LandGraph, path: readonly number[]): number {
 }
 
 /** One Dijkstra pass serves every possible destination of a retreat exit. */
-export function shortestPaths(graph: LandGraph, start: number, allowed?: EdgeAllowed): { distance: Float64Array; parent: Int32Array } {
+export function shortestPaths(
+  graph: LandGraph, start: number, allowed?: EdgeAllowed, edgeCost?: EdgeCost,
+): { distance: Float64Array; parent: Int32Array } {
   const distance = new Float64Array(graph.nodeCount).fill(Infinity), parent = new Int32Array(graph.nodeCount).fill(-1);
   if (start < 0 || start >= graph.nodeCount) return { distance, parent };
   distance[start] = 0;
@@ -109,7 +118,10 @@ export function shortestPaths(graph: LandGraph, start: number, allowed?: EdgeAll
     for (let i=0;i<graph.adjacency[node].length;i++) {
       const next=graph.adjacency[node][i];
       if (allowed && !allowed(node,next)) continue;
-      const candidate=cost+graph.edgeCost[node][i];
+      const baseCost=graph.edgeCost[node][i];
+      const stepCost=edgeCost?edgeCost(node,next,baseCost):baseCost;
+      if (!Number.isFinite(stepCost) || stepCost < 0) continue;
+      const candidate=cost+stepCost;
       if (candidate < distance[next]) { distance[next]=candidate;parent[next]=node;heap.push(candidate,next); }
     }
   }

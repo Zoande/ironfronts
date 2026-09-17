@@ -1,7 +1,7 @@
 import type { SimContext } from '../sim-context';
 import type { ArmyStack } from '../units/army';
 import { wrappedDistance } from '../geometry';
-import { findPath, pathLength, type EdgeAllowed } from './pathfind';
+import { findPath, pathLength, type EdgeAllowed, type EdgeCost } from './pathfind';
 import type { LandGraph } from './graph';
 
 export const ARRIVAL_DISTANCE = 0.01;
@@ -25,19 +25,35 @@ export function occupiedEdge(ctx: SimContext, army: ArmyStack): { from: number; 
  * leading edge. Reversing on an edge explicitly visits its origin first. */
 export function routeFromArmy(
   ctx: SimContext, army: ArmyStack, goal: number, allowed?: EdgeAllowed,
-  graph: LandGraph = ctx.graph,
+  graph: LandGraph = ctx.graph, edgeCost?: EdgeCost,
 ): number[] | null {
-  if (armyAtNode(ctx, army)) return findPath(graph, army.graphNodeId, goal, allowed);
+  if (armyAtNode(ctx, army)) return findPath(graph, army.graphNodeId, goal, allowed, edgeCost);
   const edge = occupiedEdge(ctx, army);
   if (!edge) return null;
   const choices: Array<{ path: number[]; cost: number }> = [];
   for (const endpoint of [edge.from, edge.to]) {
     // Returning to the origin is the only permitted recovery from a blocked edge.
     if (endpoint !== edge.from && allowed && !allowed(edge.from, edge.to)) continue;
-    const tail = findPath(graph, endpoint, goal, allowed);
+    const tail = findPath(graph, endpoint, goal, allowed, edgeCost);
     if (!tail) continue;
-    choices.push({ path: [army.graphNodeId, ...tail], cost: pathLength(graph, tail)
-      + wrappedDistance(army.x, army.z, ctx.graph.nodeX[endpoint], ctx.graph.nodeZ[endpoint], ctx.world.width) });
+    const tailCost = edgeCost
+      ? tail.slice(1).reduce((total, node, index) => {
+        const from = tail[index];
+        const edgeIndex = graph.adjacency[from].indexOf(node);
+        return total + edgeCost(from, node, graph.edgeCost[from][edgeIndex]);
+      }, 0)
+      : pathLength(graph, tail);
+    const partialDistance = wrappedDistance(
+      army.x, army.z, ctx.graph.nodeX[endpoint], ctx.graph.nodeZ[endpoint], ctx.world.width,
+    );
+    const fullDistance = wrappedDistance(
+      ctx.graph.nodeX[edge.from], ctx.graph.nodeZ[edge.from],
+      ctx.graph.nodeX[edge.to], ctx.graph.nodeZ[edge.to], ctx.world.width,
+    );
+    const partialCost = edgeCost && fullDistance > 0
+      ? edgeCost(edge.from, edge.to, fullDistance) * partialDistance / fullDistance
+      : partialDistance;
+    choices.push({ path: [army.graphNodeId, ...tail], cost: tailCost + partialCost });
   }
   choices.sort((a, b) => a.cost - b.cost || a.path[1] - b.path[1]);
   return choices[0]?.path ?? null;

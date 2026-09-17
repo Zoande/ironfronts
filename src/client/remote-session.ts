@@ -161,7 +161,7 @@ export class RemoteGameSession extends EventTarget {
   }
 
   private send(
-    command: CommandPayload, onAccepted?: () => void,
+    command: CommandPayload, onAccepted?: () => void, onRejected?: (reason: string) => void,
   ): { ok: boolean; reason?: string } {
     let id = '';
     id = this.connection.command(command, (ok, reason, requiredWarCountryIds, appliedRevision) => {
@@ -179,11 +179,15 @@ export class RemoteGameSession extends EventTarget {
         const respond = (confirmed: boolean): void => {
           if (answered) return;
           answered = true;
-          if (!confirmed) return;
+          if (!confirmed) {
+            onRejected?.('War declaration cancelled.');
+            return;
+          }
           const confirmedCommand = {
             ...command, confirmedWarCountryIds: [...new Set([...('confirmedWarCountryIds' in command ? command.confirmedWarCountryIds ?? [] : []), ...requiredWarCountryIds])],
           } as CommandPayload;
-          this.send(confirmedCommand, onAccepted);
+          if (onRejected) this.send(confirmedCommand, onAccepted, onRejected);
+          else this.send(confirmedCommand, onAccepted);
         };
         this.dispatchEvent(new CustomEvent('war-confirmation', {
           detail: { countryIds: [...requiredWarCountryIds], respond },
@@ -192,6 +196,7 @@ export class RemoteGameSession extends EventTarget {
         this.pendingCommands.delete(id);
         this.rebuild();
         const failure = reason ?? 'Command failed.';
+        onRejected?.(failure);
         // Connection status is surfaced once per outage by the lifecycle UI;
         // do not turn every click while reconnecting into another warning.
         if (!isConnectionFailure(failure)) this.commandFailed(failure);
@@ -281,12 +286,21 @@ export class RemoteGameSession extends EventTarget {
     return [...this.pendingCommands.values()].some(({ command }) => command.type === 'research');
   }
 
-  orderMove(armyId: string, x: number, z: number, intent: 'move' | 'attack' = 'move') {
+  orderMove(
+    armyId: string, x: number, z: number, intent: 'move' | 'attack' = 'move',
+    onAccepted?: () => void, onRejected?: (reason: string) => void,
+  ) {
     if (intent === 'attack') return { ok: false, reason: 'Choose an attack target.' };
-    return this.send({ type: 'moveArmy', armyId, x, z });
+    return this.send({ type: 'moveArmy', armyId, x, z }, onAccepted, onRejected);
   }
-  orderAttackProvince(armyId: string, provinceId: number, x: number, z: number, onAccepted?: () => void) {
-    return this.send({ type: 'attackArmy', armyId, target: { kind: 'province', provinceId, x, z } }, onAccepted);
+  orderAttackProvince(
+    armyId: string, provinceId: number, x: number, z: number,
+    onAccepted?: () => void, onRejected?: (reason: string) => void,
+  ) {
+    return this.send(
+      { type: 'attackArmy', armyId, target: { kind: 'province', provinceId, x, z } },
+      onAccepted, onRejected,
+    );
   }
   /**
    * Strategic strike on an enemy province. Country-level order (no army), never
@@ -298,8 +312,14 @@ export class RemoteGameSession extends EventTarget {
     }
     return this.send({ type: 'strike', provinceId, x, z }, onAccepted);
   }
-  orderAttackArmy(armyId: string, targetArmyId: string, onAccepted?: () => void) {
-    return this.send({ type: 'attackArmy', armyId, target: { kind: 'army', armyId: targetArmyId } }, onAccepted);
+  orderAttackArmy(
+    armyId: string, targetArmyId: string,
+    onAccepted?: () => void, onRejected?: (reason: string) => void,
+  ) {
+    return this.send(
+      { type: 'attackArmy', armyId, target: { kind: 'army', armyId: targetArmyId } },
+      onAccepted, onRejected,
+    );
   }
   orderRetreat(armyId: string, x: number, z: number) { return this.send({ type: 'retreatArmy', armyId, x, z }); }
   orderSplit(armyId: string, groups: readonly { typeId: string; count: number }[], x: number, z: number) {

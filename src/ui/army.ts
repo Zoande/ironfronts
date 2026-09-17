@@ -197,8 +197,8 @@ export function renderSelectedArmyPanel(
     description: activityKind === 'combat'
       ? 'Predicted time until the first active front resolves.'
       : activityKind === 'embarking' || activityKind === 'disembarking'
-        ? 'Port handling takes 30 game minutes; the blue line tracks this phase.'
-        : 'Authoritative time remaining on the current movement leg.',
+        ? 'Time remaining to the final destination; the blue line tracks the 30-minute port phase.'
+        : 'Authoritative time remaining to the final order destination.',
   }));
   const headerMetric = (label: string, icon: IconName, value: string): HTMLElement => {
     const item = node('span');

@@ -133,7 +133,7 @@ export class GameSession {
     }
 
     // --- gameplay systems, fixed order ------------------------------
-    stepMovement(this, dtHours);
+    for (const cap of stepMovement(this, dtHours)) this.pendingCaptures.push(cap);
     if (cadence.supplyHours + 1e-12 >= SUPPLY_INTERVAL) {
       const elapsedSupplyHours = cadence.supplyHours;
       cadence.supplyHours %= SUPPLY_INTERVAL;

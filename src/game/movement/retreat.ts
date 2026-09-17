@@ -7,6 +7,7 @@ import { nearestNode } from './graph';
 import { movementEdgeAllowed } from './policy';
 import { wrappedDistance } from '../geometry';
 import { installOrder } from './orders';
+import { movementEdgeTravelCost } from './speed';
 
 export interface RetreatPath {
   readonly firstNodeId: number;
@@ -43,7 +44,8 @@ export function retreatPaths(
     const partialReturn = edge && first === edge.from;
     if (!partialReturn && (!session.graph.adjacency[army.graphNodeId]?.includes(first) || !allowed(army.graphNodeId, first))) continue;
     const {distance,parent} = shortestPaths(session.graph, first, (from,to) => allowed(from,to)
-      && (partialReturn ? to !== edge.to : to !== army.graphNodeId));
+      && (partialReturn ? to !== edge.to : to !== army.graphNodeId),
+    movementEdgeTravelCost(session, army, session.graph));
     for (const destination of destinations) {
       if (!partialReturn && destination.node === army.graphNodeId || !Number.isFinite(distance[destination.node])) continue;
       const tail=[destination.node];
@@ -54,8 +56,17 @@ export function retreatPaths(
       // duplicate leading node whose second hop then failed the mid-edge
       // "next must be edge.from/edge.to" check in validateWorldState.
       const path=partialReturn?tail:[army.graphNodeId,...tail];
+      const leadDistance = wrappedDistance(
+        army.x, army.z, session.graph.nodeX[first], session.graph.nodeZ[first], session.world.width,
+      );
+      const edgeIndex = session.graph.adjacency[army.graphNodeId]?.indexOf(first) ?? -1;
+      const fullDistance = edgeIndex >= 0 ? session.graph.edgeCost[army.graphNodeId][edgeIndex] : leadDistance;
+      const leadCost = fullDistance > 0
+        ? movementEdgeTravelCost(session, army, session.graph)(army.graphNodeId, first, fullDistance)
+          * leadDistance / fullDistance
+        : 0;
       result.push({firstNodeId:first,destinationProvinceId:destination.id,path,
-        length:distance[destination.node]+wrappedDistance(army.x,army.z,session.graph.nodeX[first],session.graph.nodeZ[first],session.world.width)});
+        length:distance[destination.node]+leadCost});
     }
   }
   result.sort((a, b) => a.length - b.length

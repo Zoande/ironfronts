@@ -13,6 +13,8 @@ import { computeArmyVisibility } from '../visibility';
 import { relationOf, setRelation } from '../game-state';
 import { wrappedDistance } from '../geometry';
 import type { AttackCommand, CommandResult } from './types';
+import { movementEdgeAllowed } from '../movement/policy';
+import { movementEdgeTravelCost } from '../movement/speed';
 
 function reachableProvinceNode(
   ctx: SimContext, army: ArmyStack, provinceId: number, targetX: number, targetZ: number,
@@ -27,13 +29,25 @@ function reachableProvinceNode(
   ) - wrappedDistance(
     ctx.graph.nodeX[b], ctx.graph.nodeZ[b], targetX, targetZ, ctx.world.width,
   ) || a - b);
-  const reachableIn = (graph: LandGraph): ExactMoveGoal | null => {
+  const provinceOwner = ctx.state.provinceOwners[provinceId] ?? 0;
+  const prospectiveWars = new Set(provinceOwner > 0 ? [provinceOwner] : []);
+  const reachableIn = (
+    graph: LandGraph, allowNeutral: boolean,
+  ): ExactMoveGoal | null => {
+    const allowed = allowNeutral ? undefined
+      : movementEdgeAllowed(ctx, army.ownerCountryId, false, prospectiveWars);
+    const cost = movementEdgeTravelCost(
+      ctx, army, graph, allowNeutral
+        ? new Set(Object.keys(ctx.state.countries).map(Number)) : prospectiveWars,
+    );
     for (const node of nodes) {
-      if (routeFromArmy(ctx, army, node, undefined, graph)) return { graph, nodeId: node };
+      if (routeFromArmy(ctx, army, node, allowed, graph, cost)) return { graph, nodeId: node };
     }
     return null;
   };
-  const goal = reachableIn(ctx.graph) ?? reachableIn(combinedGraph(ctx.graph));
+  const merged = combinedGraph(ctx.graph);
+  const goal = reachableIn(ctx.graph, false) ?? reachableIn(merged, false)
+    ?? reachableIn(ctx.graph, true) ?? reachableIn(merged, true);
   return goal === null
     ? { ok: false, reason: 'Attack route unavailable.' }
     : { ...goal, x: ctx.graph.nodeX[goal.nodeId], z: ctx.graph.nodeZ[goal.nodeId] };

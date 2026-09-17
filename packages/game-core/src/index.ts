@@ -10,7 +10,7 @@ export { nearestNode } from '../../../src/game/movement/graph';
 export { findPath } from '../../../src/game/movement/pathfind';
 export { UNIT_TYPES, BASE_UNIT_IDS, baseUnitId, unitType } from '../../../src/game/units/unit-catalog';
 export { stackExtractionRate } from '../../../src/game/units/army';
-export { currentMovementLeg } from '../../../src/game/units/movement';
+export { currentMovementLeg, remainingOrderTravelHours } from '../../../src/game/units/movement';
 export { BUILDINGS } from '../../../src/game/construction';
 export { buildOptions } from '../../../src/game/construction';
 export { producibleUnits, unitProductionWorkRate, UNIT_PRODUCTION_RATE_BY_LEVEL } from '../../../src/game/production';

@@ -74,10 +74,12 @@ describe('single authoritative game runtime', () => {
     const runtime = new GameRuntime(tinyWorld());
     const army = Object.values(runtime.session.state.armies).find((candidate) => candidate.ownerCountryId === 1)!;
     const targetNode = runtime.session.graph.adjacency[army.graphNodeId][0];
+    const finalNode = runtime.session.graph.adjacency[targetNode]
+      .find((node) => node !== army.graphNodeId) ?? targetNode;
     army.order = {
-      path: [targetNode],
-      destX: runtime.session.graph.nodeX[targetNode],
-      destZ: runtime.session.graph.nodeZ[targetNode],
+      path: [targetNode, finalNode],
+      destX: runtime.session.graph.nodeX[finalNode],
+      destZ: runtime.session.graph.nodeZ[finalNode],
       intent: 'move',
       edgeProgress: 0,
     };
@@ -85,11 +87,15 @@ describe('single authoritative game runtime', () => {
     army.order.edgeProgress = 10;
     const normal = runtime.projection(1, 1).armies[army.id].motion!;
     const fast = runtime.projection(1, 2).armies[army.id].motion!;
+    const normalArrival = runtime.projection(1, 1).armies[army.id].arrival!;
+    const fastArrival = runtime.projection(1, 2).armies[army.id].arrival!;
     expect(normal.targetX).toBe(runtime.session.graph.nodeX[targetNode]);
     expect(normal.targetZ).toBe(runtime.session.graph.nodeZ[targetNode]);
     expect(normal.durationMs).toBeGreaterThan(0);
     expect(normal.progress).toBeGreaterThan(0);
     expect(fast.durationMs).toBeCloseTo(normal.durationMs / 2);
+    expect(normalArrival.remainingMs).toBeGreaterThan(normal.durationMs);
+    expect(fastArrival.remainingMs).toBeCloseTo(normalArrival.remainingMs / 2);
   });
 
   it('projects authoritative embark timing at the active simulation speed', () => {

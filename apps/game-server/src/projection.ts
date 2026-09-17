@@ -1,6 +1,6 @@
 import {
   extractionEligibility, movementEdgeAllowed, computeArmyVisibility, projectArmyView,
-  currentMovementLeg, legalRetreatPaths, nearestNode, findPath,
+  currentMovementLeg, remainingOrderTravelHours, legalRetreatPaths, nearestNode, findPath,
   UNIT_TYPES, BUILDINGS, buildOptions, producibleUnits, armyShortageSummary,
   provinceResourceOutputBreakdown,
   buildEngineerAssignmentIndex, engineerAssignmentKey,
@@ -67,6 +67,17 @@ export function projectFor(
     }
     if (graph && army.status !== 'unknown' && gameHoursPerRealSecond > 0) {
       const source = state.armies[army.id];
+      const remainingTravelHours = source?.order && army.own
+        ? remainingOrderTravelHours({ state, world, graph }, source) : null;
+      if (remainingTravelHours !== null && Number.isFinite(remainingTravelHours)) {
+        projected = {
+          ...projected,
+          arrival: {
+            remainingMs: Math.max(0, remainingTravelHours / gameHoursPerRealSecond * 1_000),
+            sampledAtEpochMs,
+          },
+        };
+      }
       if (source?.navalCrossing
         && (source.status === 'embarking' || source.status === 'disembarking')) {
         projected = {
