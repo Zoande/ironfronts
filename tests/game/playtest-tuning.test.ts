@@ -22,53 +22,41 @@ function affordableCount(
 }
 
 /**
- * Playtest econ-rebalance pass: unit costs (funds/food, mainly) went up
- * sharply so a starting treasury can no longer insta-build an unlimited line
- * of infantry (#econ-rebalance). Stockpiles are re-derived against the new
- * costs, not just cut by a flat percentage — see scenario-init.ts.
+ * Opening-economy contract for the current faster build-up: a selectable
+ * country can raise a substantial infantry force immediately, while armor is
+ * still constrained by funds, metal, and oil. Stockpiles are checked against
+ * current unit costs so later tuning cannot silently change that opening.
  */
-describe('opening economy is lean but non-zero', () => {
+describe('opening economy supports an early build-up', () => {
   const infantry = UNIT_TYPE_BY_ID.get('infantry')!;
   const lightTank = UNIT_TYPE_BY_ID.get('light-tank')!;
   const mediumTank = UNIT_TYPE_BY_ID.get('medium-tank')!;
 
-  it('prices infantry as a real expense, not pocket change', () => {
-    // Old prototype: 20 funds / 5 food. Must be materially higher so a
-    // starting stockpile buys only a handful, not dozens.
-    expect(infantry.cost.funds).toBeGreaterThanOrEqual(150);
-    expect(infantry.cost.food).toBeGreaterThanOrEqual(75);
-    // Manpower gate is left alone — the stockpile already makes it binding.
-    expect(infantry.cost.manpower).toBe(40);
+  it('prices infantry for a substantial but finite opening force', () => {
+    expect(infantry.cost).toMatchObject({ funds: 350, manpower: 45, food: 35 });
   });
 
-  it('prices the base tank as a five-figure-relative commitment above infantry, with a preserved tier gap to medium tanks', () => {
-    expect(lightTank.cost.funds!).toBeGreaterThanOrEqual(800);
-    expect(lightTank.cost.food).toBeGreaterThanOrEqual(200);
-    // Physical inputs (metal/oil) are untouched by the rebalance.
-    expect(lightTank.cost.metal).toBe(70);
-    expect(lightTank.cost.oil).toBe(35);
+  it('prices armor through funds and strategic materials, with a preserved tier gap', () => {
+    expect(lightTank.cost).toMatchObject({ funds: 1100, manpower: 30, metal: 140, oil: 55 });
+    expect(lightTank.cost.food).toBeUndefined();
 
     expect(mediumTank.cost.funds!).toBeGreaterThan(lightTank.cost.funds!);
-    expect(mediumTank.cost.food!).toBeGreaterThan(lightTank.cost.food!);
-    expect(mediumTank.cost.metal).toBe(120);
-    expect(mediumTank.cost.oil).toBe(60);
-    // Roughly preserve the old ~1.8x light->medium funds tier gap.
+    expect(mediumTank.cost).toMatchObject({ funds: 2000, manpower: 45, metal: 260, oil: 110 });
+    expect(mediumTank.cost.food).toBeUndefined();
+    // Preserve the roughly 1.8x light-to-medium funds tier gap.
     const tierGap = mediumTank.cost.funds! / lightTank.cost.funds!;
     expect(tierGap).toBeGreaterThan(1.4);
     expect(tierGap).toBeLessThan(2.2);
   });
 
-  it('funds a fresh selectable country for a handful of infantry from its stockpile alone, not a horde', () => {
+  it('funds eleven infantry from a fresh selectable stockpile', () => {
     const count = affordableCount(SELECTABLE_START_STOCKPILE, infantry.cost);
-    expect(count).toBeGreaterThanOrEqual(2);
-    expect(count).toBeLessThanOrEqual(4);
+    expect(count).toBe(11);
   });
 
-  it('leaves a selectable country able to afford at most one light tank up front', () => {
-    const count = affordableCount(SELECTABLE_START_STOCKPILE, lightTank.cost);
-    expect(count).toBeLessThanOrEqual(1);
-    // And nowhere near a medium tank straight away.
-    expect(affordableCount(SELECTABLE_START_STOCKPILE, mediumTank.cost)).toBe(0);
+  it('funds three light tanks or one medium tank up front', () => {
+    expect(affordableCount(SELECTABLE_START_STOCKPILE, lightTank.cost)).toBe(3);
+    expect(affordableCount(SELECTABLE_START_STOCKPILE, mediumTank.cost)).toBe(1);
   });
 
   it('keeps every selectable-stockpile resource real and playable (never zero)', () => {

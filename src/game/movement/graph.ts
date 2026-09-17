@@ -289,7 +289,10 @@ export function nearestRoadPosition(
 ): RoadPosition | null {
   let best: RoadPosition | null = null;
   let bestErrorSq = maxDistance * maxDistance;
-  for (const edge of graph.edges) {
+  // Older focused fixtures can provide only adjacency/node arrays. Treat
+  // those as having no exact road geometry instead of crashing the caller;
+  // routing may still use their node graph as a compatibility fallback.
+  for (const edge of graph.edges ?? []) {
     if (restrictComponent >= 0 && graph.component[edge.from] !== restrictComponent) continue;
     const points = edgePolyline(graph, edge.id, edge.from);
     let consumed = 0;

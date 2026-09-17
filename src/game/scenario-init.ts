@@ -31,13 +31,10 @@ import { ensureCountryEconomy } from './economy/shortages';
 /**
  * Every selectable (five-city) country starts on this identical footing.
  *
- * Deliberately lean: the opening economy should force real choices (build vs.
- * mobilise vs. bank) in the first weeks rather than letting a player queue
- * everything at once. Sized against unit-catalog.ts costs so a fresh country
- * can field a handful of infantry (funds/manpower/food) or, if it saves
- * everything instead, a single light tank (funds/food, plus metal/oil to
- * spare) — never a horde, never a dozen tanks. Sandbox keeps its own huge
- * stockpile below.
+ * The opening reserve supports a brisk initial build-up while still making
+ * armored forces a commitment. At current base-unit costs it can fund roughly
+ * eleven infantry, three light tanks, or one medium tank from stockpile alone.
+ * Sandbox keeps its own effectively unlimited stockpile below.
  */
 export const SELECTABLE_START_STOCKPILE = {
   funds: 4_200, manpower: 500, food: 500, stone: 650, metal: 450, oil: 220,
@@ -252,12 +249,9 @@ export function initGameState(
     }
   }
 
-  // ---- resource nodes: point-in-province assignment + strategic baseline
-  // The baseline stone+metal guarantee runs ONLY for the participants that need
-  // an economy — at init that is just the selected player. An AI opponent gets
-  // its own guarantee when `GameSession` flips it on (enableNearbyAi); a
-  // multiplayer server would call `guaranteeStrategicBaseline` per participant.
-  // Every other neutral nation keeps whatever scarce natural geography it has.
+  // ---- deterministic province economies + strategic resource baseline
+  // Every selectable country receives at least one undeveloped source for
+  // each physical resource; national output is then normalized once at init.
   const provinceEconomies = createProvinceEconomies(world, seed, eligibleCountryIds);
 
   // ---- starting armies ----------------------------------------

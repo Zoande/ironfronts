@@ -62,18 +62,23 @@ describe('buildOptions phase gating', () => {
   // appears in buildOptions regardless of phase (already-built buildings are
   // filtered out for that reason, not a phase reason) — these tests use
   // province 11, which starts with none.
-  it('nothing is offered at province 11 before any qualifying industry exists (Phase I)', () => {
+  it('marks Phase-II military buildings unavailable at Phase I', () => {
     const ctx = fixture();
     ctx.state.countries[1].phase = 1;
-    const ids = buildOptions(ctx, 11, 1).map((o) => o.id).sort();
-    expect(ids).toEqual(['barracks']);
+    const options = buildOptions(ctx, 11, 1);
+    expect(options.find((option) => option.id === 'barracks')?.reason).not.toMatch(/phase/i);
+    expect(options.find((option) => option.id === 'tankPlant')?.reason).toMatch(/phase 2/i);
+    expect(options.find((option) => option.id === 'ordnance')?.reason).toMatch(/phase 2/i);
   });
 
-  it('offers every building at province 11 once the country reaches Phase III', () => {
+  it('removes phase gating at Phase III while retaining technology gating', () => {
     const ctx = fixture();
     ctx.state.countries[1].phase = 3;
-    const ids = buildOptions(ctx, 11, 1).map((o) => o.id).sort();
-    expect(ids).toEqual(['barracks', 'missileSite', 'ordnance', 'tankPlant']);
+    const options = buildOptions(ctx, 11, 1);
+    for (const id of ['barracks', 'tankPlant', 'ordnance'] as const) {
+      expect(options.find((option) => option.id === id)?.reason).not.toMatch(/phase/i);
+    }
+    expect(options.find((option) => option.id === 'missileSite')?.reason).toMatch(/hybrid technology level 8/i);
   });
 
   it('BUILDING_REQUIRED_PHASE matches the intended tiering', () => {

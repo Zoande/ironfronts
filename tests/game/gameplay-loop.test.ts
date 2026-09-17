@@ -2,6 +2,9 @@ import { describe, expect, it, beforeAll } from 'vitest';
 import { GameSession } from '../../src/game/game-session';
 import { stepCombat } from '../../src/game/combat';
 import { stackUnitCount } from '../../src/game/units/army';
+import { nearestNode } from '../../src/game/movement/graph';
+import { remainingOrderTravelHours } from '../../src/game/units/movement';
+import { GAME_PACE } from '../../src/game/pacing';
 import { buildScenarioSelection } from '../../src/game/scenario-catalog';
 import { CATALOG_COUNTRY_BY_NAME } from '../../src/game/data/countries.generated';
 import { loadWorld, type LoadedWorld } from './load-world';
@@ -30,18 +33,21 @@ describe('gameplay vertical slice', () => {
     const s = spainSession();
     const army = Object.values(s.state.armies).find((a) => a.ownerCountryId === SPAIN)!;
     const startNode = army.graphNodeId;
-    // Move toward another owned Spanish province centre.
-    const target = world.provinces.find(
-      (p) => s.state.provinceOwners[p.id] === SPAIN && p.id !== army.graphNodeId,
-    )!;
-    const res = s.orderMove(SPAIN, army.id, target.center[0], target.center[1], 'move');
+    // Pick a real adjacent land-road node. A distant owned province may require
+    // a ferry, during whose embarkation a stop order is intentionally refused.
+    const targetNode = s.graph.adjacency[startNode][0];
+    expect(targetNode).toBeGreaterThanOrEqual(0);
+    const res = s.orderMove(
+      SPAIN, army.id, s.graph.nodeX[targetNode], s.graph.nodeZ[targetNode], 'move',
+    );
     expect(res.ok).toBe(true);
     expect(army.order).not.toBeNull();
 
     const startX = army.x;
+    const startZ = army.z;
     s.tick(4 / 1800);
-    expect(army.x !== startX || army.z !== 0).toBe(true); // it moved
-    s.orderStop(SPAIN, army.id);
+    expect(army.x !== startX || army.z !== startZ).toBe(true); // it moved
+    expect(s.orderStop(SPAIN, army.id)).toBe(true);
     expect(army.order).toBeNull();
     expect(army.status).toBe('idle');
     // graph node advanced or stayed valid
@@ -49,29 +55,32 @@ describe('gameplay vertical slice', () => {
     expect(startNode).toBeGreaterThanOrEqual(0);
   });
 
-  it('engineers extract a controlled deposit into the stockpile', () => {
+  it('engineers increase renewable province production', () => {
     const s = spainSession();
-    const node = Object.values(s.state.resourceNodes).find(
-      (n) => n.controllerCountryId === SPAIN && n.accessNodeId >= 0 && n.remaining > 0,
-    );
-    expect(node).toBeDefined();
-    // Place an engineer stack directly on the access node.
+    const entry = Object.entries(s.state.provinceEconomies ?? {}).find(([provinceId, economy]) =>
+      s.state.provinceOwners[Number(provinceId)] === SPAIN
+      && economy.baseProduction.stone > 0);
+    expect(entry).toBeDefined();
+    const provinceId = Number(entry![0]);
+    const province = world.provinces.find((candidate) => candidate.id === provinceId)!;
+    const centerNode = nearestNode(s.graph, province.center[0], province.center[1]);
+    // Province extraction is assigned at the province-centre road node.
     const engineers = {
       id: 'test-eng', ownerCountryId: SPAIN, name: 'Miners',
-      x: s.graph.nodeX[node!.accessNodeId], z: s.graph.nodeZ[node!.accessNodeId],
-      graphNodeId: node!.accessNodeId,
+      x: s.graph.nodeX[centerNode], z: s.graph.nodeZ[centerNode], graphNodeId: centerNode,
       units: [{ typeId: 'engineer', count: 3, hp: 240, experience: 0 }],
-      status: 'idle' as const, order: null, extractingNodeId: null,
+      status: 'idle' as const, order: null, extractingNodeId: null, extractionAssignment: null,
     };
     s.state.armies['test-eng'] = engineers;
 
-    const before = s.state.countries[SPAIN].stockpile[node!.kind];
-    const remainingBefore = node!.remaining;
-    const start = s.orderExtract(SPAIN, 'test-eng');
+    const before = s.state.countries[SPAIN].stockpile.stone;
+    const incomeBefore = s.state.countries[SPAIN].income.stone;
+    const start = s.orderExtract(SPAIN, 'test-eng', 'stone');
     expect(start.ok).toBe(true);
-    s.tick(6 / 1800);
-    expect(s.state.countries[SPAIN].stockpile[node!.kind]).toBeGreaterThan(before);
-    expect(node!.remaining).toBeLessThan(remainingBefore);
+    expect(engineers.extractionAssignment).toEqual({ provinceId, resource: 'stone' });
+    s.tick(GAME_PACE.clock.incomeRefreshHours);
+    expect(s.state.countries[SPAIN].income.stone).toBeGreaterThan(incomeBefore);
+    expect(s.state.countries[SPAIN].stockpile.stone).toBeGreaterThan(before);
   });
 
   it('a city produces a unit that spawns and auto-stacks', () => {
@@ -91,8 +100,8 @@ describe('gameplay vertical slice', () => {
     expect(order.ok).toBe(true);
     expect(s.state.countries[SPAIN].stockpile.funds).toBeLessThan(fundsBefore);
 
-    // light-tank buildTime 12h / scale 4 = 3 game-hours.
-    s.tick(5 / 1800);
+    // Tier-1 light tanks require one work-hour at a tier-1 plant.
+    s.tick(1.01);
     const armiesAfter = Object.values(s.state.armies).filter((a) => a.ownerCountryId === SPAIN);
     const hasLightTank = armiesAfter.some((a) => a.units.some((g) => g.typeId === 'light-tank'));
     expect(hasLightTank).toBe(true);
@@ -101,33 +110,20 @@ describe('gameplay vertical slice', () => {
 
   it('guarantees a strategic baseline for selectable countries', () => {
     const s = spainSession();
-    const guaranteedOwners = new Set(
-      Object.values(s.state.resourceNodes)
-        .filter((n) => n.provenance === 'scenarioGuarantee')
-        .map((n) => n.controllerCountryId),
-    );
-    // World at War has ~200 playable nations; only Spain should have been topped
-    // up at init (or nobody, if Spain's natural geography already covered it).
-    expect([...guaranteedOwners].every((id) => s.diagnostics.eligibleCountryIds.includes(id))).toBe(true);
+    const economies = s.state.provinceEconomies!;
+    const hasResource = (countryId: number, kind: 'stone' | 'metal'): boolean =>
+      world.provinces.some((province) => s.state.provinceOwners[province.id] === countryId
+        && economies[province.id].baseProduction[kind] > 0);
+    // Province economies normalize every selectable nation up front.
     for (const kind of ['stone', 'metal'] as const) {
-      expect(Object.values(s.state.resourceNodes).some(
-        (n) => n.kind === kind && n.controllerCountryId === SPAIN && n.accessNodeId >= 0,
-      )).toBe(true);
+      expect(hasResource(SPAIN, kind)).toBe(true);
     }
 
-    // Flipping on the AI opponent gives IT a baseline too — and no one else.
+    // A non-selectable minor promoted to AI receives the same strategic floor.
     const aiId = s.enableNearbyAi(SPAIN)!;
     for (const kind of ['stone', 'metal'] as const) {
-      expect(Object.values(s.state.resourceNodes).some(
-        (n) => n.kind === kind && n.controllerCountryId === aiId && n.accessNodeId >= 0,
-      )).toBe(true);
+      expect(hasResource(aiId, kind)).toBe(true);
     }
-    const ownersNow = new Set(
-      Object.values(s.state.resourceNodes)
-        .filter((n) => n.provenance === 'scenarioGuarantee')
-        .map((n) => n.controllerCountryId),
-    );
-    expect([...ownersNow].every((id) => s.diagnostics.eligibleCountryIds.includes(id) || id === aiId)).toBe(true);
   });
 
   it('hostile stacks at the same node fight and one is destroyed; capture flips ownership', () => {
@@ -140,8 +136,9 @@ describe('gameplay vertical slice', () => {
     // province centre node.
     const enemyProvince = world.provinces.find((p) => s.state.provinceOwners[p.id] === enemyId)!;
     const node = s.graph.component.length > 0
-      ? nearestOwned(s, enemyProvince.center[0], enemyProvince.center[1])
+      ? nearestInProvince(s, enemyProvince.id, enemyProvince.center[0], enemyProvince.center[1])
       : 0;
+    expect(node).toBeGreaterThanOrEqual(0);
     const at = { x: s.graph.nodeX[node], z: s.graph.nodeZ[node], graphNodeId: node };
 
     // Isolate this encounter from scenario garrisons and AI reinforcements.
@@ -167,8 +164,10 @@ describe('gameplay vertical slice', () => {
     expect(
       !s.state.armies['en-weak'] || s.state.armies['en-weak'].status === 'retreating',
     ).toBe(true);
-    // give capture a tick with no defender
-    for (let second=0; second<30 && s.state.provinceOwners[enemyProvince.id] !== SPAIN; second++) s.tick(1 / 3600);
+    // Let a surviving routed defender clear the city before capture resolves.
+    for (let step = 0; step < 24 && s.state.provinceOwners[enemyProvince.id] !== SPAIN; step += 1) {
+      s.tick(0.25);
+    }
     expect(s.state.provinceOwners[enemyProvince.id]).toBe(SPAIN);
     expect(s.isAtWar(SPAIN, enemyId!)).toBe(true);
   });
@@ -190,7 +189,9 @@ describe('gameplay vertical slice', () => {
     const res = s.orderMove(SPAIN, mover.id, s.graph.nodeX[restNode], s.graph.nodeZ[restNode], 'move');
     expect(res.ok).toBe(true);
 
-    for (let i = 0; i < 120 && s.state.armies[mover.id]; i += 1) s.tick(6 / 1800);
+    const eta = remainingOrderTravelHours(s, mover);
+    expect(eta).not.toBeNull();
+    s.tick(eta! + 0.01);
 
     expect(s.state.armies[mover.id]).toBeUndefined(); // the mover was folded away
     const survivor = s.state.armies['sp-rest'];
@@ -230,7 +231,9 @@ describe('gameplay vertical slice', () => {
     const res = s.orderMove(SPAIN, mover.id, s.graph.nodeX[restNode], s.graph.nodeZ[restNode], 'move');
     expect(res.ok).toBe(true);
 
-    for (let i = 0; i < 120 && s.state.armies[mover.id]; i += 1) s.tick(6 / 1800);
+    const eta = remainingOrderTravelHours(s, mover);
+    expect(eta).not.toBeNull();
+    s.tick(eta! + 0.01);
 
     expect(s.state.armies[mover.id]).toBeUndefined();
     const survivor = s.state.armies['sp-rest'];
@@ -267,7 +270,12 @@ describe('gameplay vertical slice', () => {
     army.status = 'moving';
     const startX = army.x;
     const startZ = army.z;
-    for (let i = 0; i < 30 && army.status === 'moving'; i += 1) s.tick(4 / 1800);
+    // First step forces revalidation; then use the authoritative ETA to reach
+    // the legal frontier endpoint where the impossible order is cancelled.
+    s.tick(1 / 1800);
+    const eta = remainingOrderTravelHours(s, army);
+    expect(eta).not.toBeNull();
+    s.tick(eta! + 0.5);
     expect(army.status).toBe('idle');
     expect(army.order).toBeNull();
     // It may have legally advanced toward the frontier, but it is not still
@@ -276,10 +284,11 @@ describe('gameplay vertical slice', () => {
   }, 30_000);
 });
 
-function nearestOwned(s: GameSession, x: number, z: number): number {
-  let best = 0;
+function nearestInProvince(s: GameSession, provinceId: number, x: number, z: number): number {
+  let best = -1;
   let bestD = Infinity;
   for (let i = 0; i < s.graph.nodeCount; i += 1) {
+    if (world.provinceAt(s.graph.nodeX[i], s.graph.nodeZ[i]) !== provinceId) continue;
     const dx = s.graph.nodeX[i] - x;
     const dz = s.graph.nodeZ[i] - z;
     const d = dx * dx + dz * dz;

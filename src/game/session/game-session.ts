@@ -37,6 +37,7 @@ import { stepTechnology } from '../technology';
 import { stepAi } from '../ai/simple-ai';
 import { applyCommand as runCommand, type CommandResult, type GameCommand } from '../commands';
 import { wrappedDistance } from '../geometry';
+import { ensureCountryProvinceResourceBaseline } from '../economy/resource-generation';
 
 /** Longest game-time step a single `tick` will integrate; larger dt is accumulated
  *  so a stall can't teleport armies through provinces. */
@@ -315,6 +316,13 @@ export class GameSession {
     }
     if (best !== null) {
       this.state.countries[best].controller = 'ai';
+      if (this.state.provinceEconomies) {
+        ensureCountryProvinceResourceBaseline(
+          this.state.provinceEconomies, this.world, this.state.provinceOwners,
+          best, ['stone', 'metal'],
+        );
+        recomputeIncome(this.state, this.world, this.graph);
+      }
       // The AI opponent now needs an economy too — give it the same strategic
       // baseline the player got at init (idempotent if its natural geography
       // already covers stone + metal).

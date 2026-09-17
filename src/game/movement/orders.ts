@@ -73,14 +73,23 @@ export function issueMoveOrder(
           merged, destX, destZ, 600, merged.component[army.graphNodeId] ?? -1,
         ),
       },
-    ] : [
-      { graph: session.graph, road: nearestRoadPosition(
-        session.graph, destX, destZ, 600,
-      ) ?? undefined },
-      { graph: merged, road: nearestRoadPosition(
-        merged, destX, destZ, 600,
-      ) ?? undefined },
-    ];
+    ] : (() => {
+      const landRoad = nearestRoadPosition(session.graph, destX, destZ, 600) ?? undefined;
+      const combinedRoad = nearestRoadPosition(merged, destX, destZ, 600) ?? undefined;
+      const roadCandidates: Candidate[] = [
+        { graph: session.graph, road: landRoad },
+        { graph: merged, road: combinedRoad },
+      ];
+      // A pure ferry fixture (or a migrated node-only graph) has no land road
+      // geometry to snap to. Its coastal endpoint remains a valid exact graph
+      // destination; generated worlds continue to require a road position.
+      if (!landRoad && !combinedRoad && !(session.graph.edges?.length > 0)) {
+        roadCandidates.push({ graph: merged, goal: nearestNode(
+          merged, destX, destZ, 600, merged.component[army.graphNodeId] ?? -1,
+        ) });
+      }
+      return roadCandidates;
+    })();
   const adjustedGoal = (goal: number): number => {
     if (target?.kind !== 'army' || goal !== army.graphNodeId) return goal;
     const opponent = session.state.armies[target.armyId];

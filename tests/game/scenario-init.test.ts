@@ -50,36 +50,26 @@ describe('Spain "World at War" initialisation', () => {
       expect(army.graphNodeId).toBeGreaterThanOrEqual(0);
     }
 
-    // capital-region army carries engineer-capable units (needed for O–S)
+    // capital-region army carries engineer-capable units for province extraction
     const engineerArmies = playerArmies.filter(
       (army) => army.units.some((g) => g.typeId === 'engineer' || g.typeId === 'infantry'),
     );
     expect(engineerArmies.length).toBeGreaterThanOrEqual(1);
 
-    // resource nodes snapped to land access; the mechanism works
-    const nodes = Object.values(state.resourceNodes);
-    expect(nodes.length).toBeGreaterThan(0);
-    expect(diagnostics.reachableResourceNodes).toBeGreaterThan(diagnostics.unreachableResourceNodes);
-    for (const node of nodes) {
-      expect(['idle', 'secured', 'extracting', 'exhausted']).toContain(node.status);
-      if (node.accessNodeId >= 0) {
-        expect(node.accessNodeId).toBeLessThan(1_000_000);
-      }
-    }
+    // The current economy is province-based; legacy point nodes stay empty.
+    expect(state.resourceNodes).toEqual({});
+    expect(Object.keys(state.provinceEconomies ?? {})).toHaveLength(world.provinces.length);
 
-    // O–S: Spain MUST control a reachable stone AND metal deposit so the
-    // vertical slice (move engineers -> deposit -> EXTRACT -> stockpile rises)
-    // is buildable. Guaranteed by the resource bootstrap if the seed's natural
-    // geography does not already provide them.
-    const spainStone = nodes.filter(
-      (n) => n.kind === 'stone' && n.controllerCountryId === SPAIN_ID && n.accessNodeId >= 0,
+    // Spain receives at least one undeveloped stone and metal source.
+    const spainProvinceIds = new Set(spainProvinces.map(([id]) => Number(id)));
+    const spainStone = Object.entries(state.provinceEconomies ?? {}).filter(
+      ([id, economy]) => spainProvinceIds.has(Number(id)) && economy.baseProduction.stone > 0,
     );
-    const spainMetal = nodes.filter(
-      (n) => n.kind === 'metal' && n.controllerCountryId === SPAIN_ID && n.accessNodeId >= 0,
+    const spainMetal = Object.entries(state.provinceEconomies ?? {}).filter(
+      ([id, economy]) => spainProvinceIds.has(Number(id)) && economy.baseProduction.metal > 0,
     );
     expect(spainStone.length).toBeGreaterThanOrEqual(1);
     expect(spainMetal.length).toBeGreaterThanOrEqual(1);
-    expect(diagnostics.guaranteedDeposits.every((g) => g.provinceId >= 0)).toBe(true);
 
     // all peace at start
     expect(Object.keys(state.relations)).toHaveLength(0);
@@ -108,8 +98,8 @@ describe('Spain "World at War" initialisation', () => {
     session.tick(6 / 1800);
     expect(session.gameTimeHours).toBeCloseTo(6 / 1800, 5);
     expect(session.state.countries[SPAIN_ID].stockpile.funds).toBeGreaterThan(before);
-    // stone/metal/oil are physical-only — no passive gain
-    expect(session.state.countries[SPAIN_ID].income.metal).toBe(0);
+    // Province resource baselines provide a small passive physical income.
+    expect(session.state.countries[SPAIN_ID].income.metal).toBeGreaterThan(0);
   });
 
 });

@@ -6,6 +6,7 @@ import {
   aiMemory, assess, combatStrength, indexArmies, indexProvinces,
 } from '../../src/game/ai/assessment';
 import { loadWorld, type LoadedWorld } from './load-world';
+import { GAME_PACE } from '../../src/game/pacing';
 
 /**
  * The stubbed AI tests pin individual decisions; this one drives the real
@@ -52,7 +53,7 @@ describe('AI on a live campaign', () => {
 
     // A clear capital surplus reaches the live mobilise/split path directly;
     // long-run economy pacing is covered by focused economy and production tests.
-    session.tick(3 / 1800);
+    session.tick(GAME_PACE.clock.aiPlanningHours);
 
     const situation = assess(
       session, aiMemory(session.state), ai, indexArmies(session.state), indexProvinces(session),
