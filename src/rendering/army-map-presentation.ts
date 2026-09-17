@@ -1,4 +1,6 @@
-/** Six silhouettes shown in the strategic counter atlas. */
+/** Strategic counter silhouettes. Infantry, engineers, and artillery share one
+ * icon; armored cars and tanks share another so the compact counter always
+ * stays within its two-icon space. */
 export type ArmyVisualKind = 0 | 1 | 2 | 3 | 4 | 5;
 /** Five close-range model families; engineers share infantry. Light tanks get
  *  their own skinned model, so they are split from the armored-car hull they
@@ -26,11 +28,8 @@ export interface ArmyCompositionRow {
 
 export function visualKindForUnit(typeId: string): ArmyVisualKind {
   typeId = typeId.replace(/-l[2-8]$/, '');
-  if (typeId === 'engineer') return 1;
-  if (typeId === 'armored-car') return 2;
-  if (typeId === 'light-tank') return 3;
-  if (typeId === 'medium-tank') return 4;
-  if (typeId === 'artillery') return 5;
+  if (typeId === 'engineer' || typeId === 'artillery') return 0;
+  if (typeId === 'armored-car' || typeId === 'light-tank' || typeId === 'medium-tank') return 2;
   return 0;
 }
 
@@ -43,7 +42,7 @@ function modelKindForUnit(typeId: string): ArmyModelKind {
   return 0;
 }
 
-/** Keep all six rule-level categories distinct, ordered by battlefield weight. */
+/** Combine units that share a strategic counter icon, ordered by weight. */
 export function buildArmyCompositionRows(groups: readonly ProjectedTroopGroup[]): ArmyCompositionRow[] {
   const buckets = new Map<ArmyVisualKind, { count: number; weightedHealth: number }>();
   for (const group of groups) {
