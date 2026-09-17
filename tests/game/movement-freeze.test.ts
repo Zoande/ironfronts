@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_STATE_VERSION, emptyStockpile, type GameState } from '../../src/game/game-state';
 import { TERRAIN_CLASS } from '../../src/game/world-data';
-import type { LandGraph } from '../../src/game/movement/graph';
+import { buildLandGraph, type LandGraph } from '../../src/game/movement/graph';
 import type { SimContext } from '../../src/game/sim-context';
 import type { WorldData } from '../../src/game/world-data';
 import { stepMovement } from '../../src/game/units/movement';
@@ -13,19 +13,10 @@ import { makeGroup, type ArmyStack } from '../../src/game/units/army';
  * boundary. The route is 0 -> 1 -> 2.
  */
 function coincidentNodeGraph(): LandGraph {
-  return {
-    nodeX: new Float64Array([100, 100.2, 300]),
-    nodeZ: new Float64Array([100, 100, 100]),
-    adjacency: [[1], [0, 2], [1]],
-    edgeCost: [[0.2], [0.2, 199.8], [199.8]],
-    seaAdjacency: [[], [], []],
-    seaEdgeCost: [[], [], []],
-    component: new Int32Array([0, 0, 0]),
-    componentSize: [3],
-    nodeCount: 3,
-    width: 10_000,
-    height: 5_000,
-  };
+  return buildLandGraph(new Float32Array([
+    100, 100, 100.2, 100, 1, 0, 0, 0,
+    100.2, 100, 300, 100, 1, 0, 0, 0,
+  ]), 10_000, 5_000);
 }
 
 function mountainWorld(): WorldData {

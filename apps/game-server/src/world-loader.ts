@@ -18,19 +18,23 @@ export async function loadWorld(directory: string): Promise<{ world: WorldData; 
     surface: manifest.fields?.surface?.url,
     height: manifest.fields?.height?.url,
     connections: manifest.buffers?.connections?.url,
+    roadNetwork: manifest.sidecars?.roadNetwork?.url,
+    roadCenterlines: manifest.buffers?.roadCenterlines?.url,
   };
-  const canonical = ['province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32'];
+  const canonical = ['province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32', 'road-network.json', 'road-centerlines.f32'];
   if (Object.values(expectedUrls).some((url, index) => String(url).replace(/^\//, '') !== canonical[index])) {
     throw new Error('World manifest points gameplay data outside its identified package.');
   }
   const details = JSON.parse(await readFile(path.join(directory, 'province-details.json'), 'utf8')).provinces;
-  const [owners, ids, surface, connections] = await Promise.all([
+  const roadNetwork = JSON.parse(await readFile(path.join(directory, 'road-network.json'), 'utf8'));
+  const [owners, ids, surface, connections, roadCenterlines] = await Promise.all([
     arrayBuffer(directory, 'province-owners.u32'),
     arrayBuffer(directory, 'province-ids.u16'),
     arrayBuffer(directory, 'surface.rgba8'),
     arrayBuffer(directory, 'connections.f32'),
+    arrayBuffer(directory, 'road-centerlines.f32'),
   ]);
-  const artifactNames = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32'];
+  const artifactNames = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32', 'road-network.json', 'road-centerlines.f32'];
   const artifactHashes = Object.fromEntries(await Promise.all(artifactNames.sort().map(async (name) => [name,
     createHash('sha256').update(await readFile(path.join(directory, name))).digest('hex')])));
   return {
@@ -45,6 +49,7 @@ export async function loadWorld(directory: string): Promise<{ world: WorldData; 
       surface: new Uint8Array(surface),
       surfaceField: manifest.fields.surface,
       connections: new Float32Array(connections),
+      roadNetwork: { ...roadNetwork, centerlines: new Float32Array(roadCenterlines) },
       resourceNodes: [],
     }),
     version: String(manifest.version),

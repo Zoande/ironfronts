@@ -27,6 +27,15 @@ export interface CountryRecord {
   capitalProvinceId: number;
 }
 
+export interface CanonicalRoadNetworkMetadata {
+  version: number;
+  nodes: Array<{ id: number; sourceNodeId: number; x: number; z: number }>;
+  edges: Array<{
+    id: number; from: number; to: number; length: number;
+    pointOffset: number; pointCount: number; dotted: boolean;
+  }>;
+}
+
 export type DiplomaticRelation = 'neutral' | 'allied' | 'war';
 
 export interface DiplomacyState {
@@ -52,6 +61,7 @@ export interface WorldManifest {
   buffers: {
     borders: BinaryBufferDescriptor;
     connections: BinaryBufferDescriptor;
+    roadCenterlines: BinaryBufferDescriptor;
     roadVertices: BinaryBufferDescriptor;
     roadIndices: BinaryBufferDescriptor;
     hiddenConnectionVertices: BinaryBufferDescriptor;
@@ -93,7 +103,10 @@ export interface WorldManifest {
     signs: PropChunkRange[];
   };
   reports: { generation: { url: string; version: string } };
-  sidecars: { provinceDetails: { url: string; version: number } };
+  sidecars: {
+    provinceDetails: { url: string; version: number };
+    roadNetwork: { url: string; version: number };
+  };
   politics: {
     owners: BinaryBufferDescriptor;
     adjacency: BinaryBufferDescriptor;

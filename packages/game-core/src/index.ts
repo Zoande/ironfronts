@@ -6,7 +6,7 @@ export { projectArmyView, visibleResourceNodes } from '../../../src/game/player-
 export { computeArmyVisibility } from '../../../src/game/visibility';
 export { legalRetreatPaths } from '../../../src/game/combat';
 export type { CombatEvent } from '../../../src/game/combat';
-export { nearestNode } from '../../../src/game/movement/graph';
+export { nearestNode, edgeIdBetween, edgePolyline } from '../../../src/game/movement/graph';
 export { findPath } from '../../../src/game/movement/pathfind';
 export { UNIT_TYPES, BASE_UNIT_IDS, baseUnitId, unitType } from '../../../src/game/units/unit-catalog';
 export { stackExtractionRate } from '../../../src/game/units/army';

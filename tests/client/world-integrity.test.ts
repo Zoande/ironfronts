@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configureWorldAssetBase, fetchWorldBinary, verifyWorldDescriptor } from '../../src/rendering/world-assets';
 
-const required = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32'];
+const required = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32', 'road-network.json', 'road-centerlines.f32'];
 const hex = (bytes: ArrayBuffer): string => [...new Uint8Array(bytes)].map((value) => value.toString(16).padStart(2, '0')).join('');
 const sha = async (value: ArrayBuffer | Uint8Array): Promise<string> =>
   hex(await crypto.subtle.digest('SHA-256', value as BufferSource));

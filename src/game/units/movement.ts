@@ -13,6 +13,7 @@ import { computeArmyVisibility } from '../visibility';
 import { relationOf } from '../game-state';
 import { GAME_PACE } from '../pacing';
 import { captureProvinceAtArmyNode, type CaptureEvent } from '../combat/capture';
+import { edgeDistanceAtPoint, edgeIdBetween, edgePositionFrom } from '../movement/graph';
 export {
   currentMovementLeg, remainingOrderTravelHours, movementEdgeTravelCost,
   ENEMY_LAND_SPEED_MULTIPLIER, type CurrentMovementLeg,
@@ -96,10 +97,21 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         order.path.length = 0;
         break;
       }
-      army.edge ??= { from: army.graphNodeId, to: targetNode };
+      const edgeId = army.edge?.edgeId
+        ?? (army.edge ? edgeIdBetween(graph, army.edge.from, army.edge.to)
+          : edgeIdBetween(graph, army.graphNodeId, targetNode));
+      if (edgeId < 0) { order.path.length = 0; break; }
+      army.edge ??= { edgeId, from: army.graphNodeId, to: targetNode, distanceAlongEdge: 0 };
+      army.edge.edgeId = edgeId;
+      army.edge.distanceAlongEdge ??= edgeDistanceAtPoint(
+        graph, edgeId, army.edge.from, army.x, army.z,
+      );
+      const roadEdge = graph.edges[edgeId];
+      const forward = targetNode === army.edge.to;
       const targetX = graph.nodeX[targetNode];
       const targetZ = graph.nodeZ[targetNode];
-      const segmentLength = wrappedDistance(army.x, army.z, targetX, targetZ, world.width);
+      const segmentLength = forward
+        ? roadEdge.length - army.edge.distanceAlongEdge : army.edge.distanceAlongEdge;
       if (segmentLength <= 1e-9) {
         army.x = targetX;
         army.z = targetZ;
@@ -116,7 +128,13 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         session, army.ownerCountryId, army.x, army.z,
       );
       const requested = Math.min(segmentLength, budget * speedScale);
-      const advance = contactDistance(session, army, targetX, targetZ, requested, positions);
+      const requestedPosition = edgePositionFrom(
+        graph, edgeId, army.edge.from,
+        army.edge.distanceAlongEdge + (forward ? requested : -requested),
+      );
+      const advance = contactDistance(
+        session, army, requestedPosition.x, requestedPosition.z, requested, positions,
+      );
       if (advance <= 1e-9) break;
       if (advance >= segmentLength - 1e-9) {
         army.x = targetX;
@@ -131,13 +149,14 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         if (capture) captures.push(capture);
         budget -= segmentLength / Math.max(speedScale, 0.01);
       } else {
-        const ratio = advance / segmentLength;
-        let dx = targetX - army.x;
-        if (dx > world.width / 2) dx -= world.width;
-        else if (dx < -world.width / 2) dx += world.width;
-        army.x = ((army.x + dx * ratio) % world.width + world.width) % world.width;
-        army.z += (targetZ - army.z) * ratio;
-        order.edgeProgress += advance;
+        army.edge.distanceAlongEdge += forward ? advance : -advance;
+        const point = edgePositionFrom(
+          graph, edgeId, army.edge.from, army.edge.distanceAlongEdge,
+        );
+        army.x = point.x;
+        army.z = point.z;
+        order.edgeProgress = forward
+          ? army.edge.distanceAlongEdge : roadEdge.length - army.edge.distanceAlongEdge;
         budget = 0;
       }
     }

@@ -56,7 +56,7 @@ async function recoverInterruptedPromotion() {
 }
 
 async function validateStagedWorld() {
-  for (const name of ['world.json', 'province-ids.u16', 'height.f32', 'surface.rgba8']) {
+  for (const name of ['world.json', 'province-ids.u16', 'height.f32', 'surface.rgba8', 'road-network.json', 'road-centerlines.f32']) {
     const info = await stat(path.join(OUTPUT, name));
     if (!info.isFile() || info.size === 0) throw new Error(`Generated world asset is empty: ${name}`);
   }
@@ -205,7 +205,7 @@ async function main() {
     landField, fieldWidth: FIELD_WIDTH, fieldHeight: FIELD_HEIGHT,
     worldWidth: WORLD_WIDTH, worldHeight: WORLD_HEIGHT,
   });
-  console.log(`Movement graph: ${suppressedLandConnections.size} land connection segments cross water — flagged untraversable (node ids unchanged).`);
+  console.log(`Legacy connection audit: ${suppressedLandConnections.size} land segments cross water; their canonical dotted roads remain traversable.`);
   const connections = buildConnections(connectionData, suppressedLandConnections);
 
   // The first pass supplies the exclusion mask used to distinguish authored
@@ -356,7 +356,7 @@ async function main() {
   for (const height of heights) maxHeight = Math.max(maxHeight, height);
 
   const worldGenerationReport = {
-    version: 'world-generation-v12',
+    version: 'world-generation-v13',
     topography: topographyReport,
     banks: bankField.report,
     waterways: waterways.report,
@@ -364,7 +364,7 @@ async function main() {
     roads: infrastructure.roadReport,
     movementGraph: {
       landConnections: connectionData.segments.filter((segment) => segment.medium === 'land').length,
-      waterCrossingSuppressed: suppressedLandConnections.size,
+      legacyWaterCrossingFlags: suppressedLandConnections.size,
     },
     props: {
       rejectedCoastalFootprints: generatedInstances.audit.rejectedCoastalFootprints,
@@ -373,7 +373,7 @@ async function main() {
   };
 
   const manifest = {
-    version: 12,
+    version: 13,
     source: { mapId: mapMetadata.map_id, mapVersion: mapMetadata.map_version },
     generatedSeed: SEED,
     world: { width: WORLD_WIDTH, height: WORLD_HEIGHT, overlapX: 250, wrapX: true },
@@ -392,6 +392,7 @@ async function main() {
     buffers: {
       borders: { url: 'borders.f32', count: borders.length / 8, stride: 8 },
       connections: { url: 'connections.f32', count: connections.length / 8, stride: 8, lazy: true },
+      roadCenterlines: { url: 'road-centerlines.f32', count: infrastructure.roadCenterlines.length / 2, stride: 2 },
       roadVertices: { url: 'road-vertices.f32', count: infrastructure.roadVertices.length / 9, stride: 9 },
       roadIndices: { url: 'road-indices.u32', count: infrastructure.roadIndices.length, stride: 1 },
       hiddenConnectionVertices: { url: 'hidden-connection-vertices.f32', count: infrastructure.hiddenConnectionVertices.length / 9, stride: 9 },
@@ -418,7 +419,10 @@ async function main() {
       lamps: lampChunks.ranges, barriers: barrierChunks.ranges, signs: signChunks.ranges,
     },
     reports: { generation: { url: 'world-generation-report.json', version: worldGenerationReport.version } },
-    sidecars: { provinceDetails: { url: 'province-details.json', version: provinceDetails.version } },
+    sidecars: {
+      provinceDetails: { url: 'province-details.json', version: provinceDetails.version },
+      roadNetwork: { url: 'road-network.json', version: infrastructure.roadNetwork.version },
+    },
     politics: {
       owners: { url: 'province-owners.u32', count: provinceOwners.length, stride: 1 },
       adjacency: { url: 'province-adjacency.u32', count: provinceAdjacency.length / 2, stride: 2 },
@@ -433,7 +437,10 @@ async function main() {
       trees: trees.length / 8,
       buildings: buildings.length / 8,
       connections: connections.length / 8,
-      waterCrossingSuppressedConnections: suppressedLandConnections.size,
+      roadNetworkNodes: infrastructure.roadNetwork.nodes.length,
+      roadNetworkEdges: infrastructure.roadNetwork.edges.length,
+      roadCenterlinePoints: infrastructure.roadCenterlines.length / 2,
+      legacyWaterCrossingFlags: suppressedLandConnections.size,
       ...waterways.stats,
       ...visualRivers.stats,
       ...infrastructure.stats,
@@ -457,6 +464,7 @@ async function main() {
     writeTypedArtifact(OUTPUT, 'coast.rg8', bankField.field),
     writeTypedArtifact(OUTPUT, 'borders.f32', borders),
     writeTypedArtifact(OUTPUT, 'connections.f32', connections),
+    writeTypedArtifact(OUTPUT, 'road-centerlines.f32', infrastructure.roadCenterlines),
     writeTypedArtifact(OUTPUT, 'road-vertices.f32', infrastructure.roadVertices),
     writeTypedArtifact(OUTPUT, 'road-indices.u32', infrastructure.roadIndices),
     writeTypedArtifact(OUTPUT, 'hidden-connection-vertices.f32', infrastructure.hiddenConnectionVertices),
@@ -471,6 +479,7 @@ async function main() {
     writeTypedArtifact(OUTPUT, 'signs.f32', signChunks.data),
     writeFile(path.join(OUTPUT, 'world-generation-report.json'), `${JSON.stringify(worldGenerationReport, null, 2)}\n`),
     writeFile(path.join(OUTPUT, 'province-details.json'), `${JSON.stringify(provinceDetails)}\n`),
+    writeFile(path.join(OUTPUT, 'road-network.json'), `${JSON.stringify(infrastructure.roadNetwork)}\n`),
     writeFile(path.join(OUTPUT, 'world.json'), `${JSON.stringify(manifest)}\n`),
   ]);
   await promoteStagedWorld();

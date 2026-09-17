@@ -1563,11 +1563,13 @@ function syncArmyMarkers(
           targetZ: armyMotionRaw.targetZ + huddle.z,
         }
       : armyMotionRaw;
+    const moveRoute = army.moveRoute
+      ?? renderer.expandRoadRoute(army.moveRoadRoute, army.x, army.z);
 
     // Authoritative route polyline for the SELECTED own army only (move = cream,
     // attack = red, retreating = amber). Other armies' routes stay hidden so the
     // map isn't a web of lines; a deselect clears this on the next sync.
-    if (army.own && army.id === selectedArmyId && army.moveRoute && army.moveRoute.length >= 2) {
+    if (army.own && army.id === selectedArmyId && moveRoute && moveRoute.length >= 2) {
       const colorFlag = army.moveIntent === 'attack' ? 1 : 0;
       const retreatFlag = army.status === 'retreating' ? 1 : 0;
       // `fraction` is 0 at the army and 1 at the destination; the route shader
@@ -1587,7 +1589,7 @@ function syncArmyMarkers(
         routeCursor += 8;
         routeCount += 1;
       };
-      const route = army.moveRoute;
+      const route = moveRoute;
       const legs = Math.max(1, route.length - 1);
       const worldW = renderer.manifest?.world.width ?? 0;
       const wrapDelta = (d: number): number => {
@@ -1720,7 +1722,7 @@ function syncArmyMarkers(
       // Head along the actual first leg of the authoritative road route (own
       // armies only) so the column sits on the road even where it bends;
       // fall back to a straight line at the destination.
-      const route = army.moveRoute;
+      const route = moveRoute;
       const worldW = renderer.manifest?.world.width ?? 0;
       const previousHeading = previousArmyHeading.get(army.id);
       // A stopped army keeps its last facing; a marching one aims a little way

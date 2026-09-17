@@ -2,7 +2,7 @@ import type { SimContext } from '../sim-context';
 import type { ArmyStack } from '../units/army';
 import { wrappedDistance } from '../geometry';
 import { findPath, pathLength, type EdgeAllowed, type EdgeCost } from './pathfind';
-import type { LandGraph } from './graph';
+import { edgeDistanceAtPoint, edgeIdBetween, type LandGraph } from './graph';
 
 export const ARRIVAL_DISTANCE = 0.01;
 
@@ -13,12 +13,21 @@ export function armyAtNode(ctx: SimContext, army: ArmyStack, node = army.graphNo
 }
 
 /** Physical edge persists through stop, split, combat and order replacement. */
-export function occupiedEdge(ctx: SimContext, army: ArmyStack): { from: number; to: number } | null {
+export function occupiedEdge(ctx: SimContext, army: ArmyStack): {
+  edgeId: number; from: number; to: number; distanceAlongEdge: number;
+} | null {
   if (armyAtNode(ctx, army)) return null;
-  if (army.edge) return army.edge;
+  if (army.edge) {
+    const edgeId = army.edge.edgeId ?? edgeIdBetween(ctx.graph, army.edge.from, army.edge.to);
+    if (edgeId < 0) return null;
+    return { ...army.edge, edgeId, distanceAlongEdge: army.edge.distanceAlongEdge
+      ?? edgeDistanceAtPoint(ctx.graph, edgeId, army.edge.from, army.x, army.z) };
+  }
   const next = army.order?.path[0] ?? army.suspendedOrder?.path[0];
-  return next !== undefined && ctx.graph.adjacency[army.graphNodeId]?.includes(next)
-    ? { from: army.graphNodeId, to: next } : null;
+  const edgeId = next === undefined ? -1 : edgeIdBetween(ctx.graph, army.graphNodeId, next);
+  return next !== undefined && edgeId >= 0
+    ? { edgeId, from: army.graphNodeId, to: next,
+      distanceAlongEdge: edgeDistanceAtPoint(ctx.graph, edgeId, army.graphNodeId, army.x, army.z) } : null;
 }
 
 /** Returns the existing inclusive-node route convention, including a partial
@@ -43,13 +52,9 @@ export function routeFromArmy(
         return total + edgeCost(from, node, graph.edgeCost[from][edgeIndex]);
       }, 0)
       : pathLength(graph, tail);
-    const partialDistance = wrappedDistance(
-      army.x, army.z, ctx.graph.nodeX[endpoint], ctx.graph.nodeZ[endpoint], ctx.world.width,
-    );
-    const fullDistance = wrappedDistance(
-      ctx.graph.nodeX[edge.from], ctx.graph.nodeZ[edge.from],
-      ctx.graph.nodeX[edge.to], ctx.graph.nodeZ[edge.to], ctx.world.width,
-    );
+    const fullDistance = ctx.graph.edges[edge.edgeId].length;
+    const partialDistance = endpoint === edge.from
+      ? edge.distanceAlongEdge : fullDistance - edge.distanceAlongEdge;
     const partialCost = edgeCost && fullDistance > 0
       ? edgeCost(edge.from, edge.to, fullDistance) * partialDistance / fullDistance
       : partialDistance;

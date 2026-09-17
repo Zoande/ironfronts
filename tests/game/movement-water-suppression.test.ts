@@ -9,8 +9,8 @@ function seg(x1: number, y1: number, x2: number, y2: number, land: boolean, supp
   return [x1, y1, x2, y2, land ? 1 : 0, suppressed ? 1 : 0, 0, 0];
 }
 
-describe('water-crossing land connections are flagged untraversable', () => {
-  it('registers a suppressed edge as nodes but never links it', () => {
+describe('dotted road connections remain traversable', () => {
+  it('registers and links a visually suppressed edge as a normal road', () => {
     const conn = new Float32Array([
       ...seg(0, 0, 100, 0, true),                 // land A-B
       ...seg(100, 0, 200, 0, true, true),         // land B-C, corridor crosses water
@@ -26,13 +26,13 @@ describe('water-crossing land connections are flagged untraversable', () => {
     expect(c).toBeGreaterThanOrEqual(0);
 
     // …but B and C are not linked, so the mainland splits at the water gap.
-    expect(graph.adjacency[b]).not.toContain(c);
-    expect(graph.adjacency[c]).not.toContain(b);
-    expect(graph.component[b]).not.toBe(graph.component[c]);
-    expect(findPath(graph, b, c)).toBeNull();
+    expect(graph.adjacency[b]).toContain(c);
+    expect(graph.adjacency[c]).toContain(b);
+    expect(graph.component[b]).toBe(graph.component[c]);
+    expect(findPath(graph, b, c)).toEqual([b, c]);
   });
 
-  it('routes a path around a suppressed edge when an alternative exists', () => {
+  it('uses a dotted direct road when it is shorter than an alternative', () => {
     const conn = new Float32Array([
       ...seg(0, 0, 100, 0, true),                 // A-B
       ...seg(100, 0, 200, 0, true, true),         // B-C direct: crosses water
@@ -46,10 +46,10 @@ describe('water-crossing land connections are flagged untraversable', () => {
 
     const route = findPath(graph, b, c);
     expect(route).not.toBeNull();
-    expect(route).toContain(e);
+    expect(route).not.toContain(e);
     // never the direct hop
     for (let i = 1; i < route!.length; i += 1) {
-      expect(!(route![i - 1] === b && route![i] === c)).toBe(true);
+      expect(route![i - 1] === b && route![i] === c).toBe(true);
     }
   });
 
@@ -74,6 +74,6 @@ describe('water-crossing land connections are flagged untraversable', () => {
     const edges = (g: typeof a): number => g.adjacency.reduce((sum, list) => sum + list.length, 0);
     // Audited build links no more than the raw one; if the shipped world has
     // any flagged crossings it links strictly fewer.
-    expect(edges(a)).toBeLessThanOrEqual(edges(u));
+    expect(edges(a)).toBe(edges(u));
   });
 });

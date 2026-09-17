@@ -7,7 +7,7 @@
  */
 
 import type {
-  TerrainClass, WorldCountry, WorldData, WorldProvince, WorldResourceNode,
+  CanonicalRoadNetwork, TerrainClass, WorldCountry, WorldData, WorldProvince, WorldResourceNode,
 } from './world-data';
 import { TERRAIN_CLASS } from './world-data';
 import { wrapX } from './geometry';
@@ -40,8 +40,9 @@ export interface WorldDataInputs {
   /** surface.rgba8 — channel 0 = terrain class, channel 3 = 0 for water/void. */
   readonly surface: Uint8Array;
   readonly surfaceField: FieldDescriptor;
-  /** connections.f32 (stride 8). */
+  /** connections.f32 (stride 8), retained for sea/ferry links. */
   readonly connections: Float32Array;
+  readonly roadNetwork?: CanonicalRoadNetwork;
   /** Deterministic resource deposits (from generateResourceNodes). */
   readonly resourceNodes: readonly WorldResourceNode[];
 }
@@ -100,6 +101,7 @@ export function buildWorldData(input: WorldDataInputs): WorldData {
     provinceAt,
     terrainClassAt,
     connections: input.connections,
+    roadNetwork: input.roadNetwork,
     resourceNodes: input.resourceNodes,
   };
 }

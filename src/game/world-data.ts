@@ -32,6 +32,34 @@ export interface WorldResourceNode {
   readonly amount: number;
 }
 
+export interface CanonicalRoadNode {
+  readonly id: number;
+  readonly sourceNodeId: number;
+  readonly x: number;
+  readonly z: number;
+}
+
+export interface CanonicalRoadEdge {
+  /** Stable within a world package. */
+  readonly id: number;
+  readonly from: number;
+  readonly to: number;
+  /** Exact length of the serialized Float32 centerline. */
+  readonly length: number;
+  readonly pointOffset: number;
+  readonly pointCount: number;
+  /** Visual-only; dotted roads remain ordinary traversable land roads. */
+  readonly dotted: boolean;
+}
+
+export interface CanonicalRoadNetwork {
+  readonly version: number;
+  readonly nodes: readonly CanonicalRoadNode[];
+  readonly edges: readonly CanonicalRoadEdge[];
+  /** Packed [x,z] centerline points referenced by every edge. */
+  readonly centerlines: Float32Array;
+}
+
 /** Authored terrain class from the surface field, channel 0. */
 export const TERRAIN_CLASS = {
   plain: 0,
@@ -68,7 +96,9 @@ export interface WorldData {
    * field. -1 (`TERRAIN_CLASS.water`) when the point is not land.
    */
   readonly terrainClassAt: (x: number, z: number) => TerrainClass;
-  /** Raw `connections.f32` (stride 8); the session filters to land edges. */
+  /** Legacy logical connections, retained for explicit sea/ferry links. */
   readonly connections: Float32Array;
+  /** Canonical visual/gameplay road centerlines. Legacy fixtures may omit it. */
+  readonly roadNetwork?: CanonicalRoadNetwork;
   readonly resourceNodes: readonly WorldResourceNode[];
 }

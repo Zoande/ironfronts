@@ -193,6 +193,10 @@ export interface ProjectedArmy {
    *  points, army position first, destination last). Absent/[] for foreign or
    *  idle stacks. */
   moveRoute?: ReadonlyArray<{ x: number; z: number }>;
+  /** Compact canonical route; the client expands stable edges from its verified world package. */
+  moveRoadRoute?: ReadonlyArray<{
+    edgeId: number; from: number; to: number; startDistance: number;
+  }>;
   moveIntent?: 'move' | 'attack';
   /** Full authoritative wall-clock estimate to the final order destination. */
   arrival?: { remainingMs: number; sampledAtEpochMs: number };

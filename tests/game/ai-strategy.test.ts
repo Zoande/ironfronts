@@ -33,7 +33,7 @@ function corridorGraph(): LandGraph {
     nodeCount: CENTERS.length,
     width: 10_000,
     height: 5_000,
-  };
+  } as unknown as LandGraph;
 }
 
 function corridorWorld(): WorldData {

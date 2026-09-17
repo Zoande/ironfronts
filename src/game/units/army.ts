@@ -66,7 +66,8 @@ export interface ArmyStack {
   z: number;
   /** Land movement-graph node the stack is currently at / leaving. */
   graphNodeId: number;
-  edge?: { from: number; to: number } | null;
+  /** Authoritative road position. x/z are derived caches for world-space systems. */
+  edge?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null;
   units: UnitGroup[];
   status: ArmyStatus;
   order: MoveOrder | null;

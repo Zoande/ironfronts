@@ -178,7 +178,7 @@ export function initGameState(
   const seed = hashString(scenario.id);
   const random = mulberry32(seed);
 
-  const graph = buildLandGraph(world.connections, world.width, world.height);
+  const graph = buildLandGraph(world.connections, world.width, world.height, world.roadNetwork);
 
   // ---- countries ---------------------------------------------------------
   // ControllerType is authoritative. Checkpoint 1: the player's country

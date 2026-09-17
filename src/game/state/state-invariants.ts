@@ -2,6 +2,7 @@ import type { SimContext } from '../sim-context';
 import { armyAtNode } from '../movement/position';
 import { wrappedDistance } from '../geometry';
 import { resolveProvince } from '../resource-bootstrap';
+import { edgeDistanceAtPoint, edgeIdBetween, edgePositionFrom } from '../movement/graph';
 
 /** Validate references after rebuilding immutable world indexes. */
 export function validateWorldState(ctx: SimContext): void {
@@ -9,10 +10,13 @@ export function validateWorldState(ctx: SimContext): void {
   const nodeExists = (id: number): boolean => Number.isInteger(id) && id >= 0 && id < graph.nodeCount;
   const provinceIds = new Set(world.provinces.map((province) => province.id));
   const countryExists = (id: number): boolean => id === 0 || Boolean(state.countries[id]);
-  const onEdge = (army: typeof state.armies[string], from: number, to: number): boolean => Math.abs(
-    wrappedDistance(graph.nodeX[from], graph.nodeZ[from], army.x, army.z, world.width)
-    + wrappedDistance(army.x, army.z, graph.nodeX[to], graph.nodeZ[to], world.width)
-    - wrappedDistance(graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to], world.width)) < 0.1;
+  const onEdge = (army: typeof state.armies[string], from: number, to: number): boolean => {
+    const edgeId = edgeIdBetween(graph, from, to);
+    if (edgeId < 0) return false;
+    const distance = edgeDistanceAtPoint(graph, edgeId, from, army.x, army.z);
+    const point = edgePositionFrom(graph, edgeId, from, distance);
+    return wrappedDistance(point.x, point.z, army.x, army.z, world.width) < 0.1;
+  };
   for (const [provinceId, owner] of Object.entries(state.provinceOwners)) {
     if (!provinceIds.has(Number(provinceId)) || !countryExists(owner)) throw new Error('Invalid province ownership.');
   }
@@ -40,11 +44,26 @@ export function validateWorldState(ctx: SimContext): void {
         + wrappedDistance(army.x, army.z, graph.nodeX[to], graph.nodeZ[to], world.width)
         - wrappedDistance(graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to], world.width)) < 0.1);
       if (to === undefined) throw new Error('Army is outside its movement edge.');
-      army.edge = { from, to };
+      const edgeId = edgeIdBetween(graph, from, to);
+      army.edge = { from, to, edgeId,
+        distanceAlongEdge: edgeDistanceAtPoint(graph, edgeId, from, army.x, army.z) };
     }
-    if (army.edge && (!nodeExists(army.edge.from) || army.edge.from !== army.graphNodeId
-      || !graph.adjacency[army.edge.from]?.includes(army.edge.to) || !onEdge(army, army.edge.from, army.edge.to))) {
-      throw new Error('Invalid occupied movement edge.');
+    if (army.edge) {
+      const edgeId = army.edge.edgeId ?? edgeIdBetween(graph, army.edge.from, army.edge.to);
+      if (!nodeExists(army.edge.from) || army.edge.from !== army.graphNodeId
+        || edgeId < 0 || !graph.adjacency[army.edge.from]?.includes(army.edge.to)
+        || !onEdge(army, army.edge.from, army.edge.to)) throw new Error('Invalid occupied movement edge.');
+      army.edge.edgeId = edgeId;
+      army.edge.distanceAlongEdge ??= edgeDistanceAtPoint(
+        graph, edgeId, army.edge.from, army.x, army.z,
+      );
+      if (army.edge.distanceAlongEdge < 0
+        || army.edge.distanceAlongEdge > graph.edges[edgeId].length + 1e-6) {
+        throw new Error('Invalid occupied movement edge progress.');
+      }
+      // edge position is authoritative; world coordinates are its derived cache
+      const derived = edgePositionFrom(graph, edgeId, army.edge.from, army.edge.distanceAlongEdge);
+      army.x = derived.x; army.z = derived.z;
     }
     for (const order of [army.order, army.suspendedOrder]) if (order) {
       if (order.edgeProgress < 0 || order.path.some((id) => !nodeExists(id))) throw new Error('Invalid order node.');

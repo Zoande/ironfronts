@@ -106,6 +106,17 @@ export class ArmyMotionInterpolator {
     const target = { x:unwrap(newest.motion.targetX,newest.x,worldWidth),z:newest.motion.targetZ };
     const age = Math.max(0,time-newest.at);
     const elapsed = Math.min(age,MAX_EXTRAPOLATION_MS,newest.motion.durationMs);
+    if (newest.motion.route?.length) {
+      const points: Array<{x:number;z:number}> = [{ x:newest.x, z:newest.z }];
+      for (const raw of newest.motion.route) {
+        const previous = points[points.length-1];
+        const next = { x:unwrap(raw.x,previous.x,worldWidth), z:raw.z };
+        if (Math.hypot(next.x-previous.x,next.z-previous.z)>1e-6) points.push(next);
+      }
+      if (points.length>1) return interpolatePath(
+        points, elapsed/newest.motion.durationMs, Math.min(MAX_EXTRAPOLATION_MS,newest.motion.durationMs),
+      );
+    }
     const point = between(newest,target,elapsed/newest.motion.durationMs);
     const endTime = Math.min(MAX_EXTRAPOLATION_MS,newest.motion.durationMs);
     const boundedTarget = between(newest,target,endTime/newest.motion.durationMs);

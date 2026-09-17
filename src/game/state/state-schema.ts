@@ -49,7 +49,7 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
   provinceOwners: record(id), provinceBuildings: record(z.object({ barracks: id.max(8), tankPlant: id.max(8), ordnance: id.max(8), missileSite: id.max(8).default(0) })),
   productionQueues: record(z.array(queue.extend({ unitTypeId: unit }))), constructionQueues: record(z.array(queue.extend({ buildingId: building }))), rallyPoints: record(point),
   armies: record(point.extend({ id: z.string(), ownerCountryId: id, name: z.string(), graphNodeId: id,
-    edge: z.object({ from: id, to: id }).nullable().optional(),
+    edge: z.object({ from: id, to: id, edgeId: id.optional(), distanceAlongEdge: positive.optional() }).nullable().optional(),
     units: z.array(z.object({ typeId: unit, count: id, hp: positive, experience: positive })), status: z.enum(['idle', 'moving', 'engaged', 'retreating', 'extracting', 'embarking', 'atSea', 'disembarking']), order: order.nullable(), extractingNodeId: id.nullable(), extractionAssignment: z.object({ provinceId: id, resource: z.enum(['food', 'stone', 'metal', 'oil']) }).nullable().optional(), shortageSeverity: z.object({ funds: positive.max(100), food: positive.max(100), metal: positive.max(100), oil: positive.max(100) }).optional(),
     lastGraphNodeId: id.nullable().optional(), suspendedOrder: order.nullable().optional(), battleFrontIds: z.array(z.string()).optional(),
     retreat: z.object({ destinationProvinceId: id, protectedUntilNodeId: id, protected: z.boolean() }).nullable().optional(),

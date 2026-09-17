@@ -7,6 +7,7 @@ import { OUT_OF_SUPPLY_SPEED_MULTIPLIER } from '../combat/constants';
 import { GAME_PACE } from '../pacing';
 import { relationOf } from '../game-state';
 import type { LandGraph } from './graph';
+import { edgeIdBetween, edgePolyline } from './graph';
 import type { EdgeCost } from './pathfind';
 
 export const TERRAIN_SPEED: Record<number, number> = {
@@ -90,6 +91,20 @@ function landSegmentHours(
   return hours;
 }
 
+function landRoadHours(
+  session: SimContext, army: ArmyStack, graph: LandGraph, from: number, to: number,
+  prospectiveWars: ReadonlySet<number> = new Set(), startDistance = 0,
+): number {
+  const edgeId = edgeIdBetween(graph, from, to);
+  if (edgeId < 0) return Infinity;
+  const points = edgePolyline(graph, edgeId, from, startDistance);
+  let hours = 0;
+  for (let i = 1; i < points.length; i += 1) hours += landSegmentHours(
+    session, army, points[i - 1].x, points[i - 1].z, points[i].x, points[i].z, prospectiveWars,
+  );
+  return hours;
+}
+
 function seaSegmentHours(army: ArmyStack, distance: number): number {
   const speed = baseWorldUnitsPerGameHour(army) * ROAD_BONUS;
   return speed > 0 ? distance / speed : Infinity;
@@ -107,10 +122,7 @@ export function movementEdgeTravelCost(
 ): EdgeCost {
   return (from, to, distance) => seaEdge(graph, from, to)
     ? seaSegmentHours(army, distance) + GAME_PACE.movement.navalDwellHours * 2
-    : landSegmentHours(
-      session, army, graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to],
-      prospectiveWars,
-    );
+    : landRoadHours(session, army, graph, from, to, prospectiveWars);
 }
 
 /** Authoritative estimate for every remaining edge and naval dwell phase. */
@@ -137,6 +149,22 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
   } else if (crossing && army.status === 'disembarking') {
     hours += Math.max(0, crossing.hoursRemaining);
   }
+  if (!crossing && pathIndex === 0 && army.edge && order.path.length) {
+    const to = order.path[0];
+    const edgeId = army.edge.edgeId ?? edgeIdBetween(session.graph, army.edge.from, army.edge.to);
+    const edge = session.graph.edges[edgeId];
+    if (edge) {
+      const distanceFromArmyEdgeOrigin = army.edge.distanceAlongEdge ?? order.edgeProgress;
+      const start = to === edge.to ? edge.from : edge.to;
+      const startDistance = start === army.edge.from
+        ? distanceFromArmyEdgeOrigin : edge.length - distanceFromArmyEdgeOrigin;
+      hours += landRoadHours(session, army, session.graph, start, to, new Set(), startDistance);
+      fromNode = to;
+      fromX = session.graph.nodeX[to];
+      fromZ = session.graph.nodeZ[to];
+      pathIndex = 1;
+    }
+  }
   for (; pathIndex < order.path.length; pathIndex += 1) {
     const to = order.path[pathIndex];
     const toX = session.graph.nodeX[to];
@@ -147,7 +175,7 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
         fromX, fromZ, toX, toZ, session.world.width,
       ));
     } else {
-      hours += landSegmentHours(session, army, fromX, fromZ, toX, toZ);
+      hours += landRoadHours(session, army, session.graph, fromNode, to);
     }
     fromNode = to;
     fromX = toX;
@@ -174,7 +202,15 @@ export function currentMovementLeg(session: SimContext, army: ArmyStack): Curren
     targetX,
     targetZ,
     worldUnitsPerGameHour,
-    distance: wrappedDistance(army.x, army.z, targetX, targetZ, session.world.width),
+    distance: army.edge
+      ? (() => {
+        const edgeId = army.edge!.edgeId ?? edgeIdBetween(session.graph, army.edge!.from, army.edge!.to);
+        const length = session.graph.edges[edgeId]?.length ?? 0;
+        const progress = army.edge!.distanceAlongEdge ?? order.edgeProgress;
+        return targetNode === army.edge!.to ? length - progress : progress;
+      })()
+      : (session.graph.edges[edgeIdBetween(session.graph, army.graphNodeId, targetNode)]?.length
+        ?? wrappedDistance(army.x, army.z, targetX, targetZ, session.world.width)),
   };
 }
 

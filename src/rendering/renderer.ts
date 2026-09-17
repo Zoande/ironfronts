@@ -38,7 +38,7 @@ import {
 import type { Mesh } from './scene-meshes';
 import type {
   CountryRecord, DiplomacyState, DiplomaticRelation, FrameStats, HoverInfo, ProgressReporter, PropChunkRange,
-  ProvinceRecord, WorldManifest,
+  CanonicalRoadNetworkMetadata, ProvinceRecord, WorldManifest,
 } from './types';
 import {
   extractFrustumPlanes, sphereIntersectsFrustum, sphereIntersectsHorizontalWorldWindow, WORLD_COPY_INDICES,
@@ -216,6 +216,8 @@ export class WorldRenderer {
   private static readonly ROUTE_MAX_DISTANCE = 6_400;
   /** Flat (ax, az, bx, bz) edges of the movement/road graph — junction input. */
   private connectionGraph?: Float32Array;
+  private roadNetwork?: CanonicalRoadNetworkMetadata;
+  private roadCenterlines?: Float32Array;
   /** World-space centres of the more populous provinces (junction spacing). */
   private settlementCenters: Array<readonly [number, number]> = [];
   /** World-space centre of every province, keyed by gameplay province id. */
@@ -375,6 +377,43 @@ export class WorldRenderer {
   }
   get worldConnectionGraph(): Float32Array | undefined { return this.connectionGraph; }
 
+  /** Expand compact server route references from this client's verified copy
+   * of the canonical centerline package. */
+  expandRoadRoute(
+    steps: ReadonlyArray<{ edgeId: number; from: number; to: number; startDistance: number }> | undefined,
+    startX: number, startZ: number,
+  ): Array<{ x: number; z: number }> | undefined {
+    if (!steps?.length || !this.roadNetwork || !this.roadCenterlines) return undefined;
+    const result = [{ x: startX, z: startZ }];
+    const width = this.manifest.world.width;
+    for (const step of steps) {
+      const edge = this.roadNetwork.edges[step.edgeId];
+      if (!edge || !((edge.from === step.from && edge.to === step.to)
+        || (edge.to === step.from && edge.from === step.to))) return undefined;
+      const points = Array.from({ length: edge.pointCount }, (_, index) => ({
+        x: this.roadCenterlines![(edge.pointOffset + index) * 2],
+        z: this.roadCenterlines![(edge.pointOffset + index) * 2 + 1],
+      }));
+      if (step.from === edge.to) points.reverse();
+      let remaining = Math.max(0, step.startDistance), index = 1;
+      while (index < points.length) {
+        const a = points[index - 1], b = points[index];
+        let dx = b.x - a.x;
+        if (dx > width / 2) dx -= width;
+        else if (dx < -width / 2) dx += width;
+        const length = Math.hypot(dx, b.z - a.z);
+        if (remaining <= length) {
+          const t = length > 0 ? remaining / length : 0;
+          const x = ((a.x + dx * t) % width + width) % width;
+          result.push({ x, z: a.z + (b.z - a.z) * t }, ...points.slice(index));
+          break;
+        }
+        remaining -= length; index += 1;
+      }
+    }
+    return result;
+  }
+
   /**
    * Show / hide the GPU resource-deposit overlay. Cheap boolean flip — the
    * markers are already resident on the GPU; this only gates that one instanced
@@ -472,11 +511,14 @@ export class WorldRenderer {
     report('Loading terrain fields', 0.2);
     const {
       heightBuffer, surfaceBuffer, terrainNormalBuffer, terrainAlbedoBuffer, navigationBuffer, coastBuffer,
-      provinceBuffer, roadVertexBuffer, roadIndexBuffer, hiddenConnectionVertexBuffer, hiddenConnectionIndexBuffer,
+      provinceBuffer, roadVertexBuffer, roadIndexBuffer, roadCenterlineBuffer,
+      hiddenConnectionVertexBuffer, hiddenConnectionIndexBuffer,
       waterwayVertexBuffer, waterwayIndexBuffer, borderBuffer, treeBuffer, buildingBuffer, lampBuffer,
       barrierBuffer, signBuffer, provinceOwnerData, provinceAdjacencyData, provinceLabelData,
     } = await loadWorldAssetBuffers(this.manifest);
     this.heightData = new Float32Array(heightBuffer);
+    this.roadCenterlines = new Float32Array(roadCenterlineBuffer);
+    this.roadNetwork = await fetchWorldJson<CanonicalRoadNetworkMetadata>(this.manifest.sidecars.roadNetwork.url);
     this.provinceData = new Uint16Array(provinceBuffer);
     this.resourceNodeList = generateResourceNodes({
       surface: new Uint8Array(surfaceBuffer),

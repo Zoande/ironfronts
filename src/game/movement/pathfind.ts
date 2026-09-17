@@ -96,10 +96,10 @@ export function closestReachablePath(
 export function pathLength(graph: LandGraph, path: readonly number[]): number {
   let total = 0;
   for (let i = 1; i < path.length; i += 1) {
-    total += wrappedDistance(
-      graph.nodeX[path[i - 1]], graph.nodeZ[path[i - 1]],
-      graph.nodeX[path[i]], graph.nodeZ[path[i]], graph.width,
-    );
+    const from = path[i - 1];
+    const edgeIndex = graph.adjacency[from].indexOf(path[i]);
+    if (edgeIndex < 0) return Infinity;
+    total += graph.edgeCost[from][edgeIndex];
   }
   return total;
 }

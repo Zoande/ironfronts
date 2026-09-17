@@ -80,6 +80,9 @@ export interface PlayerArmyView {
    *  points from the army's position to the destination. Server projection fills
    *  it (it owns the graph); [] here. */
   readonly moveRoute?: ReadonlyArray<{ readonly x: number; readonly z: number }>;
+  readonly moveRoadRoute?: ReadonlyArray<{
+    readonly edgeId: number; readonly from: number; readonly to: number; readonly startDistance: number;
+  }>;
   readonly moveIntent?: 'move' | 'attack';
   /** Current visible movement leg. The client can animate continuously toward
    * this point for the remaining wall-clock duration instead of tweening
