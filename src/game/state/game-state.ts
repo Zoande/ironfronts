@@ -234,6 +234,9 @@ export interface BattleFrontState {
   readonly provinceId: number | null;
   readonly x: number;
   readonly z: number;
+  /** Canonical road contact coordinate when both forces share an edge. */
+  readonly edgeId?: number;
+  readonly distanceAlongEdge?: number;
   sideA: BattleFrontSideState;
   sideB: BattleFrontSideState;
 }

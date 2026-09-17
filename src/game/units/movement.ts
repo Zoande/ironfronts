@@ -142,13 +142,13 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         session, army.ownerCountryId, army.x, army.z,
       );
       const requested = Math.min(segmentLength, budget * speedScale);
-      const requestedPosition = edgePositionFrom(
-        graph, edgeId, army.edge.from,
-        army.edge.distanceAlongEdge + ((exactDistance !== null
-          ? exactDistance >= army.edge.distanceAlongEdge : forward) ? requested : -requested),
-      );
+      const increasing = exactDistance !== null
+        ? exactDistance >= army.edge.distanceAlongEdge : forward;
+      const travelFrom = increasing ? army.edge.from : army.edge.to;
+      const travelStart = increasing
+        ? army.edge.distanceAlongEdge : roadEdge.length - army.edge.distanceAlongEdge;
       const advance = contactDistance(
-        session, army, requestedPosition.x, requestedPosition.z, requested, positions,
+        session, army, edgeId, travelFrom, travelStart, requested, positions,
       );
       if (advance <= 1e-9) break;
       if (advance >= segmentLength - 1e-9) {
@@ -171,8 +171,7 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         if (capture) captures.push(capture);
         budget -= segmentLength / Math.max(speedScale, 0.01);
       } else {
-        army.edge.distanceAlongEdge += (exactDistance !== null
-          ? exactDistance >= army.edge.distanceAlongEdge : forward) ? advance : -advance;
+        army.edge.distanceAlongEdge += increasing ? advance : -advance;
         const point = edgePositionFrom(
           graph, edgeId, army.edge.from, army.edge.distanceAlongEdge,
         );

@@ -30,6 +30,28 @@ export function occupiedEdge(ctx: SimContext, army: ArmyStack): {
       distanceAlongEdge: edgeDistanceAtPoint(ctx.graph, edgeId, army.graphNodeId, army.x, army.z) } : null;
 }
 
+/** Distance on an occupied edge measured from the canonical `edge.from`. */
+export function canonicalEdgeDistance(
+  graph: LandGraph, edge: NonNullable<ReturnType<typeof occupiedEdge>>,
+): number {
+  const road = graph.edges[edge.edgeId];
+  return road && edge.from === road.to ? road.length - edge.distanceAlongEdge
+    : edge.distanceAlongEdge;
+}
+
+/** The endpoint behind the stack's current/recent direction of travel. */
+export function armyApproachNode(ctx: SimContext, army: ArmyStack): number {
+  const edge = occupiedEdge(ctx, army);
+  if (!edge) return army.lastGraphNodeId ?? army.graphNodeId;
+  const target = army.order?.path[0] ?? army.suspendedOrder?.path[0];
+  if (target === edge.from) return edge.to;
+  if (target === edge.to) return edge.from;
+  if (army.lastGraphNodeId === edge.from || army.lastGraphNodeId === edge.to) {
+    return army.lastGraphNodeId;
+  }
+  return edge.from;
+}
+
 /** Returns the existing inclusive-node route convention, including a partial
  * leading edge. Reversing on an edge explicitly visits its origin first. */
 export function routeFromArmy(

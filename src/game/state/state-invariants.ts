@@ -2,7 +2,7 @@ import type { SimContext } from '../sim-context';
 import { armyAtNode } from '../movement/position';
 import { wrappedDistance } from '../geometry';
 import { resolveProvince } from '../resource-bootstrap';
-import { edgeDistanceAtPoint, edgeIdBetween, edgePositionFrom } from '../movement/graph';
+import { edgeDistanceAtPoint, edgeIdBetween, edgePosition, edgePositionFrom } from '../movement/graph';
 
 /** Validate references after rebuilding immutable world indexes. */
 export function validateWorldState(ctx: SimContext): void {
@@ -68,8 +68,9 @@ export function validateWorldState(ctx: SimContext): void {
     for (const order of [army.order, army.suspendedOrder]) if (order) {
       if (order.edgeProgress < 0 || order.path.some((id) => !nodeExists(id))) throw new Error('Invalid order node.');
       let previous = army.graphNodeId;
-      for (const next of order.path) {
-        const physical = army.edge && previous === army.graphNodeId
+      for (let index = 0; index < order.path.length; index += 1) {
+        const next = order.path[index];
+        const physical = army.edge && index === 0
           ? (next === army.edge.from || next === army.edge.to)
           : graph.adjacency[previous]?.includes(next) || graph.seaAdjacency[previous]?.includes(next);
         if (!physical) throw new Error('Order leaves the movement graph.');
@@ -126,6 +127,19 @@ export function validateWorldState(ctx: SimContext): void {
     if (state.battleFronts[front.id] !== front || !nodeExists(front.anchorNodeId)
       || !state.battles[front.battleId]?.frontIds.includes(front.id) || front.sideA.countryId === front.sideB.countryId) {
       throw new Error('Invalid front anchor or battle.');
+    }
+    if ((front.edgeId === undefined) !== (front.distanceAlongEdge === undefined)) {
+      throw new Error('Incomplete front road position.');
+    }
+    if (front.edgeId !== undefined && front.distanceAlongEdge !== undefined) {
+      const edge = graph.edges[front.edgeId];
+      if (!edge || front.distanceAlongEdge < 0 || front.distanceAlongEdge > edge.length + 1e-6) {
+        throw new Error('Invalid front road position.');
+      }
+      const point = edgePosition(graph, front.edgeId, front.distanceAlongEdge);
+      if (wrappedDistance(point.x, point.z, front.x, front.z, world.width) > 0.1) {
+        throw new Error('Front is outside its road position.');
+      }
     }
     const membership = new Set<string>();
     for (const side of [front.sideA, front.sideB]) {

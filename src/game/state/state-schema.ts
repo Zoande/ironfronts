@@ -60,7 +60,7 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']).optional(),
     inSupply: z.boolean().optional(), supplyStores: z.object({ funds: positive, food: positive, metal: positive, oil: positive }).partial().optional(), supplyCapacity: positive.optional() })),
   battles: record(z.object({ id: z.string(), frontIds: z.array(z.string()) })),
-  battleFronts: record(point.extend({ id: z.string(), battleId: z.string(), anchorNodeId: id, kind: z.enum(['road', 'province']), provinceId: id.nullable(), sideA: side, sideB: side })),
+  battleFronts: record(point.extend({ id: z.string(), battleId: z.string(), anchorNodeId: id, kind: z.enum(['road', 'province']), provinceId: id.nullable(), edgeId: id.optional(), distanceAlongEdge: positive.optional(), sideA: side, sideB: side })),
   resourceNodes: record(point.extend({ id, kind: z.enum(['stone', 'metal', 'oil']), remaining: positive, initialAmount: positive, controllerCountryId: id,
     provinceId: z.number().int(), accessNodeId: z.number().int(), extractorArmyId: z.string().nullable(), status: z.enum(['idle', 'secured', 'extracting', 'exhausted']), provenance: z.enum(['generatedNatural', 'scenarioGuarantee']) })),
   provinceEconomies: record(z.object({ resourcePotential: potential, baseProduction: stockpile, resourceBuildings,
