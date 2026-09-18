@@ -87,7 +87,7 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
     while (budget > 0 && order.path.length > 0) {
       const targetNode = order.path[0];
       if (isSeaEdge(graph, army.graphNodeId, targetNode)) {
-        beginNavalCrossing(army, targetNode);
+        beginNavalCrossing(session, army, targetNode);
         break;
       }
       if (!leadingEdgeValid(

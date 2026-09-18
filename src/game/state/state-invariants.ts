@@ -3,6 +3,8 @@ import { armyAtNode } from '../movement/position';
 import { wrappedDistance } from '../geometry';
 import { resolveProvince } from '../resource-bootstrap';
 import { edgeDistanceAtPoint, edgeIdBetween, edgePosition, edgePositionFrom } from '../movement/graph';
+import { transportType } from '../naval/transport';
+import { unitType } from '../units/unit-catalog';
 
 /** Validate references after rebuilding immutable world indexes. */
 export function validateWorldState(ctx: SimContext): void {
@@ -17,6 +19,12 @@ export function validateWorldState(ctx: SimContext): void {
     const point = edgePositionFrom(graph, edgeId, from, distance);
     return wrappedDistance(point.x, point.z, army.x, army.z, world.width) < 0.1;
   };
+  const onSeaEdge = (army: typeof state.armies[string], from: number, to: number): boolean => {
+    const total = wrappedDistance(graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to], world.width);
+    const travelled = wrappedDistance(graph.nodeX[from], graph.nodeZ[from], army.x, army.z, world.width);
+    const remaining = wrappedDistance(army.x, army.z, graph.nodeX[to], graph.nodeZ[to], world.width);
+    return Math.abs(travelled + remaining - total) < 0.1;
+  };
   for (const [provinceId, owner] of Object.entries(state.provinceOwners)) {
     if (!provinceIds.has(Number(provinceId)) || !countryExists(owner)) throw new Error('Invalid province ownership.');
   }
@@ -25,15 +33,30 @@ export function validateWorldState(ctx: SimContext): void {
     const naval = army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
     if (naval) {
       const crossing = army.navalCrossing;
-      if (!crossing || !nodeExists(crossing.fromNodeId) || !nodeExists(crossing.toNodeId)
+      const transport = army.transport;
+      if (!crossing || !transport || !nodeExists(crossing.fromNodeId) || !nodeExists(crossing.toNodeId)
         || !graph.seaAdjacency[crossing.fromNodeId]?.includes(crossing.toNodeId)
         || (army.status === 'embarking' && army.graphNodeId !== crossing.fromNodeId)
         || (army.status === 'atSea' && (army.graphNodeId !== crossing.fromNodeId
-          || !onEdge(army, crossing.fromNodeId, crossing.toNodeId)))
+          || !onSeaEdge(army, crossing.fromNodeId, crossing.toNodeId)))
         || (army.status === 'disembarking' && army.graphNodeId !== crossing.toNodeId)) {
         throw new Error('Invalid naval crossing.');
       }
-    } else if (army.navalCrossing) {
+      const shipMaxHp = transportType(transport.level).maxHp;
+      const landByType = new Map(army.units.map((group) => [group.typeId, group]));
+      if (transport.cargo.length !== landByType.size || new Set(transport.cargo.map((group) => group.cargoTypeId)).size !== transport.cargo.length) {
+        throw new Error('Invalid transport cargo.');
+      }
+      for (const cargo of transport.cargo) {
+        const land = landByType.get(cargo.cargoTypeId);
+        const expectedLandHp = cargo.shipHp.reduce(
+          (sum, hp) => sum + hp / shipMaxHp * unitType(cargo.cargoTypeId).maxHp, 0,
+        );
+        if (!land || cargo.shipHp.length !== land.count || !cargo.shipHp.length
+          || cargo.shipHp.some((hp) => !(hp > 0) || hp > shipMaxHp + 1e-6)
+          || Math.abs(land.hp - expectedLandHp) > 1e-5) throw new Error('Invalid transport cargo.');
+      }
+    } else if (army.navalCrossing || army.transport) {
       throw new Error('Naval crossing has invalid status.');
     }
     if (!naval && !armyAtNode(ctx, army) && !army.edge) {

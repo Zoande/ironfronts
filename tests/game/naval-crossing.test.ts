@@ -7,6 +7,7 @@ import {
   stepMovement, issueMoveOrder, issueStop, NAVAL_DWELL_HOURS,
 } from '../../src/game/units/movement';
 import { makeGroup, type ArmyStack } from '../../src/game/units/army';
+import { validateWorldState } from '../../src/game/state-invariants';
 
 /** Stride-8 connection record helper: [x1,y1,x2,y2,medium,0,0,0]. */
 function seg(x1: number, y1: number, x2: number, y2: number, land: boolean): number[] {
@@ -59,7 +60,7 @@ function ctx(army: ArmyStack): SimContext {
     provinceBuildings: {}, productionQueues: {}, constructionQueues: {}, rallyPoints: {},
     armies: { a1: army },
     resourceNodes: {}, relations: {}, battles: {}, battleFronts: {},
-    nextArmyId: 2, nextBattleId: 1, nextOrderId: 1, nextEventId: 1,
+    nextDiplomacyId: 1, nextArmyId: 2, nextBattleId: 1, nextFrontId: 1, nextOrderId: 1, nextEventId: 1,
   };
   return { state, graph: twoIslandGraph(), world: seaWorld() };
 }
@@ -117,5 +118,27 @@ describe('naval crossing (embark / at sea / disembark)', () => {
     stepMovement(c, NAVAL_DWELL_HOURS); // now atSea
     expect(issueStop(c, 'a1')).toBe(false);
     expect(issueMoveOrder(c, 'a1', 0, 0).ok).toBe(false);
+  });
+
+  it('snapshots naval technology and moves at transport speed without a road bonus', () => {
+    const army = seaArmy();
+    const c = ctx(army);
+    c.state.countries[1].technologies = {
+      infantry: 1, resources: 1, resourceBuildings: 1, training: 1,
+      hybrid: 1, armored: 1, navy: 3,
+    };
+    issueMoveOrder(c, 'a1', 1000, 0);
+    stepMovement(c, 1);
+    expect(army.transport?.level).toBe(3);
+
+    // Research completed after embark begins does not refit ships mid-voyage.
+    c.state.countries[1].technologies.navy = 8;
+    stepMovement(c, NAVAL_DWELL_HOURS + 0.01);
+    expect(army.status).toBe('atSea');
+    expect(army.transport?.level).toBe(3);
+
+    stepMovement(c, 1);
+    expect(army.x).toBeCloseTo(108, 6);
+    expect(() => validateWorldState(c)).not.toThrow();
   });
 });

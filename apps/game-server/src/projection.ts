@@ -212,7 +212,7 @@ export function projectFor(
       shortages: structuredClone(own.shortages ?? {}),
       warheads: Math.floor(own.warheads ?? 0),
       phase: own.phase ?? 1,
-      technologies: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, ...(own.technologies ?? {}) },
+      technologies: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1, ...(own.technologies ?? {}) },
       researchSlots: (own.researchSlots ?? [own.research ?? null, null]).map((research) =>
         research ? { ...research } : null),
     } : null,

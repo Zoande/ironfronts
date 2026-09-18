@@ -7,7 +7,7 @@ import type { GameClockReading } from './game-clock';
 type BuildingId = 'barracks' | 'tankPlant' | 'ordnance' | 'missileSite' | 'fields' | 'quarry' | 'mine' | 'oilPump';
 type PhysicalResource = 'food' | 'stone' | 'metal' | 'oil';
 type ArmyStance = 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
-export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
+export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored' | 'navy';
 export type MarketResource = 'manpower' | 'food' | 'stone' | 'metal' | 'oil';
 export type ResourceKey = 'funds' | MarketResource;
 export interface TradeLeg { resource: ResourceKey; amount: number; }

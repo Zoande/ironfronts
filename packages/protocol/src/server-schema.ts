@@ -29,7 +29,13 @@ const army = point.extend({
   composition: z.object({ unitCount: integer, health: nonnegative.max(1),
     organization: nonnegative.max(1), entrenchment: nonnegative.max(1),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']), inSupply: z.boolean(), speed: nonnegative,
-    groups: z.array(z.object({ typeId: z.string(), count: integer, health: nonnegative.max(1) })) }).nullable(),
+    groups: z.array(z.object({ typeId: z.string(), count: integer, health: nonnegative.max(1) })),
+    domain: z.enum(['land', 'naval']).optional(),
+    combatProfile: z.object({ attack: z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative }), defense: z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative }) }).optional(),
+    transport: z.object({ kind: z.literal('transport'), level: integer.min(1).max(8), shipCount: integer,
+      hp: nonnegative, maxHp: nonnegative, health: nonnegative.max(1),
+      cargo: z.array(z.object({ typeId: z.string(), shipCount: integer, health: nonnegative.max(1) })) }).nullable().optional(),
+  }).nullable(),
   moveOrder: point.nullable(), moveRoute: z.array(point).optional(),
   moveRoadRoute: z.array(z.object({ edgeId: integer, from: integer, to: integer, startDistance: nonnegative })).optional(),
   moveIntent: z.enum(['move', 'attack']).optional(),
@@ -53,8 +59,8 @@ const army = point.extend({
 const timeline = z.object({ elapsedSeconds: nonnegative, speed: finite.min(1).max(10_000), sampledAtEpochMs: finite, generation: integer });
 const ownCountry = z.object({ id: integer, name: z.string(), color: z.string(), controller: z.enum(['player', 'ai', 'neutral']),
   stockpile, income: stockpile, industryCapacity: nonnegative, warheads: nonnegative.optional(), phase: integer.optional(),
-  technologies: z.object({ infantry: integer.min(1).max(8), resources: integer.min(1).max(8), resourceBuildings: integer.min(1).max(8), training: integer.min(1).max(8), hybrid: integer.min(1).max(8), armored: integer.min(1).max(8) }).optional(),
-  researchSlots: z.array(z.object({ branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']), targetLevel: integer.min(2).max(8), progressHours: nonnegative, totalHours: finite.positive() }).nullable()).max(2).optional(),
+  technologies: z.object({ infantry: integer.min(1).max(8), resources: integer.min(1).max(8), resourceBuildings: integer.min(1).max(8), training: integer.min(1).max(8), hybrid: integer.min(1).max(8), armored: integer.min(1).max(8), navy: integer.min(1).max(8) }).optional(),
+  researchSlots: z.array(z.object({ branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy']), targetLevel: integer.min(2).max(8), progressHours: nonnegative, totalHours: finite.positive() }).nullable()).max(2).optional(),
   upkeep: stockpile.optional(), netIncome: stockpile.optional(), coverage: z.record(z.string(), nonnegative).optional(),
   reserveHours: z.record(z.string(), nonnegative.nullable()).optional(), shortages: z.record(z.string(), z.object({ severity: nonnegative, notifiedThreshold: nonnegative })).optional() });
 const diplomacyMessage = z.object({ id: z.string(), fromCountryId: integer, toCountryId: integer, body: z.string(), sentAtTick: integer });

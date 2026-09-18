@@ -1,10 +1,12 @@
 import type { SimContext } from '../sim-context';
 import type { ArmyStack, ArmyStatus, MoveOrder } from '../units/army';
-import { stackBaseSpeed } from '../units/army';
 import { wrappedDistance } from '../geometry';
 import type { LandGraph } from './graph';
 import { GAME_PACE } from '../pacing';
-import { ROAD_BONUS, STRATEGIC_MOVEMENT_SCALE } from './speed';
+import { STRATEGIC_MOVEMENT_SCALE } from './speed';
+import {
+  activeTransportStats, beginTransportManifestation, endTransportManifestation,
+} from '../naval/transport';
 
 /** Thirty real minutes each to embark and disembark on the authoritative 1x timeline. */
 export const NAVAL_DWELL_HOURS = GAME_PACE.movement.navalDwellHours;
@@ -50,9 +52,10 @@ export function isNavalStatus(status: ArmyStatus): boolean {
   return status === 'embarking' || status === 'atSea' || status === 'disembarking';
 }
 
-export function beginNavalCrossing(army: ArmyStack, targetNode: number): void {
+export function beginNavalCrossing(session: SimContext, army: ArmyStack, targetNode: number): void {
   army.edge = null;
   army.status = 'embarking';
+  beginTransportManifestation(army, session.state.countries[army.ownerCountryId]);
   army.navalCrossing = {
     fromNodeId: army.graphNodeId,
     toNodeId: targetNode,
@@ -67,6 +70,7 @@ export function stepNavalCrossing(
   const crossing = army.navalCrossing;
   if (!crossing || !isSeaEdge(session.graph, crossing.fromNodeId, crossing.toNodeId)) {
     army.navalCrossing = null;
+    endTransportManifestation(army);
     army.order = null;
     army.status = 'idle';
     return;
@@ -82,7 +86,8 @@ export function stepNavalCrossing(
     const remaining = wrappedDistance(
       army.x, army.z, targetX, targetZ, session.world.width,
     );
-    const advance = stackBaseSpeed(army) * dtHours * STRATEGIC_MOVEMENT_SCALE * ROAD_BONUS;
+    // A ship is neither its slowest piece of cargo nor a road vehicle.
+    const advance = (activeTransportStats(army)?.speed ?? 0) * dtHours * STRATEGIC_MOVEMENT_SCALE;
     if (remaining <= 1e-9 || advance >= remaining) {
       army.x = targetX;
       army.z = targetZ;
@@ -106,6 +111,7 @@ export function stepNavalCrossing(
   }
   crossing.hoursRemaining -= dtHours;
   if (crossing.hoursRemaining > 0) return;
+  endTransportManifestation(army);
   army.navalCrossing = null;
   if (order.path.length) army.status = 'moving';
   else {

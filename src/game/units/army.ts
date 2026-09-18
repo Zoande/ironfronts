@@ -10,6 +10,7 @@ import type { UnitType } from './unit-types';
 import type { PhysicalResource, UpkeepResource } from '../game-state';
 import { unitType } from './unit-catalog';
 import { unitStatMultiplier } from '../economy/shortages';
+import type { TransportManifestation } from '../naval/transport';
 
 /**
  * Combat posture — see combat/stance.ts for what each one actually does.
@@ -107,6 +108,9 @@ export interface ArmyStack {
      *  (that phase instead consumes the normal movement distance budget). */
     hoursRemaining: number;
   } | null;
+  /** Temporary sea-domain manifestation. Cargo remains in `units` on its
+   * normal land HP scale; ship HP and the snapshotted naval tech live here. */
+  transport?: TransportManifestation | null;
   /**
    * Organization/readiness, 0..100. Separate from HP: drains while engaged in
    * combat, recovers passively while not. A stack can be forced to retreat by
@@ -148,6 +152,7 @@ export function ensureArmyRuntimeState(stack: ArmyStack): void {
   stack.retreat ??= null;
   stack.artillery ??= { targetArmyId: null, manualTarget: false };
   stack.navalCrossing ??= null;
+  stack.transport ??= null;
   stack.organization ??= 100;
   stack.entrenchment ??= 0;
   stack.stance ??= 'attack-defend';

@@ -3,6 +3,7 @@ import { validateWorldState } from '../../src/game/state-invariants';
 import { parseGameState } from '../../src/game/state-schema';
 import { GAME_STATE_VERSION } from '../../src/game/game-state';
 import { fixture, army } from '../helpers/simulation';
+import { createTransportManifestation } from '../../src/game/naval/transport';
 
 describe('restored state invariants', () => {
   it('rejects off-edge positions, invalid queue owners, relations, and stale counters', () => {
@@ -39,5 +40,16 @@ describe('restored state invariants', () => {
     expect(migrated).not.toHaveProperty('outcome');
     expect(migrated.armies.a.navalCrossing?.hoursRemaining).toBe(1);
     expect(parseGameState(migrated).clock.gameTimeHours).toBe(1);
+  });
+
+  it('rejects a persisted transport whose ship pool disagrees with its cargo HP', () => {
+    const ctx = fixture();
+    const crossing = army();
+    crossing.status = 'embarking';
+    crossing.navalCrossing = { fromNodeId: 0, toNodeId: 1, hoursRemaining: 1 };
+    crossing.transport = createTransportManifestation(crossing, 1);
+    crossing.transport.cargo[0].shipHp[0] = 1;
+    ctx.state.armies = { a: crossing };
+    expect(() => parseGameState(ctx.state)).toThrow(/transport manifestation/i);
   });
 });

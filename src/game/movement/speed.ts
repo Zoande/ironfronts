@@ -9,6 +9,7 @@ import { relationOf } from '../game-state';
 import type { LandGraph } from './graph';
 import { edgeIdBetween, edgePolyline } from './graph';
 import type { EdgeCost } from './pathfind';
+import { activeTransportStats, countryTransportLevel, transportType } from '../naval/transport';
 
 export const TERRAIN_SPEED: Record<number, number> = {
   [TERRAIN_CLASS.plain]: 1,
@@ -105,8 +106,14 @@ function landRoadHours(
   return hours;
 }
 
-function seaSegmentHours(army: ArmyStack, distance: number): number {
-  const speed = baseWorldUnitsPerGameHour(army) * ROAD_BONUS;
+function transportWorldUnitsPerGameHour(session: SimContext, army: ArmyStack): number {
+  const active = activeTransportStats(army);
+  const stats = active ?? transportType(countryTransportLevel(session.state.countries[army.ownerCountryId]));
+  return stats.speed * STRATEGIC_MOVEMENT_SCALE;
+}
+
+function seaSegmentHours(session: SimContext, army: ArmyStack, distance: number): number {
+  const speed = transportWorldUnitsPerGameHour(session, army);
   return speed > 0 ? distance / speed : Infinity;
 }
 
@@ -121,7 +128,7 @@ export function movementEdgeTravelCost(
   prospectiveWars: ReadonlySet<number> = new Set(),
 ): EdgeCost {
   return (from, to, distance) => seaEdge(graph, from, to)
-    ? seaSegmentHours(army, distance) + GAME_PACE.movement.navalDwellHours * 2
+    ? seaSegmentHours(session, army, distance) + GAME_PACE.movement.navalDwellHours * 2
     : landRoadHours(session, army, graph, from, to, prospectiveWars);
 }
 
@@ -137,7 +144,7 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
   const crossing = army.navalCrossing;
   if (crossing && (army.status === 'embarking' || army.status === 'atSea')) {
     if (army.status === 'embarking') hours += Math.max(0, crossing.hoursRemaining);
-    hours += seaSegmentHours(army, wrappedDistance(
+    hours += seaSegmentHours(session, army, wrappedDistance(
       army.x, army.z, session.graph.nodeX[crossing.toNodeId],
       session.graph.nodeZ[crossing.toNodeId], session.world.width,
     ));
@@ -175,7 +182,7 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
     const toZ = session.graph.nodeZ[to];
     if (seaEdge(session.graph, fromNode, to)) {
       hours += GAME_PACE.movement.navalDwellHours * 2;
-      hours += seaSegmentHours(army, wrappedDistance(
+      hours += seaSegmentHours(session, army, wrappedDistance(
         fromX, fromZ, toX, toZ, session.world.width,
       ));
     } else {
@@ -206,10 +213,10 @@ export function currentMovementLeg(session: SimContext, army: ArmyStack): Curren
   const finalPartial = order.path.length === 1 && order.roadDestination?.to === targetNode;
   const targetX = finalPartial ? order.destX : session.graph.nodeX[targetNode];
   const targetZ = finalPartial ? order.destZ : session.graph.nodeZ[targetNode];
-  const terrainScale = army.status === 'atSea'
-    ? ROAD_BONUS
-    : landMovementSpeedMultiplierAt(session, army.ownerCountryId, army.x, army.z);
-  const worldUnitsPerGameHour = baseWorldUnitsPerGameHour(army) * terrainScale;
+  const worldUnitsPerGameHour = army.status === 'atSea'
+    ? transportWorldUnitsPerGameHour(session, army)
+    : baseWorldUnitsPerGameHour(army)
+      * landMovementSpeedMultiplierAt(session, army.ownerCountryId, army.x, army.z);
   return {
     targetX,
     targetZ,

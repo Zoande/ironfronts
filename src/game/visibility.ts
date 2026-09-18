@@ -31,6 +31,7 @@ import { unitType } from './units/unit-catalog';
 import { unitStatMultiplier } from './economy/shortages';
 import { wrappedDistanceSq } from './geometry';
 import { relationOf } from './game-state';
+import { activeTransportStats, combatDomain } from './naval/transport';
 
 export type ContactLevel = 'hidden' | 'contact' | 'visible';
 
@@ -51,11 +52,12 @@ export function friendlyVisionSources(
     if (army.ownerCountryId !== viewerCountryId
       && relationOf(state, viewerCountryId, army.ownerCountryId) !== 'allied') continue;
     const living = army.units.filter((g) => g.count > 0 && g.hp > 0);
-    const outer = Math.max(0, ...living.map((g) => {
+    const transport = combatDomain(army) === 'naval' ? activeTransportStats(army) : null;
+    const outer = transport?.visionOuter ?? Math.max(0, ...living.map((g) => {
       const type = unitType(g.typeId);
       return type.visionOuter * unitStatMultiplier(type, 'visionRange', army.shortageSeverity);
     }));
-    const inner = Math.max(0, ...living.map((g) => {
+    const inner = transport?.visionInner ?? Math.max(0, ...living.map((g) => {
       const type = unitType(g.typeId);
       return type.visionInner * unitStatMultiplier(type, 'visionRange', army.shortageSeverity);
     }));

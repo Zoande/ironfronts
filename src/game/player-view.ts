@@ -33,6 +33,11 @@ import { ORGANIZATION_MAX, ENTRENCHMENT_MAX } from './combat/constants';
 import { calculateFrontDamageRates, type CombatRateModifiers } from './combat';
 import { armySupplyPlan } from './combat/supply';
 import { armyParticipatesInFront } from './combat/membership';
+import {
+  activeTransportStats, combatDomain, transportHealthFraction, transportHp,
+  transportMaxHp, transportShipCount,
+} from './naval/transport';
+import type { DamageProfile } from './units/unit-types';
 
 export interface ProjectedGroup {
   readonly typeId: string;
@@ -73,6 +78,13 @@ export interface PlayerArmyView {
     readonly inSupply: boolean;
     readonly speed: number;
     readonly groups: readonly ProjectedGroup[];
+    readonly domain: 'land' | 'naval';
+    readonly combatProfile?: { readonly attack: DamageProfile; readonly defense: DamageProfile };
+    readonly transport?: {
+      readonly kind: 'transport'; readonly level: number; readonly shipCount: number;
+      readonly hp: number; readonly maxHp: number; readonly health: number;
+      readonly cargo: ReadonlyArray<{ readonly typeId: string; readonly shipCount: number; readonly health: number }>;
+    } | null;
   } | null;
   /** Destination of the active move order — own armies only. */
   readonly moveOrder: { readonly x: number; readonly z: number } | null;
@@ -135,14 +147,29 @@ function groupHealthFraction(typeId: string, count: number, hp: number): number 
 }
 
 function composition(army: ArmyStack): PlayerArmyView['composition'] {
+  const domain = combatDomain(army);
+  const transport = domain === 'naval' ? army.transport : null;
+  const stats = transport ? activeTransportStats(army) : null;
   return {
-    unitCount: stackUnitCount(army),
-    health: stackHealthFraction(army),
+    unitCount: transport ? transportShipCount(transport) : stackUnitCount(army),
+    health: transport ? transportHealthFraction(transport) : stackHealthFraction(army),
     organization: (army.organization ?? 100) / ORGANIZATION_MAX,
     entrenchment: (army.entrenchment ?? 0) / ENTRENCHMENT_MAX,
     stance: army.stance ?? 'attack-defend',
     inSupply: army.inSupply ?? true,
-    speed: Math.round(stackBaseSpeed(army)),
+    speed: Math.round(stats?.speed ?? stackBaseSpeed(army)),
+    domain,
+    combatProfile: stats ? { attack: stats.attack, defense: stats.defense } : undefined,
+    transport: transport && stats ? {
+      kind: 'transport', level: transport.level, shipCount: transportShipCount(transport),
+      hp: transportHp(transport), maxHp: transportMaxHp(transport),
+      health: transportHealthFraction(transport),
+      cargo: transport.cargo.map((cargo) => ({
+        typeId: cargo.cargoTypeId,
+        shipCount: cargo.shipHp.length,
+        health: cargo.shipHp.reduce((sum, hp) => sum + hp, 0) / (cargo.shipHp.length * stats.maxHp),
+      })),
+    } : null,
     groups: army.units.map((g) => ({
       typeId: g.typeId,
       count: g.count,
@@ -223,7 +250,7 @@ export function projectArmyView(
       enemyModifiers: friendlyIsA ? rates.sideBModifiers : rates.sideAModifiers,
     }];
   }) : undefined;
-  const artilleryGroups = fullyVisible
+  const artilleryGroups = fullyVisible && combatDomain(army) === 'land'
     ? army.units.filter((group) => unitType(group.typeId).category === 'artillery') : [];
   const artilleryRange = artilleryGroups.length
     ? Math.max(...artilleryGroups.map((group) => unitType(group.typeId).engagementRange)) : 0;

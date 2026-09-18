@@ -3,7 +3,7 @@ import type { CommandResult } from './commands/types';
 import type { CountryState, ResearchState, Stockpile, TechnologyBranch, TechnologyLevels } from './game-state';
 import type { BuildingId, ResourceBuildingId } from './units/unit-types';
 
-export const TECHNOLOGY_BRANCHES = ['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored'] as const;
+export const TECHNOLOGY_BRANCHES = ['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy'] as const;
 export const TECHNOLOGY_MAX_LEVEL = 8;
 export const RESEARCH_SLOT_COUNT = 2;
 
@@ -14,6 +14,7 @@ export const TECHNOLOGY_LABELS: Record<TechnologyBranch, string> = {
   training: 'Training & Industry',
   hybrid: 'Mobile Support',
   armored: 'Armored Warfare',
+  navy: 'Naval Logistics',
 };
 
 /** Time for the project that unlocks each target level. Level I is universal. */
@@ -33,6 +34,7 @@ const BASE_RESEARCH_COST_BY_LEVEL: ReadonlyArray<Partial<Stockpile>> = [
 const BRANCH_COST_MULTIPLIER: Record<TechnologyBranch, number> = {
   infantry: 1, resources: .9, resourceBuildings: 1.05,
   training: 1.1, hybrid: 1.2, armored: 1.35,
+  navy: 1.25,
 };
 
 export function technologyCost(branch: TechnologyBranch, targetLevel: number): Partial<Stockpile> {
@@ -44,7 +46,7 @@ export function technologyCost(branch: TechnologyBranch, targetLevel: number): P
 }
 
 export function initialTechnologyLevels(): TechnologyLevels {
-  return { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1 };
+  return { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1 };
 }
 
 export function technologyLevels(country: CountryState | undefined): TechnologyLevels {

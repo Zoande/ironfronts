@@ -34,7 +34,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('extract'), armyId: z.string(), resource: z.enum(['food', 'stone', 'metal', 'oil']) }),
   z.object({ type: z.literal('produce'), provinceId: z.number().int().nonnegative(), unitTypeId: z.string() }),
   z.object({ type: z.literal('build'), provinceId: z.number().int().nonnegative(), buildingId: z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']) }),
-  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']) }),
+  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy']) }),
   z.object({ type: z.literal('setRally'), provinceId: z.number().int().nonnegative(), target: z.object({ x: z.number().finite(), z: z.number().finite() }).nullable() }),
   z.object({
     type: z.literal('sendDiplomaticMessage'),
@@ -187,6 +187,16 @@ export interface ProjectedArmy {
     inSupply: boolean;
     speed: number;
     groups: ReadonlyArray<{ typeId: string; count: number; health: number }>;
+    /** Combat/movement domain of the currently manifested unit. */
+    domain?: 'land' | 'naval';
+    combatProfile?: {
+      attack: { soft: number; light: number; heavy: number };
+      defense: { soft: number; light: number; heavy: number };
+    };
+    transport?: {
+      kind: 'transport'; level: number; shipCount: number; hp: number; maxHp: number; health: number;
+      cargo: ReadonlyArray<{ typeId: string; shipCount: number; health: number }>;
+    } | null;
   };
   moveOrder: { x: number; z: number } | null;
   /** Authoritative road-graph route for an own army's active order (world-space

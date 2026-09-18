@@ -73,7 +73,7 @@ const orderEtaSeconds = (o: WorkOrderView): number => Math.max(0,
     / (GAME_PACE.clock.simulationHoursPerRealSecond * (activeSession?.devSimSpeed ?? 1)));
 const technologyView = (session: RemoteGameSession) => {
   const levels = {
-    infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1,
+    infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1,
     ...(session.ownCountry.technologies ?? {}),
   };
   const stockpile = session.ownCountry.stockpile;
@@ -2415,11 +2415,23 @@ function refreshSelectedArmy(
   const combat = view.status === 'moving' ? 'moving'
     : inCloseCombat ? 'engaged'
     : view.status === 'retreating' ? 'retreating' : 'idle';
-  const groups = comp?.groups.map((g) => ({
-    typeId: g.typeId, label: gameUnitLabel(g.typeId), count: g.count, health: g.health,
+  const displayedGroups = comp?.transport?.cargo ?? comp?.groups;
+  const groups = displayedGroups?.map((g) => ({
+    typeId: g.typeId,
+    label: comp?.transport ? `${gameUnitLabel(g.typeId)} cargo` : gameUnitLabel(g.typeId),
+    count: 'shipCount' in g ? g.shipCount : g.count,
+    health: g.health,
   }));
+  const scaledManifestationProfile = (profile: { soft: number; light: number; heavy: number } | undefined) =>
+    profile ? {
+      soft: profile.soft * (comp?.unitCount ?? 0),
+      light: profile.light * (comp?.unitCount ?? 0),
+      heavy: profile.heavy * (comp?.unitCount ?? 0),
+    } : undefined;
+  const baseActivity = armyActivityLabel(view.status, awaitingMoveTarget, view.own);
   const activity = !session.fresh ? 'Reconnecting ? state may be stale'
-    : session.pendingForArmy(view.id) ? 'Order pending confirmation' : armyActivityLabel(view.status, awaitingMoveTarget, view.own);
+    : session.pendingForArmy(view.id) ? 'Order pending confirmation'
+      : comp?.transport ? `${baseActivity} · Transport Level ${comp.transport.level}` : baseActivity;
   const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
     ? 0 : Math.max(0, Date.now() - view.motion.sampledAtEpochMs);
   const motionDurationMs = view.motion?.durationMs ?? 0;
@@ -2490,8 +2502,12 @@ function refreshSelectedArmy(
       moveOrder: view.moveOrder,
       groups,
       speed: comp?.speed,
-      attack: aggregateTroopStat(groups, 'attack', gameUnit),
-      defense: aggregateTroopStat(groups, 'defense', gameUnit),
+      domain: comp?.domain,
+      transportLevel: comp?.transport?.level,
+      attack: scaledManifestationProfile(comp?.combatProfile?.attack)
+        ?? aggregateTroopStat(groups, 'attack', gameUnit),
+      defense: scaledManifestationProfile(comp?.combatProfile?.defense)
+        ?? aggregateTroopStat(groups, 'defense', gameUnit),
       activity,
       activityKind,
       activityRemainingSeconds,

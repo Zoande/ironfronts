@@ -84,7 +84,7 @@ export function describeArmy(army: ArmyStackView): Array<[string, string]> {
   return [
     ['Force', army.name],
     ['Command', army.country],
-    ['Divisions', String(army.unitCount)],
+    [army.domain === 'naval' ? 'Transport ships' : 'Divisions', String(army.unitCount)],
     ['Strength', `${Math.round(army.strength * 100)}%`],
     ['Readiness', `${Math.round(army.health * 100)}%`],
     ['Status', COMBAT_LABEL[army.combat]],
@@ -208,7 +208,7 @@ export function renderSelectedArmyPanel(
   const compositionStats = node('span', 'ifg-army-panel__header-stats');
   compositionStats.append(
     headerMetric('Speed', 'stat-speed', army.identified === false || army.speed === undefined ? '--' : String(Math.round(army.speed))),
-    headerMetric('Troops', 'stat-troops', army.identified === false ? '--' : String(army.unitCount)),
+    headerMetric(army.domain === 'naval' ? 'Ships' : 'Troops', 'stat-troops', army.identified === false ? '--' : String(army.unitCount)),
   );
   const close = node('button', 'ifg-army-panel__close');
   close.type = 'button';

@@ -10,6 +10,16 @@ export { nearestNode, edgeIdBetween, edgePolyline } from '../../../src/game/move
 export { findPath } from '../../../src/game/movement/pathfind';
 export { UNIT_TYPES, BASE_UNIT_IDS, baseUnitId, unitType } from '../../../src/game/units/unit-catalog';
 export { stackExtractionRate } from '../../../src/game/units/army';
+export {
+  TRANSPORT_TYPES, transportType, countryTransportLevel, createTransportManifestation,
+  beginTransportManifestation, endTransportManifestation, activeTransportStats,
+  transportShipCount, transportHp, transportMaxHp, transportHealthFraction,
+  damageTransportCargo, damageTransport, syncCargoFromTransport, combatDomain,
+} from '../../../src/game/naval/transport';
+export type {
+  CombatDomain, NavalUnitKind, NavalTargetClass, NavalUnitStats,
+  TransportCargoGroup, TransportManifestation,
+} from '../../../src/game/naval/transport';
 export { currentMovementLeg, remainingOrderTravelHours } from '../../../src/game/units/movement';
 export { BUILDINGS } from '../../../src/game/construction';
 export { buildOptions } from '../../../src/game/construction';

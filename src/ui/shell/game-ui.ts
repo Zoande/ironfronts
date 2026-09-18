@@ -140,7 +140,8 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
     { id: 'armored', technology: 'armored', label: 'Armored Warfare', shortLabel: 'Armor', icon: 'unit-medium-tank', description: 'Improves tank protection, engines and heavy firepower.', unlocks: 'Light and medium tank levels' },
   ] },
   { id: 'navy', label: 'Navy', icon: 'tech-navy', lines: [
-    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future naval vessels and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
+    { id: 'transport-service', technology: 'navy', label: 'Naval Logistics', shortLabel: 'Transports', icon: 'tech-navy', description: 'Improves the temporary transport fleet used by embarked land armies.', unlocks: 'Transport ship health, speed and defensive armament' },
+    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future battleships and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
     { id: 'submarines', label: 'Submarine Service', shortLabel: 'Submarines', icon: 'tech-navy', description: 'Future undersea warfare capabilities.', unlocks: 'Planned naval line', comingSoon: true },
   ] },
   { id: 'airforce', label: 'Air Force', icon: 'tech-airforce', lines: [
@@ -175,6 +176,8 @@ function technologyLevelUnlockText(branch: TechnologyBranch, level: number): str
         : `Armored Car & Artillery Level ${level} — also needs Tank Plant/Ordnance Tier ${level}.`;
     case 'armored':
       return `Light & Medium Tank Level ${level} — also needs Tank Plant Tier ${level}.`;
+    case 'navy':
+      return `Transport Ship Level ${level} (more hull strength, speed and defensive armament).`;
   }
 }
 
@@ -190,6 +193,7 @@ function technologyUnlocks(branch: TechnologyBranch, level: number): readonly Te
     case 'training': return [building('barracks', 'Barracks'), building('tankPlant', 'Tank plant'), building('ordnance', 'Ordnance')];
     case 'hybrid': return [unit('armored-car', 'Armored car'), unit('artillery', 'Artillery'), ...(level === 8 ? [building('missileSite', 'Missile site', 1)] : [])];
     case 'armored': return [unit('light-tank', 'Light tank'), unit('medium-tank', 'Medium tank')];
+    case 'navy': return [];
   }
 }
 

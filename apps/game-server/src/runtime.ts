@@ -170,7 +170,7 @@ export class GameRuntime {
       status: 'idle', order: null, extractingNodeId: null, extractionAssignment: null,
       shortageSeverity: { funds: 0, food: 0, metal: 0, oil: 0 }, lastGraphNodeId: null,
       suspendedOrder: null, battleFrontIds: [], retreat: null,
-      artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null,
+      artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null, transport: null,
       organization: 100, entrenchment: 0, stance: 'attack-defend', inSupply: true,
     };
     this.session.refreshDerivedState();

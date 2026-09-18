@@ -15,6 +15,7 @@ import { wrappedDistance } from '../geometry';
 import type { AttackCommand, CommandResult } from './types';
 import { movementEdgeAllowed } from '../movement/policy';
 import { movementEdgeTravelCost } from '../movement/speed';
+import { combatDomain } from '../naval/transport';
 
 function reachableProvinceNode(
   ctx: SimContext, army: ArmyStack, provinceId: number, targetX: number, targetZ: number,
@@ -123,6 +124,11 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
   if (!contact || contact === 'hidden') return { ok: false, reason: 'No valid hostile force.' };
   const required = relationOf(ctx.state, army.ownerCountryId, target.ownerCountryId) === 'war'
     ? [] : [target.ownerCountryId];
+  if (combatDomain(army) !== combatDomain(target)) {
+    return { ok: false, reason: combatDomain(target) === 'naval'
+      ? 'Land forces cannot attack a naval target.'
+      : 'Naval forces cannot attack a land target.' };
+  }
   if (artilleryOnly) {
   if (required.some((id) => !command.confirmedWarCountryIds?.includes(id))) {
     return { ok: false, reason: 'War declaration required.', requiredWarCountryIds: required };
