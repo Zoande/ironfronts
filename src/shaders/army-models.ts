@@ -180,12 +180,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   output.alpha = closeFade * (1.0 - horizontalWorldFog(worldPosition.x));
   let modelFlags = u32(model.b.z + 0.5);
   if ((modelFlags & 1u) != 0u) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
-  // Each skinned asset has its own indexed draw. Keep the procedural model
-  // only as a graceful fallback for whichever kinds' optional asset failed to
-  // load — mode is a bitmask: 1 infantry, 2 light tank, 4 medium tank.
-  if ((kind == 0u && (armyModelParams.mode & 1u) != 0u)
-    || (kind == 4u && (armyModelParams.mode & 2u) != 0u)
-    || (kind == 2u && (armyModelParams.mode & 4u) != 0u)) {
+  // Four authored land families share a single pipeline; missing files retain a fallback.
+  if (kind < 4u && (armyModelParams.mode & (1u << kind)) != 0u) {
     output.position = vec4f(2.0, 2.0, 2.0, 1.0);
     output.alpha = 0.0;
   }

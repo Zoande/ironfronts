@@ -2,11 +2,9 @@
  * icon; armored cars and tanks share another so the compact counter always
  * stays within its two-icon space. */
 export type ArmyVisualKind = 0 | 1 | 2 | 3 | 4 | 5;
-/** Five close-range model families; engineers share infantry. Light tanks get
- *  their own skinned model, so they are split from the armored-car hull they
- *  used to share (kind 1) into kind 4. */
-/** Kind 5 is the procedural transport ship used while a stack is at sea. */
-export type ArmyModelKind = 0 | 1 | 2 | 3 | 4 | 5;
+/** Four authored land families; engineers share infantry and both tanks share kind 2.
+ * Kind 5 remains the transport ship. */
+export type ArmyModelKind = 0 | 1 | 2 | 3 | 5;
 
 export interface ProjectedTroopGroup {
   readonly typeId: string;
@@ -36,9 +34,8 @@ export function visualKindForUnit(typeId: string): ArmyVisualKind {
 function modelKindForUnit(typeId: string): ArmyModelKind {
   typeId = typeId.replace(/-l[2-8]$/, '');
   if (typeId === 'armored-car') return 1;
-  if (typeId === 'medium-tank') return 2;
+  if (typeId === 'medium-tank' || typeId === 'light-tank') return 2;
   if (typeId === 'artillery') return 3;
-  if (typeId === 'light-tank') return 4;
   return 0;
 }
 

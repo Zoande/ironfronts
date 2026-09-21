@@ -319,7 +319,7 @@ describe('groupEngagedByFront + buildBattleAnchors + combatHuddleOffset end-to-e
     expect(visible.count).toBe(2);
     const kinds = [
       visible.floats[2],
-      visible.floats[8 + 2],
+      visible.floats[EFFECT_STRIDE + 2],
     ];
     expect(kinds).toContain(EFFECT_KIND.battleMarker);
     expect(kinds).toContain(EFFECT_KIND.explosion);

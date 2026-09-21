@@ -24,8 +24,8 @@ describe('army map presentation LOD data', () => {
     expect(formation).toEqual([
       { kind: 0, count: 4, health: 0.875 },
       { kind: 1, count: 5, health: 0.8 },
-      { kind: 2, count: 1, health: 0.5 },
-      { kind: 4, count: 2, health: 0.75 },
+      { kind: 1, count: 5, health: 0.8 },
+      { kind: 2, count: 3, health: 2 / 3 },
     ]);
     expect(dominantVisualKind(buildArmyCompositionRows([
       { typeId: 'infantry', count: 3, health: 1 },
@@ -43,6 +43,8 @@ describe('army map presentation LOD data', () => {
       { typeId: 'infantry', count: 7, health: 1 },
       { typeId: 'armored-car', count: 2, health: 1 },
       { typeId: 'medium-tank', count: 1, health: 1 },
+      { typeId: 'light-tank-l3', count: 3, health: 0.7 },
+      { typeId: 'engineer', count: 2, health: 1 },
       { typeId: 'artillery', count: 1, health: 1 },
     ]);
     expect(mixed).toHaveLength(4);

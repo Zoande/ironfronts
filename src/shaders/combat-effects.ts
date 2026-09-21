@@ -3,7 +3,7 @@ import { commonWgsl } from './common';
 /**
  * World-space instanced combat effects, fed by CombatEffectPool.collect().
  *
- * One `pass.draw(6, N)` billboarded quad per effect. The CPU packs 8 floats
+ * One `pass.draw(6, N)` billboarded quad per effect. The CPU packs 12 floats
  * per instance:
  *   a = (worldX, worldZ, kind, age01)
  *   b = (seed, scale, intensity, dir)   dir in radians, -999 = none
@@ -17,10 +17,12 @@ import { commonWgsl } from './common';
  * bright terrain still reads and a dense cluster never blows out to white.
  */
 export const combatEffectShader = commonWgsl + /* wgsl */ `
-struct Effect { a: vec4f, b: vec4f };
+struct Effect { a: vec4f, b: vec4f, c: vec4f };
 struct EffectParams { count: u32, mode: u32, pad0: u32, pad1: u32 };
 @group(1) @binding(0) var<storage, read> effects: array<Effect>;
 @group(1) @binding(1) var<uniform> effectParams: EffectParams;
+@group(2) @binding(0) var effectAtlas: texture_2d<f32>;
+@group(2) @binding(1) var effectSampler: sampler;
 
 struct EffectOut {
   @builtin(position) position: vec4f,
@@ -70,20 +72,23 @@ fn combatEffectVertex(
   // Projectiles / tracers travel from the spawn point along dir over their life.
   var worldXZ = vec2f(effect.a.x, effect.a.y);
   if ((kind == 2 || kind == 1) && dir > -900.0) {
-    let travel = select(150.0, 60.0, kind == 1) * age;
+    let travel = effect.c.y * age;
     worldXZ += vec2f(cos(dir), sin(dir)) * travel;
   }
   if (kind == 9 && dir > -900.0) {
     // Tiny ballistic debris: cheap horizontal scatter plus a single parabolic
     // lift. No physics objects, collision bodies, or per-particle CPU updates.
-    let travel = 58.0 * age;
+    let travel = select(58.0,effect.c.y,effect.c.w>0.0) * age;
     worldXZ += vec2f(cos(dir), sin(dir)) * travel;
   }
   let uvGround = worldXZ / uniforms.map.xy;
   let ground = heightAt(uvGround);
-  var rise = select(0.0, age * 26.0, kind == 4 || kind == 5); // dust / smoke drift up
+  var rise = select(0.0, age * select(26.0,effect.c.w*1.3,effect.c.w>0.0), kind == 4 || kind == 5); // dust / smoke drift up
   if (kind == 9) { rise = max(0.0, sin(age * 3.14159265) * 34.0 - age * 5.0); }
-  let worldPos = vec3f(worldXZ.x + copyOffset, ground + 6.0 + rise, worldXZ.y);
+  var height = effect.c.x;
+  if (kind == 1 || kind == 2) { height = mix(effect.c.x,.15,age)+sin(age*3.14159265)*effect.c.z; }
+  if (kind == 9 && effect.c.w > 0.0) { rise=sin(age*3.14159265)*effect.c.z; }
+  let worldPos = vec3f(worldXZ.x + copyOffset, ground + height + rise, worldXZ.y);
   let clip = uniforms.viewProjection * vec4f(worldPos, 1.0);
 
   // Grow with age for the puff kinds, snap-then-shrink for the flash kinds.
@@ -102,7 +107,13 @@ fn combatEffectVertex(
   // the strategic map.
   let markerZoomScale = mix(1.0, 1.7, smoothstep(1500.0, 9000.0, zoom));
   let effZoomScale = select(zoomScale, markerZoomScale, kind == 8);
-  let half = effectPixelSize(kind) * max(0.15, effect.b.y) * sizeAge * effZoomScale * uniforms.viewport.z;
+  var half = effectPixelSize(kind) * max(0.15, effect.b.y) * sizeAge * effZoomScale * uniforms.viewport.z;
+
+  if (effect.c.w > 0.0) {
+    let upClip=uniforms.viewProjection*vec4f(worldPos+vec3f(0.0,effect.c.w,0.0),1.0);
+    half=length((upClip.xy/max(.001,upClip.w)-clip.xy/max(.001,clip.w))*uniforms.viewport.xy*.5)*sizeAge;
+    half=clamp(half,.4,100.0);
+  }
 
   // Fade: transients fade over their life; the battle marker holds (its pulse
   // is size + fragment glow) and — unlike every transient — stays at full
@@ -186,7 +197,7 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
 
   if (kind == 0) {                        // muzzle flash — hot star
     let core = softDisc(uv, 0.0) * 1.2;
-    let spikes = pow(max(0.0, 1.0 - abs(uv.x) * 6.0), 2.0) + pow(max(0.0, 1.0 - abs(uv.y) * 6.0), 2.0);
+    let spikes = softDisc(uv*vec2f(.8,2.2),.05)*(0.5+valueNoise(uv*8.0+input.seed*19.0));
     let f = clamp(core + spikes * 0.5, 0.0, 1.0);
     rgb = mix(vec3f(1.0, 0.86, 0.45), vec3f(1.0, 1.0, 0.95), core);
     a = f;
@@ -208,7 +219,7 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
     a = softDisc(uv * 1.4, 0.0);
     rgb = vec3f(1.0, 0.9, 0.7);
   } else if (kind == 3) {                 // impact — expanding ring + spark
-    a = clamp(ring(uv, 0.7, 0.06) + softDisc(uv * 3.0, 0.0) * 0.7, 0.0, 1.0);
+    a = softDisc(uv * vec2f(1.0,1.7), .05) * (0.35 + .65*turbulence(uv*6.0+input.seed*31.0));
     rgb = vec3f(0.95, 0.93, 0.86);
   } else if (kind == 4) {                 // dust — soft brown puff, billowing
     let n = valueNoise(uv * 3.0 + input.seed * 40.0) * 0.7
@@ -289,6 +300,19 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
     a = clamp(smoke * 0.72 + ember * 0.5, 0.0, 1.0);
   }
 
+  if (kind == 4 || kind == 5 || kind == 6) {
+    let frame=min(15.0,input.age*15.0);
+    let bank=select(0.0,4.0,kind==6);
+    let frameA=floor(frame);let frameB=min(15.0,frameA+1.0);
+    let local=clamp(uv*.5+.5,vec2f(.002),vec2f(.998));
+    let uvA=(vec2f(frameA%4.0,floor(frameA/4.0)+bank)+local)/vec2f(4.0,8.0);
+    let uvB=(vec2f(frameB%4.0,floor(frameB/4.0)+bank)+local)/vec2f(4.0,8.0);
+    let puff=mix(textureSampleLevel(effectAtlas,effectSampler,uvA,0.0),
+                 textureSampleLevel(effectAtlas,effectSampler,uvB,0.0),fract(frame));
+    a=puff.a*select(.62,.85,kind==6);
+    rgb=select(puff.rgb*vec3f(.40,.39,.36),puff.rgb,kind==6);
+    if(kind==4){rgb=puff.rgb*vec3f(.77,.66,.48);}
+  }
   let out = clamp(a * input.alpha * (0.7 + 0.3 * input.intensity), 0.0, 1.0);
   if (out < 0.01) { discard; }
   return vec4f(rgb, out);

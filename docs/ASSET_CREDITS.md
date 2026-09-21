@@ -4,30 +4,17 @@ Ironfronts bundles a small number of third-party UI assets. Each is listed
 below with its upstream project, exact source path, and licence. Only the
 specific files we actually use are vendored.
 
-## User-provided infantry model
+## Original land army assets
 
-`public/models/infantry.glb` is generated from the project owner's supplied
-Saluting Soldier GLB exports. It contains the shared mesh, armature, texture,
-and only the `Walking`, `Injured_Walk`, and `Injured_Walk_Backward` clips used
-by the game. Run `npm run build:infantry-model` to regenerate it from the
-source exports in the repository root. The supplied model is treated as an
-Ironfronts project asset; confirm its original author/licence before public
-distribution.
+`public/models/land/` contains the project's original Blender-authored infantry,
+armored car, tank and artillery, including rigs, animation, material textures and
+combat effect flipbooks. No third-party model or texture is used by this set.
+Editable sources live in `material/land-armies/`; see
+[the asset guide](../material/land-armies/README.md) for regeneration and budgets.
 
-## User-provided tank models
-
-`public/models/tank-light.glb` and `public/models/tank-medium.glb` are
-converted from the project owner's supplied "Animated Tank Pack" FBX exports
-(`Tank_Pack_Light.fbx`, `Tank_Pack_Medium.fbx` in the repository root; two of
-the four hull designs in the source pack, picked for a lighter vs. heavier
-silhouette). Each contains the shared hull/track mesh, the 89-bone armature,
-and all four driving clips (`Tank_Forward`, `Tank_Backwards`,
-`Tank_TurningLeft`, `Tank_TurningRight`); only Forward and Backwards are
-currently wired into the game (see `src/tank-model.ts`). Run
-`npm run build:tank-model` to regenerate them via headless Blender — set
-`BLENDER_BIN` if Blender isn't in one of the default install locations. The
-supplied models are treated as Ironfronts project assets; confirm their
-original author/licence before public distribution.
+The previously shipped `infantry.glb`, `tank-light.glb` and `tank-medium.glb`
+have been retired. The owner's supplied Soldier GLBs and Animated Tank Pack FBXs
+remain reference/source files and are not used to build the current land armies.
 
 ---
 

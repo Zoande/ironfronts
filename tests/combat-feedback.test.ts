@@ -71,7 +71,8 @@ describe('attack-order feedback', () => {
   it('spawns pooled world-space effects from the same combat events (LOD-gated)', () => {
     const block = main.slice(main.indexOf('const fxDensity = effectDensityForDistance'),
       main.indexOf('for (const cap of session.pendingCaptures'));
-    expect(block).toContain("combatEffects.spawnVolley('generic'");
+    expect(block).not.toContain("combatEffects.spawnVolley(");
+    expect(block).toContain('showArmyDestruction(last.records)');
     expect(block).toContain('EFFECT_KIND.explosion');
     expect(block).toContain("ev.kind === 'bombardment'");
     // markers reconcile off engaged armies, not per event
@@ -119,29 +120,18 @@ describe('combat huddle (visual-only positioning)', () => {
   });
 });
 
-describe('continuous battle FX (gunfire, smoke stalk, city-under-siege overlay)', () => {
-  it('spawns ongoing FX per authoritative battle-front cluster, at the same centroid the huddle uses, gated on camera LOD', () => {
+describe('continuous battle FX attached to visible models', () => {
+  it('gates muzzle shots on visibility, an identified opponent, and the skeletal animation clock', () => {
     const start = main.indexOf('function spawnOngoingBattleFx');
     const block = main.slice(start, main.indexOf('\nfunction drainSessionEvents', start));
     expect(block).toContain('effectDensityForDistance(lastCombatCameraDistance)');
-    // Groups the same way the huddle above does — a cluster only exists
-    // because a fully-visible engaged army reported that front id, so no
-    // separate owner-diversity check is needed (and none would fire FX for
-    // the player's own engaged army against a fog-obscured enemy).
-    expect(block).toContain('groupEngagedByFront(');
-    expect(block).not.toContain('ownerCountryIds.size < 2');
-    // Gunshots: more frequent than the single spawnVolley the 'engaged'/'combatPulse' events already fire.
-    expect(block).toContain("combatEffects.spawnVolley('infantry', cluster.x, cluster.z");
-    // Smoke reuses the same EFFECT_KIND.smoke WGSL composition as the nuke's smoke stalk, smaller/continuous.
-    expect(block).toContain('EFFECT_KIND.smoke');
-    expect(block).toMatch(/lifetimeMs: 2_400/);
-    // City-under-siege: resolve the province from the fight's own centroid
-    // (the projection never ships a front's province id) and only act when it
-    // actually has buildings.
-    expect(block).toContain('renderer.provinceIdAtWorld(cluster.x, cluster.z)');
-    expect(block).toContain('session.state.provinceBuildings[provinceId]');
-    expect(block).toContain('buildingCount <= 0) continue');
-    expect(block).toContain('EFFECT_KIND.explosion');
+    expect(block).toContain('renderer.isWorldPointVisible(visual.x,visual.z,30)');
+    expect(block).toContain('nextLandShot(nowSeconds,visual.phase,visual.kind)');
+    expect(block).toContain('landMuzzlePosition(');
+    expect(block).toContain('targetVisuals.get(visual.targetArmyId)');
+    expect(block).toContain('combatEffects.spawnWeaponShot(');
+    expect(block).not.toContain('spawnVolley(');
+    expect(block).not.toContain('provinceBuildings');
   });
 
   it('is wired into the 400ms HUD timer alongside syncCombatMarkers', () => {

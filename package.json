@@ -29,7 +29,9 @@
     "visual-check": "node scripts/visual-check.mjs",
     "performance-check": "node scripts/performance-check.mjs",
     "import:music": "node scripts/import-music.mjs",
-    "dev:fast": "vite --host 127.0.0.1 --port 5173"
+    "dev:fast": "vite --host 127.0.0.1 --port 5173",
+    "build:land-models": "node scripts/build-land-models.mjs",
+    "check:land-visuals": "node scripts/qa/land-armies-check.mjs"
   },
   "dependencies": {
     "@fontsource/bitter": "^5.3.0",
