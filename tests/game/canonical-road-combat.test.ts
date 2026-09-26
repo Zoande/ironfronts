@@ -154,7 +154,6 @@ describe('canonical road combat and retreat', () => {
     const c = context([routable, trapped, enemy], () => 10, [safe], { 10: 1 });
     for (const army of [routable, trapped, enemy]) {
       army.status = 'engaged';
-      army.organization = army.ownerCountryId === 1 ? 0 : 100;
       army.order = null;
       army.battleFrontIds = ['front-1'];
     }
@@ -169,6 +168,8 @@ describe('canonical road combat and retreat', () => {
     };
     c.state.battles['battle-1'] = { id: 'battle-1', frontIds: [front.id] };
     c.state.battleFronts[front.id] = front;
+    routable.units[0].hp = 60;
+    trapped.units[0].hp = 60;
     // Give only one stack an additional enemy front blocking its forward exit.
     const ahead = onRoad(c.graph, 'ahead', 2, 100, 'reverse');
     ahead.status = 'engaged'; ahead.order = null; ahead.battleFrontIds = ['front-2'];
@@ -183,6 +184,9 @@ describe('canonical road combat and retreat', () => {
     c.state.battles['battle-1'].frontIds.push(trapFront.id);
     c.state.battleFronts[trapFront.id] = trapFront;
 
+    expect(autoRetreat(c, front, front.sideA)).toBe(false);
+    routable.stance = 'retreat';
+    trapped.stance = 'retreat';
     expect(autoRetreat(c, front, front.sideA)).toBe(true);
     expect(routable.status).toBe('retreating');
     expect(trapped.status).toBe('engaged');

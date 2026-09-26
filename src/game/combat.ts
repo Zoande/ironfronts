@@ -5,14 +5,14 @@ import { stackUnitCount, type ArmyStack } from './units/army';
 import { addDamage, applyPendingDamage, calculateDamage, type GroupRef, type PendingDamage } from './combat/damage';
 import { initializeState, detectEngagements, sideArmies, removeArmyFromAllFronts, cleanupFronts } from './combat/fronts';
 import {
-  COMBAT_FRONTAGE, DEVASTATED_DEFENDER_STRENGTH_MULTIPLIER, OUT_OF_SUPPLY_COMBAT_MULTIPLIER,
+  COMBAT_FRONTAGE, DEVASTATED_DEFENDER_STRENGTH_MULTIPLIER,
 } from './combat/constants';
 import { autoRetreat } from './combat/retreat';
 import { stepArtillery } from './combat/artillery';
-import { drainOrganizationFromCombat, organizationEffectiveness } from './combat/organization';
 import { terrainDefenseMultiplier } from './combat/terrain';
 import { entrenchmentDamageMultiplier } from './combat/entrenchment';
 import { stanceModifiers } from './combat/stance';
+import { supplyEffectiveness } from './combat/supply';
 import type { CombatEvent } from './combat/events';
 export type { CombatEvent } from './combat/events';
 export { COMBAT_FRONTAGE } from './combat/constants';
@@ -28,7 +28,6 @@ export interface CombatRateModifiers {
   readonly frontageUsed: number;
   readonly frontageLimit: number;
   readonly coordination: number;
-  readonly organization: number;
   readonly stanceOutput: number;
   readonly supply: number;
   /** Combined entrenchment, defensive-stance, and supply multiplier on damage received. */
@@ -64,12 +63,11 @@ function rateModifiers(
   role: BattleRole,
 ): CombatRateModifiers {
   const frontageUsed = Math.min(COMBAT_FRONTAGE, armies.reduce((sum, army) => sum + stackUnitCount(army), 0));
-  const supply = (army: ArmyStack): number => army.inSupply === false ? OUT_OF_SUPPLY_COMBAT_MULTIPLIER : 1;
+  const supply = supplyEffectiveness;
   return {
     frontageUsed,
     frontageLimit: COMBAT_FRONTAGE,
     coordination: 1 / Math.sqrt(Math.max(1, frontageUsed)),
-    organization: weightedAverage(armies, (army) => organizationEffectiveness(army.organization ?? 100)),
     stanceOutput: weightedAverage(armies, (army) => stanceModifiers(army.stance).attackOutput),
     supply: weightedAverage(armies, supply),
     protection: weightedAverage(armies, (army) => entrenchmentDamageMultiplier(army.entrenchment ?? 0)
@@ -143,7 +141,6 @@ export function stepCombat(session: SimContext, dtHours: number): CombatEvent[] 
     addDamage(pending, damage.sideBToA);
   }
   applyPendingDamage(pending);
-  drainOrganizationFromCombat(session, pending, dtHours);
   if (session.state.simulationTick % 10 === 0) {
     for (const front of activeFronts) {
       events.push({

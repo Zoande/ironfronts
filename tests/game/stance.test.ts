@@ -14,8 +14,7 @@ describe('stanceModifiers', () => {
       expect(modifiers.attackOutput).toBe(1);
       expect(modifiers.damageTaken).toBe(1);
       expect(modifiers.entrenchmentRate).toBe(1);
-      expect(modifiers.organizationDrain).toBe(1);
-      expect(modifiers.retreatThreshold).toBe(1);
+      expect(modifiers.hpRetreatThreshold).toBe(1);
     }
   });
 
@@ -26,9 +25,9 @@ describe('stanceModifiers', () => {
     // Defend is tougher and digs in faster than balanced.
     expect(stanceModifiers('defend').damageTaken).toBeLessThan(1);
     expect(stanceModifiers('defend').entrenchmentRate).toBeGreaterThan(1);
-    // Retreat breaks off far sooner than balanced; defend holds on longer.
-    expect(stanceModifiers('retreat').retreatThreshold).toBeGreaterThan(1);
-    expect(stanceModifiers('defend').retreatThreshold).toBeLessThan(1);
+    expect(stanceModifiers('defend-retreat').damageTaken).toBeLessThan(1);
+    expect(stanceModifiers('retreat').hpRetreatThreshold).toBeGreaterThan(1);
+    expect(stanceModifiers('defend').hpRetreatThreshold).toBeLessThan(1);
   });
 
   it('STANCES lists exactly the five stances the icon set supports', () => {

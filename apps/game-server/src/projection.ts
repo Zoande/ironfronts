@@ -2,7 +2,7 @@ import {
   extractionEligibility, movementEdgeAllowed, computeArmyVisibility, projectArmyView,
   currentMovementLeg, remainingOrderTravelHours, legalRetreatPaths, nearestNode, findPath,
   edgeIdBetween, edgePolyline,
-  UNIT_TYPES, BUILDINGS, buildOptions, producibleUnits, armyShortageSummary,
+  UNIT_TYPES, BUILDINGS, buildOptions, producibleUnits,
   provinceResourceOutputBreakdown,
   buildEngineerAssignmentIndex, engineerAssignmentKey,
   unitProductionWorkRate,
@@ -42,11 +42,7 @@ export function projectFor(
       const eligibility = extractionEligibility({ state, world, graph }, army.id);
       projected = { ...projected, actions: { canExtract: eligibility.ok, extractionProvinceId: eligibility.provinceId ?? null,
         extractableResources: [...(eligibility.resources ?? [])],
-        ...(eligibility.reason ? { extractReason: eligibility.reason } : {}) },
-        shortage: {
-          severity: { ...(state.armies[army.id]?.shortageSeverity ?? { funds: 0, food: 0, metal: 0, oil: 0 }) },
-          modifiers: armyShortageSummary(state.armies[army.id]),
-        } };
+        ...(eligibility.reason ? { extractReason: eligibility.reason } : {}) } };
     }
     if (graph && army.own && army.status === 'engaged') {
       projected = {

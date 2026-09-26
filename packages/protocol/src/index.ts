@@ -151,7 +151,6 @@ export interface CombatRateModifiers {
   frontageUsed: number;
   frontageLimit: number;
   coordination: number;
-  organization: number;
   stanceOutput: number;
   supply: number;
   protection: number;
@@ -177,8 +176,6 @@ export interface ProjectedArmy {
   composition: null | {
     unitCount: number;
     health: number;
-    /** Organization/readiness, 0..1 of max — separate from health. */
-    organization: number;
     /** Entrenchment, 0..1 of max. */
     entrenchment: number;
     /** Combat posture; see game/units/army.ts ArmyStance. */
@@ -226,15 +223,14 @@ export interface ProjectedArmy {
     durationMs: number; remainingMs: number; sampledAtEpochMs: number;
   };
   actions?: { canExtract: boolean; extractionProvinceId: number | null; extractableResources: Array<'food' | 'stone' | 'metal' | 'oil'>; extractReason?: string };
-  shortage?: {
-    severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
-    modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
-  };
   supply?: {
     capacity: number;
-    stores: Readonly<Record<string, number>>;
+    current: number;
     connected: boolean;
-    allocation: Readonly<Record<string, number>>;
+    refillMultiplier: number;
+    shortfalls: ReadonlyArray<'funds' | 'food' | 'metal' | 'oil'>;
+    effectiveness: number;
+    depletionPerHour: number;
   };
   suspendedOrder?: { x: number; z: number; intent: 'move' | 'attack' } | null;
   battleFronts?: ReadonlyArray<{

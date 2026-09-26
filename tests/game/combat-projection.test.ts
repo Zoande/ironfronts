@@ -18,7 +18,6 @@ function context(): SimContext {
   const attackers = army('attackers', 1, 100, 0);
   attackers.status = 'moving';
   attackers.stance = 'attack';
-  attackers.organization = 70;
   attackers.order = {
     path: [1], destX: 200, destZ: 100, intent: 'attack',
     target: { kind: 'position', x: 200, z: 100 }, edgeProgress: 0,

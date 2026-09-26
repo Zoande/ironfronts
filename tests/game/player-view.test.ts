@@ -60,6 +60,17 @@ describe('projectArmyView', () => {
     expect(v.composition).not.toBeNull();
     expect(v.composition!.unitCount).toBe(4);
     expect(v.name).toBe('p Detachment');
+    expect(v.supply?.capacity).toBe(400);
+    expect(v.supply?.current).toBe(400);
+  });
+
+  it('withholds country supply shortfalls from a visible foreign stack', () => {
+    const s = state(false, [army('e', 2, 0, 0)]);
+    s.countries[2].stockpile.food = 0;
+    s.countries[2].netIncome = { ...emptyStockpile(), food: -1 };
+    const v = projectArmyView(s, world, 1, 'e')!;
+    expect(v.composition).not.toBeNull();
+    expect(v.supply).toBeUndefined();
   });
 
   it('projects the transport manifestation instead of cargo combat and movement stats at sea', () => {

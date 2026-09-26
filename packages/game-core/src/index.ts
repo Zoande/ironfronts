@@ -44,7 +44,6 @@ export {
   buildEngineerAssignmentIndex, engineerAssignmentKey, physicalResourceOutput, provinceResourceOutputBreakdown,
 } from '../../../src/game/economy/resource-production';
 export { runEconomySimulation } from '../../../src/game/economy/simulator';
-export { unitStatMultiplier, stackOrganizationCap, armyShortageSummary } from '../../../src/game/economy/shortages';
 export { RESOURCE_TIER_GATES, maximumResourceTier } from '../../../src/game/economy/resources';
 export type { GameCommand, CommandResult } from '../../../src/game/commands';
 export type { WorldData } from '../../../src/game/world-data';

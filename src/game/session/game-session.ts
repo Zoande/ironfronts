@@ -29,7 +29,6 @@ import { stepProduction, type UnitCompletion } from '../production';
 import { stepConstruction, type BuildingCompletion } from '../construction';
 import { stepCombat, stepCapture, type CaptureEvent, type CombatEvent } from '../combat';
 import { stepEntrenchment } from '../combat/entrenchment';
-import { regenOrganization } from '../combat/organization';
 import { stepSupply } from '../combat/supply';
 import { stepPhaseProgression } from '../phase';
 import { stepWarheads } from '../strike';
@@ -141,7 +140,6 @@ export class GameSession {
       stepSupply(this, elapsedSupplyHours);
     }
     stepEntrenchment(this, dtHours);
-    regenOrganization(this, dtHours);
     stepExtraction(this, dtHours);
     for (const b of stepConstruction(this, dtHours)) this.pendingBuildings.push(b);
     stepWarheads(this, dtHours);

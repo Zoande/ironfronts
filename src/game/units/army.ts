@@ -7,10 +7,11 @@
  */
 
 import type { UnitType } from './unit-types';
-import type { PhysicalResource, UpkeepResource } from '../game-state';
+import type { PhysicalResource } from '../game-state';
 import { unitType } from './unit-catalog';
-import { unitStatMultiplier } from '../economy/shortages';
 import type { TransportManifestation } from '../naval/transport';
+
+export const SUPPLY_CAPACITY_PER_UNIT = 100;
 
 /**
  * Combat posture — see combat/stance.ts for what each one actually does.
@@ -81,8 +82,6 @@ export interface ArmyStack {
   extractingNodeId: number | null;
   /** V4 renewable production assignment. */
   extractionAssignment?: { provinceId: number; resource: PhysicalResource } | null;
-  /** Country pressure snapshot used by hot movement/combat/vision paths. */
-  shortageSeverity?: Record<UpkeepResource, number>;
   /** Node occupied before graphNodeId; defines the back edge for retreat. */
   lastGraphNodeId?: number | null;
   /** Order paused by close combat and resumed when every joined front clears. */
@@ -112,14 +111,6 @@ export interface ArmyStack {
    * normal land HP scale; ship HP and the snapshotted naval tech live here. */
   transport?: TransportManifestation | null;
   /**
-   * Organization/readiness, 0..100. Separate from HP: drains while engaged in
-   * combat, recovers passively while not. A stack can be forced to retreat by
-   * low organization well before its HP pool is exhausted (see
-   * combat/organization.ts) — this is what lets an offensive be repelled
-   * without annihilating the defender first.
-   */
-  organization?: number;
-  /**
    * Entrenchment, 0..100. Grows while the stack is stationary and not engaged
    * (see combat/entrenchment.ts); clears the moment it takes a move order.
    * Reduces incoming damage while defending in place.
@@ -127,12 +118,10 @@ export interface ArmyStack {
   entrenchment?: number;
   /** Combat posture; see ArmyStance. Defaults to 'attack-defend' (balanced). */
   stance?: ArmyStance;
-  /** Within reach of the owner's own territory — see combat/supply.ts. An
-   *  out-of-supply stack fights, holds, and moves worse. Recomputed on a
-   *  slow cadence, not every tick. */
+  /** Whether a supply route exists; low stored supply applies the penalties. */
   inSupply?: boolean;
-  /** Per-army field stores, allocated by each unit's upkeep ratio. */
-  supplyStores?: Partial<Record<UpkeepResource, number>>;
+  /** One field-supply reserve for the whole stack. */
+  supply?: number;
   supplyCapacity?: number;
 }
 
@@ -153,15 +142,11 @@ export function ensureArmyRuntimeState(stack: ArmyStack): void {
   stack.artillery ??= { targetArmyId: null, manualTarget: false };
   stack.navalCrossing ??= null;
   stack.transport ??= null;
-  stack.organization ??= 100;
   stack.entrenchment ??= 0;
   stack.stance ??= 'attack-defend';
   stack.inSupply ??= true;
-  stack.shortageSeverity ??= { funds: 0, food: 0, metal: 0, oil: 0 };
-  stack.supplyStores ??= {};
   stack.supplyCapacity ??= 0;
   stack.extractionAssignment ??= null;
-  stack.shortageSeverity ??= { funds: 0, food: 0, metal: 0, oil: 0 };
 }
 
 export function stackUnitCount(stack: ArmyStack): number {
@@ -218,7 +203,7 @@ export function stackBaseSpeed(stack: ArmyStack): number {
   for (const group of stack.units) {
     if (group.count <= 0) continue;
     const type = unitType(group.typeId);
-    slowest = Math.min(slowest, type.speed * unitStatMultiplier(type, 'movementSpeed', stack.shortageSeverity));
+    slowest = Math.min(slowest, type.speed);
   }
   return Number.isFinite(slowest) ? slowest : 0;
 }
@@ -241,6 +226,9 @@ export function canExtract(stack: ArmyStack): boolean {
  * their count and hp; new types are appended. `source.units` is emptied.
  */
 export function mergeStacks(target: ArmyStack, source: ArmyStack): void {
+  const targetCapacity = stackUnitCount(target) * SUPPLY_CAPACITY_PER_UNIT;
+  const sourceCapacity = stackUnitCount(source) * SUPPLY_CAPACITY_PER_UNIT;
+  const mergedSupply = (target.supply ?? targetCapacity) + (source.supply ?? sourceCapacity);
   for (const incoming of source.units) {
     if (incoming.count <= 0) continue;
     const existing = target.units.find((group) => group.typeId === incoming.typeId);
@@ -253,6 +241,10 @@ export function mergeStacks(target: ArmyStack, source: ArmyStack): void {
     }
   }
   source.units = [];
+  target.supplyCapacity = targetCapacity + sourceCapacity;
+  target.supply = Math.min(target.supplyCapacity, mergedSupply);
+  source.supplyCapacity = 0;
+  source.supply = 0;
 }
 
 export function makeGroup(typeId: string, count: number, hpFraction = 1): UnitGroup {

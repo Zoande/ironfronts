@@ -2,8 +2,9 @@
 
 import type { SimContext } from '../sim-context';
 import {
-  canExtract, ensureArmyRuntimeState, stackUnitCount, type ArmyStack, type UnitGroup,
+  canExtract, ensureArmyRuntimeState, stackUnitCount, SUPPLY_CAPACITY_PER_UNIT, type ArmyStack, type UnitGroup,
 } from '../units/army';
+import { supplyFraction } from '../combat/supply';
 import { issueMoveOrder } from '../units/movement';
 import { occupiedEdge } from '../movement/position';
 import type { CommandResult, SplitArmyCommand } from './types';
@@ -45,6 +46,7 @@ export function issueSplit(ctx: SimContext, command: SplitArmyCommand): CommandR
   }
   const groups = requestedGroups(parent, command.groups);
   if (typeof groups === 'string') return { ok: false, reason: groups };
+  const inheritedSupplyFraction = supplyFraction(parent);
   const id = `army-${ctx.state.nextArmyId}`;
   const child: ArmyStack = {
     id,
@@ -80,6 +82,10 @@ export function issueSplit(ctx: SimContext, command: SplitArmyCommand): CommandR
     source.hp -= detached.hp;
   }
   parent.units = parent.units.filter((group) => group.count > 0 && group.hp > 0);
+  parent.supplyCapacity = stackUnitCount(parent) * SUPPLY_CAPACITY_PER_UNIT;
+  parent.supply = parent.supplyCapacity * inheritedSupplyFraction;
+  child.supplyCapacity = stackUnitCount(child) * SUPPLY_CAPACITY_PER_UNIT;
+  child.supply = child.supplyCapacity * inheritedSupplyFraction;
   if (parent.status === 'extracting' && !canExtract(parent)) {
     const node = parent.extractingNodeId === null
       ? undefined : ctx.state.resourceNodes[parent.extractingNodeId];

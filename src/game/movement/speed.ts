@@ -3,7 +3,7 @@ import type { ArmyStack } from '../units/army';
 import { stackBaseSpeed } from '../units/army';
 import { TERRAIN_CLASS } from '../world-data';
 import { wrappedDistance } from '../geometry';
-import { OUT_OF_SUPPLY_SPEED_MULTIPLIER } from '../combat/constants';
+import { supplyEffectiveness } from '../combat/supply';
 import { GAME_PACE } from '../pacing';
 import { relationOf } from '../game-state';
 import type { LandGraph } from './graph';
@@ -62,7 +62,7 @@ export function landMovementSpeedMultiplierAt(
 function baseWorldUnitsPerGameHour(army: ArmyStack): number {
   return stackBaseSpeed(army) * STRATEGIC_MOVEMENT_SCALE
     * (army.status === 'retreating' ? GAME_PACE.movement.retreatMultiplier : 1)
-    * (army.inSupply === false ? OUT_OF_SUPPLY_SPEED_MULTIPLIER : 1);
+    * supplyEffectiveness(army);
 }
 
 /** Integrate terrain/ownership along a segment rather than looking only at its

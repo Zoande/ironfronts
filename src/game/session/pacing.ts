@@ -36,8 +36,6 @@ export const GAME_PACE = {
   combat: {
     /** A 1v1 infantry fight lasts roughly 1.5 hours at full readiness. */
     damageScale: 12.5,
-    organizationDrainPerHour: 1.5,
-    organizationRegenPerHour: 4,
     hoursToFullEntrenchment: 48,
   },
   strategic: {

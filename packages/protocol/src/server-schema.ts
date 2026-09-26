@@ -19,7 +19,7 @@ const resource = point.extend({ id: integer, kind: z.enum(['stone', 'metal', 'oi
 const record = <T extends z.ZodType>(schema: T) => z.record(z.string(), schema);
 const combatRateModifiers = z.object({
   frontageUsed: integer, frontageLimit: integer, coordination: nonnegative,
-  organization: nonnegative, stanceOutput: nonnegative, supply: nonnegative,
+  stanceOutput: nonnegative, supply: nonnegative,
   protection: nonnegative, terrain: nonnegative, devastation: nonnegative,
 });
 const army = point.extend({
@@ -27,7 +27,7 @@ const army = point.extend({
   contact: z.enum(['contact', 'visible']), status: z.enum(['idle', 'moving', 'extracting', 'engaged', 'retreating', 'embarking', 'atSea', 'disembarking', 'unknown']),
   graphNodeId: integer.optional(),
   composition: z.object({ unitCount: integer, health: nonnegative.max(1),
-    organization: nonnegative.max(1), entrenchment: nonnegative.max(1),
+    entrenchment: nonnegative.max(1),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']), inSupply: z.boolean(), speed: nonnegative,
     groups: z.array(z.object({ typeId: z.string(), count: integer, health: nonnegative.max(1) })),
     domain: z.enum(['land', 'naval']).optional(),
@@ -44,8 +44,7 @@ const army = point.extend({
   navalPhase: z.object({ kind: z.enum(['embarking', 'disembarking']), durationMs: nonnegative,
     remainingMs: nonnegative, sampledAtEpochMs: finite }).optional(),
   actions: z.object({ canExtract: z.boolean(), extractionProvinceId: integer.nullable(), extractableResources: z.array(z.enum(['food', 'stone', 'metal', 'oil'])), extractReason: z.string().optional() }).optional(),
-  shortage: z.object({ severity: z.record(z.string(), nonnegative), modifiers: z.record(z.string(), nonnegative) }).optional(),
-  supply: z.object({ capacity: nonnegative, stores: z.record(z.string(), nonnegative), connected: z.boolean(), allocation: z.record(z.string(), nonnegative) }).optional(),
+  supply: z.object({ capacity: nonnegative, current: nonnegative, connected: z.boolean(), refillMultiplier: nonnegative.max(1), shortfalls: z.array(z.enum(['funds', 'food', 'metal', 'oil'])), effectiveness: nonnegative.max(1), depletionPerHour: nonnegative }).optional(),
   suspendedOrder: point.extend({ intent: z.enum(['move', 'attack']) }).nullable().optional(),
   battleFronts: z.array(z.object({ id: z.string(), directionNodeId: integer, role: z.enum(['attack', 'defense']),
     friendlyHp: nonnegative, friendlyBaselineHp: nonnegative, enemyHp: nonnegative, enemyBaselineHp: nonnegative,
@@ -94,7 +93,7 @@ const profile = z.object({ soft: nonnegative, light: nonnegative, heavy: nonnega
 const cost = stockpile.partial();
 const catalogs = z.object({ units: z.array(z.object({ id: z.string(), baseId: z.string(), level: integer.min(1).max(8), technology: z.enum(['infantry', 'resources', 'hybrid', 'armored']), name: z.string(), category: z.enum(['infantry', 'engineer', 'recon', 'armor', 'artillery']),
   armorClass: z.enum(['soft', 'light', 'heavy']), icon: z.string(), maxHp: finite.positive(), speed: nonnegative, attack: profile, defense: profile,
-  visionOuter: nonnegative, visionInner: nonnegative, extractionRate: nonnegative, engagementRange: nonnegative, buildCost: cost, buildWork: finite.positive(), upkeep: z.record(z.string(), nonnegative), shortageEffects: z.array(z.unknown()), cost, buildTimeHours: finite.positive(), requiredBuilding: buildingId, stackPriority: finite })),
+  visionOuter: nonnegative, visionInner: nonnegative, extractionRate: nonnegative, engagementRange: nonnegative, buildCost: cost, buildWork: finite.positive(), upkeep: z.record(z.string(), nonnegative), cost, buildTimeHours: finite.positive(), requiredBuilding: buildingId, stackPriority: finite })),
   buildings: z.array(z.object({ id: buildingId, label: z.string(), kind: z.enum(['military', 'resource']), tiers: z.array(z.unknown()), cost, buildWork: finite.positive(), buildTimeHours: finite.positive() })) });
 const eventBase = { id: z.string(), message: z.string().optional() };
 const locatedEvent = { ...eventBase, x: finite, z: finite };

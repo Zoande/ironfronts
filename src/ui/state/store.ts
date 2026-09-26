@@ -287,9 +287,6 @@ export interface ArmyStackView {
   readonly strength: number;
   /** 0..1 */
   readonly health: number;
-  /** 0..1. Organization/readiness — separate from health; low organization
-   *  can force a retreat well before the stack is destroyed. */
-  readonly organization?: number;
   /** 0..1. Grows while the stack holds ground; reduces incoming damage. */
   readonly entrenchment?: number;
   /** Combat posture; see game/units/army.ts ArmyStance. Own armies only. */
@@ -345,15 +342,14 @@ export interface ArmyStackView {
   readonly canRetreat?: boolean;
   readonly canSplit?: boolean;
   readonly canStop?: boolean;
-  readonly shortage?: {
-    severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
-    modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
-  };
   readonly supply?: {
     readonly capacity: number;
-    readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    readonly current: number;
     readonly connected: boolean;
-    readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    readonly refillMultiplier: number;
+    readonly shortfalls: ReadonlyArray<'funds' | 'food' | 'metal' | 'oil'>;
+    readonly effectiveness: number;
+    readonly depletionPerHour: number;
   };
   readonly legalRetreatExits?: ReadonlyArray<{
     firstNodeId: number; destinationProvinceId: number; x: number; z: number;
@@ -367,11 +363,11 @@ export interface ArmyStackView {
     friendlyCasualties: number; enemyCasualties: number;
     estimatedGameHours: number | null; estimatedRealSeconds: number | null;
     friendlyModifiers: {
-      frontageUsed: number; frontageLimit: number; coordination: number; organization: number;
+      frontageUsed: number; frontageLimit: number; coordination: number;
       stanceOutput: number; supply: number; protection: number; terrain: number; devastation: number;
     };
     enemyModifiers: {
-      frontageUsed: number; frontageLimit: number; coordination: number; organization: number;
+      frontageUsed: number; frontageLimit: number; coordination: number;
       stanceOutput: number; supply: number; protection: number; terrain: number; devastation: number;
     };
   }>;

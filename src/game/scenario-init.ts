@@ -160,7 +160,6 @@ function spawnArmy(
     extractionAssignment: null,
     navalCrossing: null,
     transport: null,
-    organization: 100,
     entrenchment: 0,
     stance: 'attack-defend',
     inSupply: true,

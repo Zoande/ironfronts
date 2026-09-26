@@ -29,9 +29,9 @@ import {
   stackBaseSpeed, stackHealthFraction, stackHp, stackUnitCount,
 } from './units/army';
 import { unitType } from './units/unit-catalog';
-import { ORGANIZATION_MAX, ENTRENCHMENT_MAX } from './combat/constants';
+import { ENTRENCHMENT_MAX } from './combat/constants';
 import { calculateFrontDamageRates, type CombatRateModifiers } from './combat';
-import { armySupplyPlan } from './combat/supply';
+import { armySupplyPlan, supplyEffectiveness, supplyRefillMultiplier, supplyShortfalls } from './combat/supply';
 import { armyParticipatesInFront } from './combat/membership';
 import {
   activeTransportStats, combatDomain, transportHealthFraction, transportHp,
@@ -67,9 +67,6 @@ export interface PlayerArmyView {
   readonly composition: {
     readonly unitCount: number;
     readonly health: number;
-    /** Organization/readiness, 0..1 of max — separate from health; see
-     *  game/combat/organization.ts. */
-    readonly organization: number;
     /** Entrenchment, 0..1 of max — see game/combat/entrenchment.ts. */
     readonly entrenchment: number;
     /** Combat posture — see units/army.ts ArmyStance. */
@@ -105,12 +102,15 @@ export interface PlayerArmyView {
     readonly targetZ: number;
     readonly durationMs: number;
   };
-    readonly supply?: {
-      readonly capacity: number;
-      readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
-      readonly connected: boolean;
-      readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
-    };
+  readonly supply?: {
+    readonly capacity: number;
+    readonly current: number;
+    readonly connected: boolean;
+    readonly refillMultiplier: number;
+    readonly shortfalls: ReadonlyArray<'funds' | 'food' | 'metal' | 'oil'>;
+    readonly effectiveness: number;
+    readonly depletionPerHour: number;
+  };
   readonly suspendedOrder?: { readonly x: number; readonly z: number; readonly intent: 'move' | 'attack' } | null;
   readonly battleFronts?: ReadonlyArray<{
     id: string;
@@ -153,11 +153,10 @@ function composition(army: ArmyStack): PlayerArmyView['composition'] {
   return {
     unitCount: transport ? transportShipCount(transport) : stackUnitCount(army),
     health: transport ? transportHealthFraction(transport) : stackHealthFraction(army),
-    organization: (army.organization ?? 100) / ORGANIZATION_MAX,
     entrenchment: (army.entrenchment ?? 0) / ENTRENCHMENT_MAX,
     stance: army.stance ?? 'attack-defend',
     inSupply: army.inSupply ?? true,
-    speed: Math.round(stats?.speed ?? stackBaseSpeed(army)),
+    speed: Math.round((stats?.speed ?? stackBaseSpeed(army)) * supplyEffectiveness(army)),
     domain,
     combatProfile: stats ? { attack: stats.attack, defense: stats.defense } : undefined,
     transport: transport && stats ? {
@@ -254,7 +253,7 @@ export function projectArmyView(
     ? army.units.filter((group) => unitType(group.typeId).category === 'artillery') : [];
   const artilleryRange = artilleryGroups.length
     ? Math.max(...artilleryGroups.map((group) => unitType(group.typeId).engagementRange)) : 0;
-  const supplyPlan = fullyVisible ? armySupplyPlan(army) : null;
+  const supplyPlan = own ? armySupplyPlan(army) : null;
   return {
     id: army.id,
     name: fullyVisible ? army.name : 'Unidentified force',
@@ -276,12 +275,12 @@ export function projectArmyView(
       : null,
     supply: supplyPlan ? {
       capacity: supplyPlan.capacity,
-      stores: { funds: army.supplyStores?.funds ?? supplyPlan.allocation.funds,
-        food: army.supplyStores?.food ?? supplyPlan.allocation.food,
-        metal: army.supplyStores?.metal ?? supplyPlan.allocation.metal,
-        oil: army.supplyStores?.oil ?? supplyPlan.allocation.oil },
+      current: Math.max(0, Math.min(supplyPlan.capacity, army.supply ?? supplyPlan.capacity)),
       connected: army.inSupply ?? false,
-      allocation: supplyPlan.allocation,
+      refillMultiplier: supplyRefillMultiplier(owner),
+      shortfalls: supplyShortfalls(owner),
+      effectiveness: supplyEffectiveness(army),
+      depletionPerHour: supplyPlan.upkeepPerHour,
     } : undefined,
     battleFronts: fronts,
     // The server projection, which also owns the movement graph, fills these.

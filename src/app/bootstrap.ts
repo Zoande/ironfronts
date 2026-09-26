@@ -2541,7 +2541,6 @@ function refreshSelectedArmy(
       unitCount: comp?.unitCount ?? 0,
       strength: comp ? Math.min(1, comp.unitCount / 12) : 0,
       health: comp?.health ?? 0,
-      organization: comp?.organization,
       entrenchment: comp?.entrenchment,
       stance: comp?.stance,
       inSupply: comp?.inSupply,
@@ -2582,7 +2581,6 @@ function refreshSelectedArmy(
       canStop: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status)
         && (Boolean(view.moveOrder) || view.status === 'extracting' || targetingMode !== null),
-      shortage: view.shortage,
       supply: view.supply,
       legalRetreatExits: view.legalRetreatExits,
       battleFronts: view.battleFronts,

@@ -168,10 +168,10 @@ export class GameRuntime {
       x: this.session.graph.nodeX[nodeId], z: this.session.graph.nodeZ[nodeId], graphNodeId: nodeId,
       edge: null, units: [{ typeId: unitTypeId, count: 1, hp: unitType(unitTypeId).maxHp, experience: 0 }],
       status: 'idle', order: null, extractingNodeId: null, extractionAssignment: null,
-      shortageSeverity: { funds: 0, food: 0, metal: 0, oil: 0 }, lastGraphNodeId: null,
+      lastGraphNodeId: null,
       suspendedOrder: null, battleFrontIds: [], retreat: null,
       artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null, transport: null,
-      organization: 100, entrenchment: 0, stance: 'attack-defend', inSupply: true,
+      entrenchment: 0, stance: 'attack-defend', inSupply: true,
     };
     this.session.refreshDerivedState();
     return { ok: true, message: `${definition.name} spawned for country ${countryId} in province ${provinceId}.` };

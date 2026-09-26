@@ -9,7 +9,7 @@
 
 import { createIcon, iconMarkup, type IconName } from './icons';
 import { roundDisplayedHp, summarizeBattleFronts, type BattleSidePresentation } from './army-presentation';
-import { bindTooltip } from './tooltip';
+import { bindTooltip, type TooltipContent } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import { createRankInsignia, catalogueLevel } from './rank-insignia';
 import type { ArmyActivityKind, ArmyStackView, CombatStatus } from './ui-state';
@@ -96,18 +96,38 @@ export type ArmyPanelCommand =
   | 'stance-attack' | 'stance-attack-defend' | 'stance-defend' | 'stance-defend-retreat' | 'stance-retreat';
 
 const STANCE_OPTIONS: ReadonlyArray<{ command: ArmyPanelCommand; icon: IconName; label: string; description: string }> = [
-  { command: 'stance-attack', icon: 'stance-attack', label: 'Attack', description: 'Hits harder; never digs in; holds the assault until organization nearly breaks.' },
+  { command: 'stance-attack', icon: 'stance-attack', label: 'Attack', description: 'Hits harder; never digs in; retreats later.' },
   { command: 'stance-attack-defend', icon: 'stance-attack-defend', label: 'Balanced', description: 'No bonus or penalty either way — the default posture.' },
-  { command: 'stance-defend', icon: 'stance-defend', label: 'Defend', description: 'Takes less damage and digs in fast; holds the line at all costs.' },
-  { command: 'stance-defend-retreat', icon: 'stance-defend-retreat', label: 'Defensive', description: 'Some defensive bonus, but pulls back early to preserve the force.' },
-  { command: 'stance-retreat', icon: 'stance-retreat', label: 'Cautious', description: 'No combat bonus; breaks off at the first real pressure.' },
+  { command: 'stance-defend', icon: 'stance-defend', label: 'Defend', description: 'Takes less damage, digs in faster, and retreats later.' },
+  { command: 'stance-defend-retreat', icon: 'stance-defend-retreat', label: 'Defensive', description: 'Takes slightly less damage and retreats earlier.' },
+  { command: 'stance-retreat', icon: 'stance-retreat', label: 'Cautious', description: 'Retreats earlier and builds entrenchment more slowly.' },
 ];
-const SUPPLY_RESOURCES = [
-  { id: 'funds', label: 'Funds', color: '#d1b56a' },
-  { id: 'food', label: 'Food', color: '#d6a24f' },
-  { id: 'metal', label: 'Metal', color: '#91a0a5' },
-  { id: 'oil', label: 'Oil', color: '#6d9b8d' },
-] as const;
+
+export function supplyTooltip(supply: NonNullable<ArmyStackView['supply']>): TooltipContent {
+  const percent = supply.capacity > 0 ? Math.max(0, Math.min(100, supply.current / supply.capacity * 100)) : 100;
+  return {
+    title: `Supply ${Math.round(supply.current)} / ${Math.round(supply.capacity)} (${Math.round(percent)}%)`,
+    description: supply.connected
+      ? 'Connected to a supply route. The reserve is refilling.'
+      : 'Disconnected from supply. The reserve is being consumed.',
+    children: [
+      { label: supply.connected ? 'Refill' : 'Consumption', value: supply.connected
+        ? `+${Math.round(supply.capacity * supply.refillMultiplier)} / game h`
+        : `-${supply.depletionPerHour.toFixed(1)} / game h` },
+      { label: 'Country shortfalls', value: supply.shortfalls.length
+        ? `${supply.shortfalls.join(', ')} (−${supply.shortfalls.length * 20}% refill)` : 'None' },
+      { label: 'Effectiveness', value: `${Math.round(supply.effectiveness * 100)}%`, content: {
+        title: 'Low supply effects',
+        description: 'Combat output, movement speed, vision, extraction and entrenchment use this multiplier.',
+      } },
+      { label: 'Damage taken', value: `${Math.round(100 / supply.effectiveness)}%` },
+      { label: 'Low supply thresholds', value: '75% / 50% / 25% / empty', content: {
+        title: 'Supply penalties',
+        description: 'Below 75%: 90% effectiveness; below 50%: 75%; below 25%: 60%; empty: 40%.',
+      } },
+    ],
+  };
+}
 
 const ACTIVITY_ICON: Record<ArmyActivityKind, IconName> = {
   holding: 'cmd-stop', moving: 'cmd-move', embarking: 'activity-embark',
@@ -229,18 +249,16 @@ export function renderSelectedArmyPanel(
     const healthFill = node('i', 'ifg-army-panel__health-fill');
     healthFill.style.width = `${healthPercent}%`;
     healthTrack.append(healthFill);
-    // Organization is a real, separate stat from health (see
-    // game/combat/organization.ts) — a battered-but-intact stack can still be
-    // forced to retreat once this collapses. Entrenchment only shows once it's
-    // actually built up, so a freshly-arrived stack's caption stays uncluttered.
-    const orgPercent = Math.round((army.organization ?? army.health) * 100);
     const entrenchPercent = Math.round((army.entrenchment ?? 0) * 100);
-    const captionParts = [`${orgPercent} / 100 organization`];
+    const captionParts: string[] = [];
     if (entrenchPercent > 0) captionParts.push(`${entrenchPercent}% entrenched`);
     if (army.own && army.inSupply === false) captionParts.push('out of supply');
-    const captionEl = node('span', 'ifg-army-panel__health-caption', captionParts.join(' · '));
-    if (army.own && army.inSupply === false) captionEl.classList.add('is-warning');
-    health.append(healthTrack, captionEl);
+    health.append(healthTrack);
+    if (captionParts.length) {
+      const captionEl = node('span', 'ifg-army-panel__health-caption', captionParts.join(' · '));
+      if (army.own && army.inSupply === false) captionEl.classList.add('is-warning');
+      health.append(captionEl);
+    }
   }
 
   const stats = node('section', 'ifg-army-panel__stats');
@@ -298,35 +316,14 @@ export function renderSelectedArmyPanel(
   if (army.supply) {
     const supplyBar = node('span', 'ifg-army-panel__supply-bar');
     supplyBar.setAttribute('role', 'img');
-    supplyBar.setAttribute('aria-label', army.supply.connected ? 'Supply connected' : 'Supply stores');
-    const children = SUPPLY_RESOURCES.filter((resource) => (army.supply!.allocation[resource.id] ?? 0) > 0).map((resource) => {
-      const maximum = army.supply!.allocation[resource.id] ?? 0;
-      const current = Math.max(0, army.supply!.stores[resource.id] ?? 0);
-      const segment = node('i', 'ifg-army-panel__supply-segment');
-      segment.style.width = `${army.supply!.capacity > 0 ? current / army.supply!.capacity * 100 : 0}%`;
-      segment.style.backgroundColor = resource.color;
-      supplyBar.append(segment);
-      const depleted = current <= 0;
-      const debuff = depleted
-        ? 'Store empty: this resource’s unit-specific shortages are active.'
-        : army.shortage?.modifiers && Object.values(army.shortage.modifiers).some((value) => value < 0.999)
-          ? 'A shortage effect is active on this army.' : 'No shortage effect active.';
-      return { label: resource.label, value: `${Math.round(current)} / ${Math.round(maximum)}`, content: {
-        title: resource.label, description: debuff, status: army.supply!.connected ? 'Connected' : 'Depleting',
-      } };
-    });
-    const activeDebuffs = Object.entries(army.shortage?.modifiers ?? {}).filter(([, value]) => value < 0.999);
-    bindTooltip(supplyBar, () => ({
-      title: 'Supply stores',
-      description: army.supply!.connected ? 'Connected to the capital or a nearby ocean route.' : 'Disconnected: stores are being consumed.',
-      children: [
-        ...children,
-        ...(activeDebuffs.length ? [{ label: 'Active debuffs', value: `${activeDebuffs.length}`, content: {
-          title: 'Active shortage effects',
-          children: activeDebuffs.map(([stat, value]) => ({ label: stat.replace(/([A-Z])/g, ' $1'), value: `${Math.round(value * 100)}%` })),
-        } }] : []),
-      ],
-    }));
+    const supply = army.supply;
+    const percent = supply.capacity > 0 ? Math.max(0, Math.min(100, supply.current / supply.capacity * 100)) : 100;
+    supplyBar.setAttribute('aria-label', `Supply ${Math.round(percent)}%${supply.connected ? ', connected' : ', disconnected'}`);
+    const fill = node('i', 'ifg-army-panel__supply-segment');
+    fill.style.width = `${percent}%`;
+    fill.style.backgroundColor = percent >= 75 ? '#6d9b8d' : percent >= 25 ? '#d6a24f' : '#dc6e50';
+    supplyBar.append(fill);
+    bindTooltip(supplyBar, () => supplyTooltip(supply));
     const supplyDisplay = node('span', 'ifg-army-panel__supply-display');
     supplyDisplay.append(createIcon('supply', 'ifg-army-panel__supply-icon'), supplyBar);
     headerControls.append(supplyDisplay);
@@ -472,7 +469,7 @@ export function renderSelectedArmyPanel(
       const sideHeader = node('div', 'ifg-battle-side__header');
       sideHeader.append(
         node('strong', undefined, label),
-        node('b', undefined, `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP · ${battle ? side.organizationPercent : '--'}% org`),
+        node('b', undefined, `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP`),
       );
       const healthTrack = node('span', 'ifg-battle-side__health');
       healthTrack.setAttribute('role', 'progressbar');
@@ -490,10 +487,9 @@ export function renderSelectedArmyPanel(
       hp: army.identified === false ? 0 : army.health,
       baselineHp: army.identified === false ? 0 : 1,
       healthPercent: army.identified === false ? 0 : Math.round(army.health * 100),
-      organizationPercent: army.identified === false ? 0 : Math.round((army.organization ?? 0) * 100),
       damagePerGameHour: 0,
     };
-    const enemySide = battle?.enemy ?? { hp: 0, baselineHp: 0, healthPercent: 0, organizationPercent: 0, damagePerGameHour: 0 };
+    const enemySide = battle?.enemy ?? { hp: 0, baselineHp: 0, healthPercent: 0, damagePerGameHour: 0 };
     appendSide(army.own ? 'Your forces' : 'Selected forces', friendlySide, army.own ? 'friendly' : 'enemy');
     appendSide(army.own ? 'Enemy forces' : 'Opposing forces', enemySide, army.own ? 'enemy' : 'friendly');
 

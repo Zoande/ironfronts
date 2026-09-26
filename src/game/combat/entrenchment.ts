@@ -7,9 +7,9 @@
 import type { SimContext } from '../sim-context';
 import {
   ENTRENCHMENT_MAX, ENTRENCHMENT_GAIN_PER_HOUR, ENTRENCHMENT_DEFENSE_PER_POINT, ENTRENCHMENT_DEFENSE_CAP,
-  OUT_OF_SUPPLY_ENTRENCHMENT_MULTIPLIER,
 } from './constants';
 import { stanceModifiers } from './stance';
+import { supplyEffectiveness } from './supply';
 
 export function entrenchmentDamageMultiplier(entrenchment: number): number {
   return 1 - Math.min(ENTRENCHMENT_DEFENSE_CAP, Math.max(0, entrenchment) * ENTRENCHMENT_DEFENSE_PER_POINT);
@@ -19,7 +19,7 @@ export function stepEntrenchment(ctx: SimContext, dtHours: number): void {
   if (dtHours <= 0) return;
   for (const army of Object.values(ctx.state.armies)) {
     if (army.status === 'idle' || army.status === 'extracting') {
-      const supplyRate = army.inSupply === false ? OUT_OF_SUPPLY_ENTRENCHMENT_MULTIPLIER : 1;
+      const supplyRate = supplyEffectiveness(army);
       const rate = ENTRENCHMENT_GAIN_PER_HOUR * stanceModifiers(army.stance).entrenchmentRate * supplyRate;
       army.entrenchment = Math.min(ENTRENCHMENT_MAX, (army.entrenchment ?? 0) + rate * dtHours);
     } else if (army.status !== 'engaged') {

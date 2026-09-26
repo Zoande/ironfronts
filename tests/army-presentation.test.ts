@@ -2,8 +2,21 @@ import { describe, expect, it } from 'vitest';
 import {
   aggregateTroopStat, armyActivityLabel, roundDisplayedHp, summarizeBattleFronts,
 } from '../src/ui/army-presentation';
+import { supplyTooltip } from '../src/ui/army';
 
 describe('selected army presentation', () => {
+  it('explains one supply reserve, refill shortfalls, and the active penalty', () => {
+    const tooltip = supplyTooltip({ capacity: 100, current: 40, connected: true,
+      refillMultiplier: 0.6, shortfalls: ['food', 'oil'], effectiveness: 0.75, depletionPerHour: 2 });
+    expect(tooltip.title).toBe('Supply 40 / 100 (40%)');
+    expect(tooltip.children).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Refill', value: '+60 / game h' }),
+      expect.objectContaining({ label: 'Country shortfalls', value: 'food, oil (−40% refill)' }),
+      expect.objectContaining({ value: '75%' }),
+      expect.objectContaining({ label: 'Damage taken', value: '133%' }),
+    ]));
+  });
+
   it('describes authoritative activities in player-facing language', () => {
     expect(armyActivityLabel('idle', false, true)).toBe('Holding position');
     expect(armyActivityLabel('moving', false, true)).toBe('Moving to destination');
@@ -44,23 +57,23 @@ describe('selected army presentation', () => {
         reinforcementCount: 1, outgoingDamagePerGameHour: 12, incomingDamagePerGameHour: 5,
         friendlyCasualties: 20, enemyCasualties: 30, estimatedGameHours: 2.5, estimatedRealSeconds: 9_000,
         friendlyModifiers: { frontageUsed: 5, frontageLimit: 10, coordination: 0.45,
-          organization: 0.8, stanceOutput: 1.25, supply: 1, protection: 1, terrain: 1, devastation: 1 },
+          stanceOutput: 1.25, supply: 1, protection: 1, terrain: 1, devastation: 1 },
       },
       {
         role: 'defense', friendlyHp: 40, friendlyBaselineHp: 50, enemyHp: 20, enemyBaselineHp: 40,
         reinforcementCount: 2, outgoingDamagePerGameHour: 8, incomingDamagePerGameHour: 7,
         friendlyCasualties: 10, enemyCasualties: 20, estimatedGameHours: 3, estimatedRealSeconds: 10_800,
         friendlyModifiers: { frontageUsed: 3, frontageLimit: 10, coordination: 0.6,
-          organization: 1, stanceOutput: 1, supply: 0.6, protection: 0.8, terrain: 0.7, devastation: 0.4 },
+          stanceOutput: 1, supply: 0.6, protection: 0.8, terrain: 0.7, devastation: 0.4 },
       },
     ]);
     expect(summary).toEqual({
       role: 'mixed', frontCount: 2, reinforcementCount: 3,
       friendly: {
-        hp: 120, baselineHp: 150, healthPercent: 80, organizationPercent: 90, damagePerGameHour: 20,
+        hp: 120, baselineHp: 150, healthPercent: 80, damagePerGameHour: 20,
       },
       enemy: {
-        hp: 50, baselineHp: 100, healthPercent: 50, organizationPercent: 0, damagePerGameHour: 12,
+        hp: 50, baselineHp: 100, healthPercent: 50, damagePerGameHour: 12,
       },
       outgoingDamagePerGameHour: 20,
       incomingDamagePerGameHour: 12,
@@ -68,7 +81,7 @@ describe('selected army presentation', () => {
       enemyCasualties: 50,
       estimatedGameHours: 2.5,
       estimatedRealSeconds: 9_000,
-      modifiers: ['Frontage 8 / 20', 'Coordination ×0.53', 'Organization ×0.90',
+      modifiers: ['Frontage 8 / 20', 'Coordination ×0.53',
         'Stance output ×1.13', 'Supply ×0.80', 'Protection ×0.90',
         'Terrain ×0.85', 'Devastation ×0.70'],
     });

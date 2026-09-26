@@ -1,4 +1,5 @@
-import { COMBAT_SNAP, OUT_OF_SUPPLY_SPEED_MULTIPLIER } from '../combat/constants';
+import { COMBAT_SNAP } from '../combat/constants';
+import { supplyEffectiveness } from '../combat/supply';
 import { SpatialIndex } from '../spatial-index';
 import type { SimContext } from '../sim-context';
 import { ensureArmyRuntimeState, mergeStacks, stackBaseSpeed } from './army';
@@ -82,7 +83,7 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
     revalidateOrder(session, army, order, visibility);
     let budget = stackBaseSpeed(army) * dtHours * STRATEGIC_MOVEMENT_SCALE
       * (army.status === 'retreating' ? GAME_PACE.movement.retreatMultiplier : 1)
-      * (army.inSupply === false ? OUT_OF_SUPPLY_SPEED_MULTIPLIER : 1);
+      * supplyEffectiveness(army);
 
     while (budget > 0 && order.path.length > 0) {
       const targetNode = order.path[0];
