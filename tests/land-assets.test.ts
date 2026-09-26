@@ -12,7 +12,7 @@ function asset(family:string,lod:number) {
 }
 
 describe('original resident land assets',()=>{
-  for(const family of ['infantry','armored-car','tank','artillery'])it(`${family} has complete compatible LODs and animation sockets`,()=>{
+  for(const family of ['infantry','armored-car','tank','artillery','transport'])it(`${family} has complete compatible LODs and animation sockets`,()=>{
     let lastTriangles=Infinity;
     let jointNames:string[]=[];
     for(let lod=0;lod<3;lod++){
@@ -37,6 +37,18 @@ describe('original resident land assets',()=>{
 });
 
 describe('weapon choreography',()=>{
+  it('separates armored-car burst rounds and keeps rifle shots single',()=>{
+    for(const kind of [0,1]){
+      const pool=new CombatEffectPool(128);
+      pool.spawnWeaponShot(kind,0,0,40,0,{now:1000,height:2});
+      for(const delay of [0,80,160]){
+        const packed=pool.collect(1000+delay,{x:0,z:0},1000);
+        const kinds=Array.from({length:packed.count},(_,i)=>packed.floats[i*EFFECT_STRIDE+2]);
+        expect(kinds.includes(EFFECT_KIND.muzzleFlash)).toBe(kind===1||delay===0);
+        expect(kinds.includes(EFFECT_KIND.projectile)).toBe(false);
+      }
+    }
+  });
   it('shares the exact GPU fire phase and skips rifle reload cycles',()=>{
     for(let kind=0;kind<4;kind++)for(const now of [0,1.2,12.7,104]){
       const shot=nextLandShot(now,.23,kind);

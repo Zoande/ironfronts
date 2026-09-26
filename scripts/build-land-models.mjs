@@ -13,7 +13,7 @@ export function buildLandModels(families = []) {
   for (const [script,args] of [
     ['build_land_armies.py',families], ['build_land_effects.py',[]],
   ]) {
-    const result=spawnSync(blender,['--background','--python',path.join(root,'scripts/blender',script),'--',...args],
+    const result=spawnSync(blender,['--background','--threads','4','--python',path.join(root,'scripts/blender',script),'--',...args],
       {cwd:root,stdio:'inherit',windowsHide:true});
     if(result.error)throw result.error;
     if(result.status!==0)throw new Error(`${script} failed (${result.status})`);

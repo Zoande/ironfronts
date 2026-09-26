@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { create, globals } from 'webgpu';
 import {
-  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, landModelShader, infrastructureShader, lineShader, mapMarkerShader, polarCapShader, propShader,
+  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, landModelShader, landShadowShader, infrastructureShader, lineShader, mapMarkerShader, polarCapShader, propShader,
   rainShader, terrainShader, waterShader, waterwayShader,
 } from '../src/shaders';
 
@@ -42,7 +42,7 @@ describe('WGSL programs', () => {
     // infantry rifle points forward (-Z), not out the side (+X)
     expect(armyModelShader).toContain('center = vec3f(0.06, 1.72, -0.78)');
     // gait only animates while the unit is actually moving between syncs
-    expect(armyModelShader).toContain('let moveAmt = clamp(distance(model.a.xy, model.c.xy) / 3.0, 0.0, 1.0)');
+    expect(armyModelShader).toContain('let moveAmt = select(0.0,1.0,(u32(model.b.z)&2u)!=0u)');
   });
 
   it('holds marker plaques and count badges at a constant CSS size across graphics presets', () => {
@@ -50,11 +50,11 @@ describe('WGSL programs', () => {
     expect(armyModelShader).toContain('* 2.0 * uniforms.viewport.z / uniforms.viewport.xy');
   });
 
-  it('renders the explosion as layered fire, embers, smoke and ground dust', () => {
-    expect(combatEffectShader).toContain('let fireLife = 1.0 - smoothstep(0.0, 0.55, input.age)');
-    expect(combatEffectShader).toContain('let smokeLife = smoothstep(0.06, 0.5, input.age)');
-    expect(combatEffectShader).toContain('let emberField = valueNoise(uv * 9.0 + input.seed * 120.0)');
-    expect(combatEffectShader).toContain('* uniforms.viewport.z');
+  it('samples and blends authored smoke/fire frames in world-scaled billboards', () => {
+    expect(combatEffectShader).toContain('textureSampleLevel(effectAtlas');
+    expect(combatEffectShader).toContain('fract(frame)');
+    expect(combatEffectShader).toContain('effect.c.w');
+    expect(combatEffectShader).toContain('vec2f(rotated.x,-rotated.y)');
   });
 
   it('pulls towns and forests down to a strategic map scale', () => {
@@ -269,6 +269,7 @@ describe('WGSL programs', () => {
       ['armyMarkerVertex', 'armyCompositionVertex'], ['armyCompositionFragment', 'armyMarkerFragment']],
     ['army models', armyModelShader, ['armyModelVertex', 'armyKindCountVertex'], ['armyModelFragment', 'armyKindCountFragment']],
     ['land model', landModelShader, ['landModelVertex'], ['landModelFragment']],
+    ['land shadows and ship wake', landShadowShader, ['landShadowVertex'], ['landShadowFragment']],
     ['combat effects', combatEffectShader, ['combatEffectVertex'], ['combatEffectFragment']],
     ['country labels', countryLabelShader, ['countryLabelVertex'], ['countryLabelFragment']],
   ])('parses the %s shader and exposes its render entry points', (_name, source, vertexNames, fragmentNames) => {
@@ -291,7 +292,7 @@ describe('WGSL programs', () => {
     const device = await adapter.requestDevice();
     const modules = new Map<string, GPUShaderModule>();
     for (const [label, source] of [
-      ['terrain', terrainShader], ['polar caps', polarCapShader], ['water', waterShader], ['waterways', waterwayShader], ['infrastructure', infrastructureShader], ['props', propShader], ['city lights', cityLightShader], ['rain', rainShader], ['lines', lineShader], ['map markers', mapMarkerShader], ['army markers', armyMarkerShader], ['army models', armyModelShader], ['land model', landModelShader], ['combat effects', combatEffectShader], ['country labels', countryLabelShader],
+      ['terrain', terrainShader], ['polar caps', polarCapShader], ['water', waterShader], ['waterways', waterwayShader], ['infrastructure', infrastructureShader], ['props', propShader], ['city lights', cityLightShader], ['rain', rainShader], ['lines', lineShader], ['map markers', mapMarkerShader], ['army markers', armyMarkerShader], ['army models', armyModelShader], ['land model', landModelShader], ['land shadows',landShadowShader], ['combat effects', combatEffectShader], ['country labels', countryLabelShader],
     ] as const) {
       const module = device.createShaderModule({ label, code: source });
       modules.set(label, module);

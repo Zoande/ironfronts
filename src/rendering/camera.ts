@@ -15,7 +15,8 @@ export class StrategyCamera {
   pitch = 0.78;
   minDistance = 90;
   maxDistance = 10_800;
-  minimumAltitude = 300;
+  // Close army inspection, with clearance above the generated terrain (< 56).
+  minimumAltitude = 80;
   worldWidth = 13_562;
   worldHeight = 7_000;
   viewportWidth = 1;

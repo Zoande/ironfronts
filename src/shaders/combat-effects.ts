@@ -7,6 +7,7 @@ import { commonWgsl } from './common';
  * per instance:
  *   a = (worldX, worldZ, kind, age01)
  *   b = (seed, scale, intensity, dir)   dir in radians, -999 = none
+ *   c = (height, travelDistance, arcHeight, worldSize)
  *
  * kind: 0 muzzle flash, 1 tracer, 2 projectile, 3 impact, 4 dust, 5 smoke,
  *       6 explosion, 7 target flash, 8 battle marker (age01 = pulse phase),
@@ -93,7 +94,7 @@ fn combatEffectVertex(
 
   // Grow with age for the puff kinds, snap-then-shrink for the flash kinds.
   var sizeAge = 1.0;
-  if (kind == 3 || kind == 6) { sizeAge = mix(0.35, 1.35, sqrt(age)); }
+  if (kind == 3 || kind == 6) { sizeAge = mix(0.60, 1.35, sqrt(age)); }
   else if (kind == 4 || kind == 5) { sizeAge = mix(0.5, 1.5, age); }
   else if (kind == 0) { sizeAge = mix(1.2, 0.4, age); }
   else if (kind == 7) { sizeAge = mix(1.6, 0.7, age); }
@@ -136,7 +137,7 @@ fn combatEffectVertex(
     return output;
   }
   var pixelOffset = corner * half * 2.0 / uniforms.viewport.xy;
-  if (kind == 1 && dir > -900.0) {
+  if ((kind == 1 || kind == 0) && dir > -900.0) {
     // Orient the tracer in the actual projected world-space firing direction.
     // The previous effect was always horizontal in screen space, which made a
     // diagonal or vertical shot look detached from the combatants.
@@ -152,7 +153,7 @@ fn combatEffectVertex(
       if (deltaLen > 0.01) {
         let axis = deltaPx / deltaLen;
         let normal = vec2f(-axis.y, axis.x);
-        let orientedPx = axis * (corner.x * half * 1.75) + normal * (corner.y * half * 0.20);
+        let orientedPx = axis * (corner.x * half * select(1.75,1.4,kind==0)) + normal * (corner.y * half * select(.20,.55,kind==0));
         pixelOffset = orientedPx * 2.0 / uniforms.viewport.xy;
       }
     }
@@ -202,14 +203,7 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
     rgb = mix(vec3f(1.0, 0.86, 0.45), vec3f(1.0, 1.0, 0.95), core);
     a = f;
   } else if (kind == 1) {
-    // Tracer — thin streak with a white-hot core cooling to amber at both
-    // tips. This billboard is screen-aligned, not rotated to travel dir
-    // (see the vertex stage above), so a one-sided bright-head/dim-tail
-    // gradient would point the wrong way whenever the camera is rotated off
-    // the firing direction. A center-hot, symmetric gradient instead reads
-    // as "a glowing round in flight" from any camera angle, distinguishing
-    // it from the flat-colored bar it used to be and from the plain dot used
-    // for kind 2 (projectile).
+    // A thin streak follows the projected firing direction, with a hot center.
     let d = abs(uv.y) + max(0.0, abs(uv.x) - 0.85) * 4.0;
     let envelope = clamp(1.0 - d * 3.0, 0.0, 1.0);
     let heat = 1.0 - smoothstep(0.0, 0.8, abs(uv.x)); // hottest at center, cooling toward both tips
@@ -221,56 +215,6 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
   } else if (kind == 3) {                 // impact — expanding ring + spark
     a = softDisc(uv * vec2f(1.0,1.7), .05) * (0.35 + .65*turbulence(uv*6.0+input.seed*31.0));
     rgb = vec3f(0.95, 0.93, 0.86);
-  } else if (kind == 4) {                 // dust — soft brown puff, billowing
-    let n = valueNoise(uv * 3.0 + input.seed * 40.0) * 0.7
-          + valueNoise(uv * 6.5 - input.seed * 12.0) * 0.3;
-    a = softDisc(uv, 0.1) * (0.35 + 0.55 * n) * 0.72;
-    rgb = mix(vec3f(0.52, 0.43, 0.31), vec3f(0.70, 0.62, 0.50), n);
-  } else if (kind == 5) {                 // smoke — dark grey puff, curling up
-    let n = valueNoise(uv * 2.4 + input.seed * 27.0 + vec2f(input.age * 1.5, -input.age * 2.0)) * 0.7
-          + valueNoise(uv * 5.0 + input.seed * 9.0 - vec2f(0.0, input.age * 3.0)) * 0.3;
-    a = softDisc(uv, 0.05) * (0.30 + 0.55 * n) * 0.64;
-    rgb = mix(vec3f(0.12, 0.12, 0.13), vec3f(0.32, 0.31, 0.29), n);
-  } else if (kind == 6) {
-    // Explosion, composited bottom-up: ground dust skirt -> rolling smoke that
-    // lifts and greys as it ages -> orange fireball with a white-hot core that
-    // is spent by ~60% life -> a scatter of bright embers fading to red. Reads
-    // as a battlefield burst rather than an expanding coloured disc.
-    let rise = vec2f(0.0, -input.age * 0.55);
-    let turb = valueNoise(uv * 2.3 + rise * 3.0 + input.seed * 51.0)
-             + valueNoise(uv * 5.1 - rise * 2.0 + input.seed * 17.0) * 0.5;
-    let billow = clamp(turb / 1.5, 0.0, 1.0);
-    let rr = length(uv * vec2f(1.0, 1.12) - rise);
-
-    let fireLife = 1.0 - smoothstep(0.0, 0.55, input.age);
-    let fireBody = (1.0 - smoothstep(0.12, 0.78 + billow * 0.25, rr)) * fireLife;
-    let hotCore = (1.0 - smoothstep(0.0, 0.30, rr)) * fireLife;
-    let fireCol = mix(vec3f(1.0, 0.45, 0.12), vec3f(1.0, 0.93, 0.66), hotCore);
-
-    let smokeLife = smoothstep(0.06, 0.5, input.age) * (1.0 - smoothstep(0.72, 1.0, input.age));
-    let smokeBody = (1.0 - smoothstep(0.15, 0.95, rr)) * (0.35 + 0.65 * billow) * smokeLife;
-    let smokeCol = mix(vec3f(0.16, 0.15, 0.15), vec3f(0.40, 0.35, 0.30), billow);
-
-    let dustLife = 1.0 - smoothstep(0.0, 0.4, input.age);
-    let ground = uv.y + 0.35;
-    let dust = (1.0 - smoothstep(0.2, 1.0, length(vec2f(uv.x * 0.7, ground * 2.4))))
-             * step(ground, 0.35) * dustLife * (0.4 + 0.5 * billow);
-
-    let emberField = valueNoise(uv * 9.0 + input.seed * 120.0);
-    let ember = smoothstep(0.86, 0.98, emberField)
-              * (1.0 - smoothstep(0.2, 0.95, input.age)) * step(0.25, rr);
-    let emberCol = mix(vec3f(1.0, 0.8, 0.3), vec3f(0.9, 0.25, 0.1), input.age);
-
-    var col = vec3f(0.52, 0.44, 0.34);
-    var cov = dust;
-    col = mix(col, smokeCol, smokeBody);
-    cov = max(cov, smokeBody);
-    col = mix(col, fireCol, fireBody);
-    cov = max(cov, fireBody * 1.1);
-    col += emberCol * ember * 1.3;
-    cov = clamp(max(cov, ember), 0.0, 1.0);
-    rgb = clamp(col, vec3f(0.0), vec3f(1.0));
-    a = cov;
   } else if (kind == 7) {                 // target flash — red reticle
     let cross = max(
       step(abs(uv.x), 0.06) * step(abs(uv.y), 0.85),
@@ -286,7 +230,7 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
     let box = max(abs(p.x) * 0.85, abs(p.y) * 2.2);
     a = 1.0 - smoothstep(0.45, 0.82, box);
     rgb = mix(vec3f(0.12, 0.105, 0.085), vec3f(0.28, 0.22, 0.15), input.seed);
-  } else {                                // battle marker — a smouldering smoke plume, no ring or cross
+  } else if (kind == 8) {                  // battle marker — a smouldering smoke plume, no ring or cross
     // A pulsing ring / crossed-blades "X" both read as HUD chrome. A turbulent
     // dark smoke puff with a flickering ember core reads as "fighting here"
     // without borrowing another symbol, and never draws a circle.
@@ -304,7 +248,10 @@ fn combatEffectFragment(input: EffectOut) -> @location(0) vec4f {
     let frame=min(15.0,input.age*15.0);
     let bank=select(0.0,4.0,kind==6);
     let frameA=floor(frame);let frameB=min(15.0,frameA+1.0);
-    let local=clamp(uv*.5+.5,vec2f(.002),vec2f(.998));
+    // Flip the billboard's vertical coordinate: atlas frames are stored top-down.
+    let angle=input.seed*6.2831853;
+    let rotated=vec2f(uv.x*cos(angle)-uv.y*sin(angle),uv.x*sin(angle)+uv.y*cos(angle));
+    let local=clamp(vec2f(rotated.x,-rotated.y)*.5+.5,vec2f(.002),vec2f(.998));
     let uvA=(vec2f(frameA%4.0,floor(frameA/4.0)+bank)+local)/vec2f(4.0,8.0);
     let uvB=(vec2f(frameB%4.0,floor(frameB/4.0)+bank)+local)/vec2f(4.0,8.0);
     let puff=mix(textureSampleLevel(effectAtlas,effectSampler,uvA,0.0),

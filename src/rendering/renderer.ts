@@ -182,10 +182,10 @@ export class WorldRenderer {
   private readonly landUnits: Array<{
     kind: number; family: string; model?: LandModel; layer?: InstanceLayer;
     state: { sourceRevision: number; cameraRevision: number; copyMask?:number }; scratch: Float32Array;
-  }> = ['infantry','armored-car','tank','artillery'].map((family,kind) => ({
-    family, kind, state: { sourceRevision: -1, cameraRevision: -1 }, scratch: new Float32Array(4096*16),
+  }> = ['infantry','armored-car','tank','artillery','transport'].map((family,index) => ({
+    family, kind: index === 4 ? 5 : index, state: { sourceRevision: -1, cameraRevision: -1 }, scratch: new Float32Array(4096*16),
   }));
-  /** One bit per loaded land family; ship keeps its procedural renderer. */
+  /** One bit per loaded model family, including naval transport. */
   private armyModelMode = 0;
   private static readonly ARMY_MARKER_CAPACITY = 1_024;
   private static readonly ARMY_MODEL_CAPACITY = 4_096;
@@ -486,7 +486,6 @@ export class WorldRenderer {
     if (!defaultPlayer) throw new Error('The world has no countries');
     this.playerCountryId = defaultPlayer.id;
     this.camera.configureWorld(this.manifest.world.width, this.manifest.world.height);
-    this.camera.minimumAltitude = this.manifest.terrain.maxHeight + 42;
 
     report('Requesting WebGPU device', 0.1);
     this.adapter = (await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
@@ -532,6 +531,9 @@ export class WorldRenderer {
       barrierBuffer, signBuffer, provinceOwnerData, provinceAdjacencyData, provinceLabelData,
     } = await loadWorldAssetBuffers(this.manifest);
     this.heightData = new Float32Array(heightBuffer);
+    // Keep close inspection above the highest terrain, with a smaller clearance
+    // than the former 42-unit margin.
+    this.camera.minimumAltitude = Math.max(80,this.heightData.reduce((peak,height)=>Math.max(peak,height),0)+24);
     this.roadCenterlines = new Float32Array(roadCenterlineBuffer);
     this.roadNetwork = await fetchWorldJson<CanonicalRoadNetworkMetadata>(this.manifest.sidecars.roadNetwork.url);
     this.provinceData = new Uint16Array(provinceBuffer);
@@ -1389,7 +1391,7 @@ export class WorldRenderer {
         for (let index = 0; index < cappedModels; index += 1) {
           const offset=index*16;
           const flags=modelRecords[offset+6];
-          if(modelRecords[offset+3]<4 && !(flags&16)) {
+          if(modelRecords[offset+3]!==4 && !(flags&16)) {
             const phase=modelRecords[offset+9];activePhases.add(phase);
             const state=landStateForFlags(flags);
             let transition=this.landTransitions.get(phase);
@@ -1452,7 +1454,11 @@ export class WorldRenderer {
       const z = this.armyModelSource[sourceOffset + 1];
       let visible = false;
       for (const copy of WORLD_COPY_INDICES) {
-        if (this.chunkIntersectsView(x + (copy - 1) * worldWidth, z, 12)) {
+        const copyX=x+(copy-1)*worldWidth;
+        const inView=this.armyModelSource[sourceOffset+3]===5
+          ? sphereIntersectsFrustum(this.frustumPlanes,copyX,.35,z,22)
+          : this.chunkIntersectsView(copyX,z,12);
+        if (inView) {
           visible = true;
           state.copyMask |= 1 << copy;
         }
@@ -1498,7 +1504,7 @@ export class WorldRenderer {
   get unitAnimationTime(): number { return this.elapsed; }
 
   landWeaponSocket(kind: number): { point: readonly number[]; scale: number; pivot:readonly number[] } | undefined {
-    const model = this.landUnits[kind]?.model;
+    const model = this.landUnits.find(unit=>unit.kind===kind)?.model;
     return model ? { point: model.fireMuzzle, scale: model.metadata.scale, pivot:model.turretPivot } : undefined;
   }
 
@@ -1701,7 +1707,9 @@ export class WorldRenderer {
     const frameMs = Math.max(0, time - this.previousTime);
     const deltaMs = Math.min(50, frameMs);
     this.previousTime = time;
-    this.elapsed += deltaMs / 1000;
+    // Skeletal clips, network motion and scheduled shots must share real time.
+    // Clamping this clock made recoil lag behind particles on slow frames.
+    this.elapsed += frameMs / 1000;
     this.onFrame?.(this.elapsed);
     this.environment.update(Math.min(frameMs, 250) / 1000, deltaMs / 1000);
     this.notifyTimeOfDayChange();

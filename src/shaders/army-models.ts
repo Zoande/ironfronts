@@ -141,7 +141,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // movement path still read at strategic zoom. Selection/pick hitbox is on the
   // flat marker, not the model, so this does not hurt selectability. Trimmed
   // again this pass (1.95 -> 1.7) to sit closer to the road ribbon width.
-  let scale = select(1.7, 2.15, kind == 5u);
+  // Infantry gets a 1.5x multiplier to match its authored model size.
+  let scale = select(select(1.7, 2.55, kind == 0u), 2.15, kind == 5u);
   var local = (part.center + cube.position * part.halfSize) * scale;
 
   // Marching gait. moveAmt is how far the unit shifted between the last two
@@ -153,7 +154,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // this is a strategic-tempo WW2 campaign, not a real-time skirmish, and a
   // brisk real-life walking pace read as constant background fidgeting at
   // the zoom levels the map is actually played at.
-  let moveAmt = clamp(distance(model.a.xy, model.c.xy) / 3.0, 0.0, 1.0);
+  let moveAmt = select(0.0,1.0,(u32(model.b.z)&2u)!=0u);
   let gait = uniforms.sunTime.w * 4.2 + model.c.x * 0.15;
   if (kind == 0u) {
     local.y += abs(sin(gait)) * 0.13 * scale * moveAmt;
@@ -181,7 +182,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let modelFlags = u32(model.b.z + 0.5);
   if ((modelFlags & 1u) != 0u) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
   // Four authored land families share a single pipeline; missing files retain a fallback.
-  if (kind < 4u && (armyModelParams.mode & (1u << kind)) != 0u) {
+  if (kind < 6u && (armyModelParams.mode & (1u << kind)) != 0u) {
     output.position = vec4f(2.0, 2.0, 2.0, 1.0);
     output.alpha = 0.0;
   }

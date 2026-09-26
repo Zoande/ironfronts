@@ -7,7 +7,7 @@ specific files we actually use are vendored.
 ## Original land army assets
 
 `public/models/land/` contains the project's original Blender-authored infantry,
-armored car, tank and artillery, including rigs, animation, material textures and
+armored car, tank, artillery and transport ship, including rigs, animation, material textures and
 combat effect flipbooks. No third-party model or texture is used by this set.
 Editable sources live in `material/land-armies/`; see
 [the asset guide](../material/land-armies/README.md) for regeneration and budgets.

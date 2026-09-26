@@ -151,8 +151,16 @@ export class CombatEffectPool {
     const impactAt = now + flight;
     this.spawn(EFFECT_KIND.muzzleFlash,x,z,{ ...options,now,dir,lifetimeMs: small ? 65 : 100,
       worldSize: small ? .32 : 1.15 });
-    this.spawn(EFFECT_KIND.projectile,x,z,{ ...options,now,dir,travel: distance,
-      arc: artillery ? Math.min(18,distance*.18) : 0,worldSize: small ? .07 : .16,lifetimeMs: flight });
+    this.spawn(small ? EFFECT_KIND.tracer : EFFECT_KIND.projectile,x,z,{ ...options,now,dir,travel: distance,
+      arc: artillery ? Math.min(18,distance*.18) : 0,worldSize: small ? .22 : .16,lifetimeMs: flight });
+    if (kind === 1) {
+      // Short machine-gun burst; each round has its own muzzle and impact time.
+      for (const delay of [80,160]) {
+        this.spawn(EFFECT_KIND.muzzleFlash,x,z,{...options,now:now+delay,dir,worldSize:.3,lifetimeMs:45});
+        this.spawn(EFFECT_KIND.tracer,x,z,{...options,now:now+delay,dir,travel:distance,worldSize:.2,lifetimeMs:flight});
+        this.spawn(EFFECT_KIND.impact,targetX,targetZ,{now:impactAt+delay,dir,height:.25,worldSize:.35,lifetimeMs:120});
+      }
+    }
     this.spawn(EFFECT_KIND.smoke,x,z,{ ...options,now: now+50,worldSize: small ? .38 : 1.1,
       intensity: .5,lifetimeMs: 700 });
     this.spawn(EFFECT_KIND.impact,targetX,targetZ,{ now: impactAt,dir,height: .2,

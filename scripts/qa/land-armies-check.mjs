@@ -40,6 +40,7 @@ try {
     const {CombatEffectPool}=await import('/src/rendering/combat-effects.ts');
     const {nextLandShot,landMuzzlePosition}=await import('/src/rendering/land-animation.ts');
     const pool=new CombatEffectPool(384);const scheduled=new Map();
+    window.firedFamilies=new Set();
     window.landPool=pool;
     window.landFxTimer=setInterval(()=>{
       for(let i=0;i<8;i++){
@@ -47,6 +48,7 @@ try {
         const shot=nextLandShot(renderer.unitAnimationTime,phase,kind);
         if(shot.at-renderer.unitAnimationTime>.16||scheduled.get(i)===shot.cycle)continue;
         scheduled.set(i,shot.cycle);
+        window.firedFamilies.add(kind);
         const socket=renderer.landWeaponSocket(kind);if(!socket)continue;
         const muzzle=landMuzzlePosition(models[o],models[o+1],models[o+7],socket.point,socket.scale);
         const enemy=(i<4?i+4:i-4)*16;
@@ -62,7 +64,7 @@ try {
     };
     renderer.focus(x,z,100,-.55,.85);renderer.start();
   });
-  await page.waitForTimeout(2500);
+  await page.waitForFunction(()=>window.firedFamilies.size===4,{},{timeout:30000});
   await page.evaluate(()=>window.landRenderer.resetPerformanceSamples());
   await page.waitForTimeout(1500);
   await page.screenshot({path:fileURLToPath(new URL('in-game-close.png',output))});
@@ -71,6 +73,9 @@ try {
       triangles:unit.model?.lods.map(lod=>lod.indexCount/3),socket:unit.model?.fireMuzzle})),
     performance:window.landRenderer.getPerformanceSnapshot(),
     effectsPeak:window.landFxPeak??0,
+    firedFamilies:[...window.firedFamilies],
+    adapter: {vendor:window.landRenderer.adapter.info.vendor,architecture:window.landRenderer.adapter.info.architecture,
+      device:window.landRenderer.adapter.info.device,description:window.landRenderer.adapter.info.description},
   }));
   await page.evaluate(()=>{
     const r=window.landRenderer,m=window.landModels;
@@ -115,8 +120,74 @@ try {
   await page.waitForTimeout(2500);
   report.crowded=await page.evaluate(()=>window.landRenderer.getPerformanceSnapshot());
   await page.screenshot({path:fileURLToPath(new URL('in-game-crowded.png',output))});
+  await page.evaluate(()=>{
+    const r=window.landRenderer,m=window.landModels.slice(0,16);
+    r.landGhosts=[];
+    const ground=r.sampleHeight(m[0],m[1]);
+    m[6]=8;m[7]=Math.PI;m[11]=Math.PI;
+    r.camera.minDistance=10;r.camera.minimumAltitude=ground+12;r.camera.target[1]=ground+1.7;
+    r.setArmyMarkers(new Float32Array(28),0,[],m,1);
+    r.focus(m[0],m[1],16,-.55,1.15);
+  });
+  await page.waitForTimeout(800);
+  await page.screenshot({path:fileURLToPath(new URL('in-game-infantry.png',output))});
+  report.transport=await page.evaluate(()=>{
+    const r=window.landRenderer,[cx,cz]=window.landCenter;
+    r.camera.target[1]=0;r.camera.minimumAltitude=80;r.camera.minDistance=90;
+    let sea;
+    for(let radius=60;radius<=900&&!sea;radius+=40)for(let i=0;i<24&&!sea;i++){
+      const x=cx+Math.cos(i*Math.PI/12)*radius,z=cz+Math.sin(i*Math.PI/12)*radius;
+      if([[0,0],[30,0],[-30,0],[0,30],[0,-30]].every(([dx,dz])=>r.sampleHeight(x+dx,z+dz)<.02&&r.sampleProvince(x+dx,z+dz)===0))sea=[x,z];
+    }
+    if(!sea)throw new Error('No open water found for transport inspection');
+    const [x,z]=sea;
+    const m=new Float32Array([x,z,0x547b80,5,1,1,2,0,0,.27,0,0,x,z-35,12,0]);
+    r.setArmyMarkers(new Float32Array(28),0,[],m,1);r.focus(x,z,55,-.8,.85);
+    window.transportFixture=m;
+    return {position:sea,loaded:!!r.landUnits.find(unit=>unit.family==='transport')?.model};
+  });
+  await page.waitForTimeout(1600);
+  await page.screenshot({path:fileURLToPath(new URL('in-game-transport.png',output))});
+  await page.evaluate(()=>{
+    const r=window.landRenderer,m=window.transportFixture;m[6]=0;m[14]=0;
+    r.setArmyMarkers(new Float32Array(28),0,[],m,1);
+  });
+  await page.waitForTimeout(700);
+  await page.screenshot({path:fileURLToPath(new URL('in-game-transport-idle.png',output))});
+  await page.evaluate(()=>{
+    const r=window.landRenderer,m=new Float32Array(9*16);
+    m.set(window.landModels);m.set(window.transportFixture,8*16);
+    for(let i=0;i<9;i++)m[i*16+6]=0;
+    r.landGhosts=[];r.setPerformanceLayerVisibility({trees:true,buildings:true});
+    r.setArmyMarkers(new Float32Array(28),0,[],m,9);
+    const [x,z]=window.landCenter,ship=window.transportFixture;
+    r.focus((x+ship[0])/2,(z+ship[1])/2,300,-.2,.95);
+  });
+  await page.waitForTimeout(1200);
+  report.combinedVisible=await page.evaluate(()=>window.landRenderer.landUnits.map(unit=>({family:unit.family,count:unit.layer.count})));
+  await page.screenshot({path:fileURLToPath(new URL('in-game-combined.png',output))});
   await page.evaluate(()=>window.landRenderer.dispose());
   await writeFile(new URL('runtime-report.json',output),JSON.stringify({...report,errors},null,2));
+  const views=[
+    ['Infantry: firing pose','infantry-fire.png'],['Original transport','transport.png'],
+    ['Mixed land armies','in-game-close.png'],['Shell impact','in-game-impact.png'],
+    ['Movement','in-game-movement.png'],['Loss animation','in-game-loss.png'],
+    ['400-model scene','in-game-crowded.png'],['Transport underway','in-game-transport.png'],
+    ['Transport stopped','in-game-transport-idle.png'],['Infantry detail inspection','in-game-infantry.png'],
+    ['All five families in the game world','in-game-combined.png'],
+  ];
+  await writeFile(new URL('review.html',output),`<!doctype html><html lang="en"><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1"><title>Ironfronts unit visual review</title>
+    <style>body{margin:0;padding:32px;background:#151b20;color:#eee;font:16px system-ui}main{max-width:1500px;margin:auto}
+    h1{font-size:30px}p{color:#b9c5cc;line-height:1.6}section{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
+    figure{margin:0;background:#222b32;border-radius:8px;overflow:hidden}img{display:block;width:100%;height:auto}figcaption{padding:14px}a{color:#b7d7ed}</style>
+    <main><h1>Army and transport visual review</h1><p>Original Blender assets and captures from the game renderer.
+    All four land types fired during this check; ${errors.length} browser/GPU errors. The scene uses the high graphics preset at 1600 × 1000;
+    trees and buildings are hidden for unit inspection and enabled in the combined view. The infantry detail view uses a closer inspection camera than gameplay.</p>
+    <p>Frame median: ${report.performance.frame.median.toFixed(1)} ms. 400-model median: ${report.crowded.frame.median.toFixed(1)} ms.
+    These local timings are not a guarantee for other devices. <a href="runtime-report.json">Full runtime report</a>.</p>
+    <section>${views.map(([title,file])=>`<figure><a href="${file}"><img loading="lazy" src="${file}" alt="${title}"></a><figcaption>${title}</figcaption></figure>`).join('')}</section></main></html>`);
   console.log(JSON.stringify({loaded:report.loaded,errors},null,2));
-  if(errors.length||!report.effectsPeak||report.loaded.some(unit=>!unit.loaded))process.exitCode=1;
+  if(errors.length||report.firedFamilies.length!==4||!report.effectsPeak||!report.transport.loaded
+    ||report.loaded.some(unit=>!unit.loaded)||report.combinedVisible.some(unit=>!unit.count))process.exitCode=1;
 } finally {await browser.close();}

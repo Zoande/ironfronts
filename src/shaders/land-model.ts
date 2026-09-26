@@ -67,7 +67,8 @@ fn landModelVertex(
   let flags = u32(model.b.z + 0.5);
   let moving = (flags & 2u) != 0u;
   let retreating = (flags & 4u) != 0u;
-  let engaged = (flags & 8u) != 0u;
+  let ship = model.a.w > 4.5;
+  let engaged = (flags & 8u) != 0u && !ship;
   let legTravel = select(0.0, clamp((uniforms.sunTime.w-model.d.w)/max(model.d.z,.0001),0.0,1.0),model.d.z>0.0);
   let travelled = model.c.x + distance(model.d.xy,model.a.xy)*legTravel;
   let phase = model.c.y;
@@ -115,6 +116,15 @@ fn landModelVertex(
     local=pivot+vec3f(offset.x*c-offset.z*s,offset.y,offset.x*s+offset.z*c);
     localNormal=vec3f(localNormal.x*c-localNormal.z*s,localNormal.y,localNormal.x*s+localNormal.z*c);
   }
+  // Low-amplitude sea motion is independent of the propeller animation.
+  if(ship){
+    let seaTime=uniforms.sunTime.w+phase*6.2831853;
+    let roll=sin(seaTime*.85)*.018;let pitch=sin(seaTime*.61)*.009;
+    local=vec3f(local.x*cos(roll)-local.y*sin(roll),local.x*sin(roll)+local.y*cos(roll),local.z);
+    localNormal=vec3f(localNormal.x*cos(roll)-localNormal.y*sin(roll),localNormal.x*sin(roll)+localNormal.y*cos(roll),localNormal.z);
+    local=vec3f(local.x,local.y*cos(pitch)-local.z*sin(pitch)+sin(seaTime*.72)*.055,local.y*sin(pitch)+local.z*cos(pitch));
+    localNormal=vec3f(localNormal.x,localNormal.y*cos(pitch)-localNormal.z*sin(pitch),localNormal.y*sin(pitch)+localNormal.z*cos(pitch));
+  }
   let rotated = vec3f(local.x * cosine - local.z * sine, local.y, local.x * sine + local.z * cosine);
   let rotatedNormal = normalize(vec3f(
     localNormal.x * cosine - localNormal.z * sine,
@@ -122,7 +132,8 @@ fn landModelVertex(
     localNormal.x * sine + localNormal.z * cosine,
   ));
   let centerXZ = mix(model.a.xy, model.d.xy, legTravel) + vec2f(copyOffset, 0.0);
-  let ground = heightAt(centerXZ / uniforms.map.xy);
+  var ground = heightAt(centerXZ / uniforms.map.xy);
+  if(ship){ground=.35+oceanWaveHeight(centerXZ,1.0-bankAt(centerXZ/uniforms.map.xy));}
   let worldPosition = vec3f(centerXZ.x + rotated.x, ground + rotated.y + 0.12, centerXZ.y + rotated.z);
   var output: LandOut;
   output.position = uniforms.viewProjection * vec4f(worldPosition, 1.0);

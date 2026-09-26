@@ -1,27 +1,27 @@
 {
-  "scale": 3.0,
-  "stride": 1.1,
+  "scale": 0.72,
+  "stride": 5.0,
   "muzzle": [
-    -0.22,
-    0.993,
-    1.1
+    0,
+    1.3,
+    12
   ],
-  "kind": "infantry",
+  "kind": "transport",
   "lods": [
     {
       "lod": 0,
-      "triangles": 37540,
-      "vertices": 18958
+      "triangles": 13636,
+      "vertices": 7274
     },
     {
       "lod": 1,
-      "triangles": 15766,
-      "vertices": 8071
+      "triangles": 5726,
+      "vertices": 3314
     },
     {
       "lod": 2,
-      "triangles": 5252,
-      "vertices": 2815
+      "triangles": 1722,
+      "vertices": 1401
     }
   ],
   "clips": {
@@ -58,6 +58,6 @@
       "fps": 30
     }
   },
-  "source": "material/land-armies/infantry.blend",
+  "source": "material/land-armies/transport.blend",
   "authoredBy": "Ironfronts / Codex; original procedural Blender source"
 }

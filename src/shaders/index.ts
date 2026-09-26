@@ -14,3 +14,4 @@ export { rainShader } from './rain';
 export { terrainShader } from './terrain';
 export { waterShader } from './water';
 export { waterwayShader } from './waterways';
+export { landShadowShader } from './land-shadows';

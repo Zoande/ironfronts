@@ -1802,10 +1802,10 @@ function syncArmyMarkers(
         const phase = hashUnit(modelKey);
         const travelled = (landTravel.get(modelKey) ?? 0) + (marching ? Math.min(30, Math.hypot(x-previousX,z-previous.z)) : 0);
         landTravel.set(modelKey, travelled);
-        armyModelScratch[modelCursor + 8] = group.kind === 5 ? previousX : travelled;
-        armyModelScratch[modelCursor + 9] = group.kind === 5 ? previous.z : phase;
+        armyModelScratch[modelCursor + 8] = travelled;
+        armyModelScratch[modelCursor + 9] = phase;
         if (group.kind < 4) {
-          landCombatVisuals.set(modelKey, { armyId: army.id, kind: group.kind, x, z, heading, phase,
+          landCombatVisuals.set(modelKey, { recordOffset: modelCursor, armyId: army.id, kind: group.kind, x, z, heading, phase,
             hullHeading:group.kind===0?heading:stationaryHullHeadings.get(army.id)??heading,
             firing:!marching && (army.status==='engaged'||(group.kind===3 && !!opponent)),targetArmyId:opponent?.id });
         }
@@ -1826,6 +1826,30 @@ function syncArmyMarkers(
       lastArmyLandModels.set(army.id,{records:armyModelScratch.slice(firstModelCursor,modelCursor),at:Date.now()});
     }
   }
+  // Aim at the same visible model used by the shot effects, including across the map seam.
+  const aimTargets = new Map<string, Array<(typeof landCombatVisuals extends Map<string, infer V> ? V : never)>>();
+  for (const visual of landCombatVisuals.values()) {
+    const group = aimTargets.get(visual.armyId) ?? [];
+    group.push(visual);
+    aimTargets.set(visual.armyId, group);
+  }
+  const aimWorldWidth = renderer.manifest?.world.width ?? 0;
+  for (const [key, visual] of landCombatVisuals) {
+    const candidates = visual.targetArmyId ? aimTargets.get(visual.targetArmyId) : undefined;
+    const target = candidates?.find(candidate => candidate.kind === visual.kind) ?? candidates?.[0];
+    if (visual.firing && target) {
+      let dx = target.x - visual.x;
+      if (aimWorldWidth) dx -= Math.round(dx / aimWorldWidth) * aimWorldWidth;
+      visual.heading = Math.atan2(dx, -(target.z - visual.z));
+      armyModelScratch[visual.recordOffset + 7] = visual.heading;
+      if (visual.kind === 0) {
+        armyModelScratch[visual.recordOffset + 11] = previousLandAim.get(key) ?? visual.heading;
+        visual.hullHeading = visual.heading;
+      }
+    }
+    previousLandAim.set(key, visual.heading);
+  }
+  for (const key of previousLandAim.keys()) if (!activeModelKeys.has(key)) previousLandAim.delete(key);
   for(const [id,last] of lastArmyLandModels)if(Date.now()-last.at>10000)lastArmyLandModels.delete(id);
   for (const key of previousArmyModelPositions.keys()) {
     if (!activeModelKeys.has(key)) { previousArmyModelPositions.delete(key); landTravel.delete(key); }
@@ -2682,10 +2706,11 @@ const stationaryHullHeadings=new Map<string,number>();
 const landBombardmentTargets=new Map<string,{target:string;at:number}>();
 const lastArmyLandModels = new Map<string,{records:Float32Array;at:number}>();
 const landCombatVisuals = new Map<string, {
-  armyId: string; kind: number; x: number; z: number; heading: number; phase: number; hullHeading:number; firing:boolean; targetArmyId?:string;
+  recordOffset: number; armyId: string; kind: number; x: number; z: number; heading: number; phase: number; hullHeading:number; firing:boolean; targetArmyId?:string;
 }>();
 const scheduledLandShots = new Map<string, number>();
 const landTravel = new Map<string, number>();
+const previousLandAim = new Map<string, number>();
 
 function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRenderer): void {
   // The renderer already suspends GPU frames for hidden tabs; also stop creating
@@ -2711,11 +2736,15 @@ function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRendere
   if (closeBattle) void audio.playEffectCue('close-battle');
 
   const nowSeconds=renderer.unitAnimationTime;
-  const targetVisuals=new Map<string,(typeof landCombatVisuals extends Map<string,infer V> ? V : never)>();
-  for(const visual of landCombatVisuals.values())if(!targetVisuals.has(visual.armyId))targetVisuals.set(visual.armyId,visual);
+  type Visual=typeof landCombatVisuals extends Map<string,infer V> ? V : never;
+  const targetVisuals=new Map<string,Visual[]>();
+  for(const visual of landCombatVisuals.values()){
+    const group=targetVisuals.get(visual.armyId)??[];group.push(visual);targetVisuals.set(visual.armyId,group);
+  }
   for(const [key,visual] of landCombatVisuals){
     if(!visual.firing || !visual.targetArmyId || !renderer.isWorldPointVisible(visual.x,visual.z,30))continue;
-    const target=targetVisuals.get(visual.targetArmyId);
+    const candidates=targetVisuals.get(visual.targetArmyId);
+    const target=candidates?.find(candidate=>candidate.kind===visual.kind)??candidates?.[0];
     const socket=renderer.landWeaponSocket(visual.kind);
     if(!target||!socket)continue;
     const shot=nextLandShot(nowSeconds,visual.phase,visual.kind);
@@ -2724,7 +2753,11 @@ function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRendere
     const muzzle=landMuzzlePosition(visual.x,visual.z,visual.heading,socket.point,socket.scale,visual.kind===0?[0,0,0]:socket.pivot,visual.hullHeading);
     let targetX=target.x;
     if(worldWidth)targetX-=Math.round((targetX-muzzle.x)/worldWidth)*worldWidth;
-    combatEffects.spawnWeaponShot(visual.kind,muzzle.x,muzzle.z,targetX,target.z,{
+    // Hit the facing edge of a vehicle instead of burying every burst under its hull.
+    const dx=muzzle.x-targetX,dz=muzzle.z-target.z,range=Math.hypot(dx,dz);
+    const radius=target.kind===2?2.6:target.kind===1?1.8:target.kind===3?1.2:.25;
+    const offset=Math.min(radius,range*.25)/Math.max(.001,range);
+    combatEffects.spawnWeaponShot(visual.kind,muzzle.x,muzzle.z,targetX+dx*offset,target.z+dz*offset,{
       now:now+(shot.at-nowSeconds)*1000,height:muzzle.height,
     });
   }

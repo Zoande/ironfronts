@@ -41,8 +41,8 @@ def textures():
     for i,c in enumerate(COLORS):
         y,x = divmod(i,4)
         noise = rng.normal(0,1,(tile,tile)).astype(np.float32)
-        broad = np.sin(xx*.047 + np.sin(yy*.029))*np.cos(yy*.039)*.018
-        weave = (np.sin(xx*math.pi*.5)*np.sin(yy*math.pi*.5))*.018
+        broad = np.sin(xx*.047 + np.sin(yy*.029))*np.cos(yy*.039)*.008
+        weave = (np.sin(xx*math.pi*.5)*np.sin(yy*math.pi*.5))*.006
         detail = noise*.013 + broad
         if i in (0,1,12,14): detail += weave
         if i==5: detail += np.sin(xx*.12 + np.sin(yy*.018)*2)*.025
@@ -192,24 +192,24 @@ def infantry():
         limb(side+' trouser thigh',hip,knee,[(0,.091),(.15,.10),(.38,.102),(.65,.082),(.88,.071),(1,.067)],0,side+'Thigh')
         limb(side+' trouser calf',knee,ankle,[(0,.071),(.18,.074),(.4,.077),(.65,.063),(.83,.050),(1,.047)],0,side+'Shin')
         ellipsoid(side+' knee cloth',(s*.105,-.019,.515),(.067,.059,.059),0,side+'Thigh')
-        box(side+' boot sole',(s*.105,-.047,.036),(.14,.28,.04),7,side+'Foot',.018)
-        ellipsoid(side+' boot vamp',(s*.105,-.065,.083),(.069,.138,.059),2,side+'Foot')
+        loft(side+' boot sole',[(s*.105,-.047,.018,.065,.133),(s*.105,-.047,.045,.069,.138),(s*.105,-.047,.058,.067,.134)],7,side+'Foot',28)
+        loft(side+' boot vamp',[(s*.105,-.047,.044,.066,.133),(s*.105,-.047,.071,.067,.133),(s*.105,-.042,.105,.060,.123),(s*.105,-.016,.145,.054,.083),(s*.105,.005,.18,.050,.051)],2,side+'Foot',28)
         loft(side+' boot ankle',[(s*.105,.015,.08,.06,.072),(s*.105,.01,.15,.055,.054),(s*.105,0,.245,.052,.050)],2,side+'Shin',20)
         for j in range(5):
             strap(side+' boot lace',[(s*.105-.027,-.05,.125+j*.015),(s*.105+.027,-.05,.132+j*.015)],.006,.004,1,side+'Shin')
-        limb(side+' wool sleeve',shoulder,elbow,[(0,.073),(.15,.079),(.45,.073),(.8,.061),(1,.055)],0,side+'Arm')
-        ellipsoid(side+' shoulder seam',(s*.18,0,1.399),(.075,.072,.073),0,side+'Arm')
-        limb(side+' forearm sleeve',elbow,wrist,[(0,.057),(.2,.062),(.55,.055),(.85,.043),(1,.039)],0,side+'Forearm')
+        limb(side+' wool sleeve',shoulder,elbow,[(0,.067),(.15,.069),(.35,.065),(.55,.068),(.76,.056),(.88,.059),(1,.052)],0,side+'Arm')
+        ellipsoid(side+' shoulder seam',(s*.18,0,1.399),(.066,.063,.066),0,side+'Arm')
+        limb(side+' forearm sleeve',elbow,wrist,[(0,.052),(.15,.055),(.3,.052),(.46,.056),(.66,.047),(.80,.044),(.9,.046),(1,.037)],0,side+'Forearm')
         ellipsoid(side+' palm',(s*.238,-.245,.945),(.038,.032,.052),3,side+'Hand')
         for j in range(4):
             ellipsoid(side+' finger '+str(j),(s*(.216+j*.013),-.255,.913),(.008,.014,.028),3,side+'Hand',12,8)
         ellipsoid(side+' thumb',(s*.199,-.246,.95),(.016,.019,.030),3,side+'Hand',12,8)
     loft('Tailored wool tunic',[(0,0,.84,.158,.104),(0,0,.94,.157,.106),(0,0,1.01,.144,.102),
-        (0,0,1.10,.148,.105),(0,0,1.22,.184,.114),(0,0,1.34,.199,.114),(0,0,1.405,.190,.096),(0,0,1.44,.085,.072)],0,'Chest',32)
+        (0,0,1.10,.148,.105),(0,0,1.22,.184,.114),(0,0,1.34,.184,.106),(0,0,1.405,.179,.096),(0,0,1.455,.071,.066)],0,'Chest',32)
     loft('Trouser seat',[(0,0,.81,.125,.098),(0,0,.9,.157,.102),(0,0,.97,.151,.102)],0,'Pelvis',28)
-    cylinder('Neck',(0,0,1.415),(0,0,1.515),.057,3,'Head')
+    cylinder('Neck',(0,.006,1.445),(0,.006,1.51),.050,3,'Head')
     # Face with cheekbones, jaw, brow and nose rather than a spherical head.
-    loft('Head anatomy',[(0,-.018,1.48,.036,.037),(0,-.023,1.50,.052,.049),
+    loft('Head anatomy',[(0,-.026,1.482,.042,.037),(0,-.020,1.51,.059,.051),
         (0,-.006,1.54,.066,.065),(0,.002,1.585,.076,.079),(0,.006,1.63,.074,.077),
         (0,.011,1.68,.069,.075),(0,.012,1.72,.049,.056),(0,.012,1.735,.013,.021)],3,'Head',32)
     ellipsoid('Nose bridge',(0,-.076,1.579),(.012,.019,.030),3,'Head',16,10)
@@ -227,7 +227,7 @@ def infantry():
         (0,.014,1.70,.091,.105),(0,.012,1.74,.073,.085),(0,.01,1.764,.041,.05),(0,.01,1.772,.005,.006)],6,'Head',40)
     loft('Rolled helmet rim',[(0,.012,1.642,.102,.119),(0,.012,1.649,.105,.12),(0,.012,1.655,.10,.114)],8,'Head',40)
     for s in [-1,1]:
-        box('Collar',(s*.047,-.065,1.428),(.058,.037,.037),14,'Chest',.009)
+        box('Collar',(s*.043,-.062,1.445),(.055,.037,.038),14,'Chest',.009)
         box('Breast pocket',(s*.088,-.107,1.28),(.068,.025,.095),0,'Chest',.008)
         box('Pocket flap',(s*.088,-.125,1.312),(.073,.013,.029),14,'Chest',.005)
         strap('Webbing brace',[(s*.105,-.115,1.0),(s*.155,-.112,1.32),(s*.153,0,1.44),(s*.115,.121,1.08)],.032,.012,1,'Chest')
@@ -257,7 +257,7 @@ def infantry():
     ellipsoid('Bolt knob',(-.277,-.36,.984),(.010,.010,.01),4,'Weapon',12,8)
     box('Front sight',(-.22,-1.055,1.011),(.014,.021,.025),8,'Weapon',.002)
     strap('Rifle sling',[(-.22,-.12,.913),(-.22,-.45,.87),(-.22,-.88,.946)],.016,.004,2,'Weapon')
-    return rig(bones), {'scale':2.0,'stride':3.2,'muzzle':[-.22,.993,1.10]}
+    return rig(bones), {'scale':2.0,'stride':1.1,'muzzle':[-.22,.993,1.10]}
 
 def wheel(name,x,y,z,radius,width,bone,tracked=False):
     cylinder(name+' tire',(x-width/2,y,z),(x+width/2,y,z),radius,7,bone,32)
@@ -377,6 +377,93 @@ def vehicle(kind):
     bones[4]=('Muzzle',(muzzle[0],-muzzle[2],muzzle[1]),(muzzle[0],-muzzle[2]-.15,muzzle[1]),'Gun')
     return rig(bones),{'scale':2.0,'stride':2.8 if car else 2.2,'muzzle':muzzle}
 
+def transport_ship():
+    """Original coastal troop/cargo transport: curved hull, working deck and bridge."""
+    bones=[('Root',(0,0,0),(0,0,1),None),('Hull',(0,0,0),(0,0,1),'Root'),
+           ('Propeller',(0,10,-.35),(0,11,-.35),'Hull'),
+           ('Muzzle',(0,-12,1.3),(0,-13,1.3),'Hull')]
+    stations=[(-13,.05),(-12,.65),(-10,1.8),(-7,2.5),(-3,2.7),(3,2.7),(8,2.5),(11,1.8),(12,1.2)]
+    vertices=[];faces=[]
+    for y,w in stations:
+        sheer=.22*(abs(y)/13)**3
+        for x,z in [(-w,1.35+sheer),(-w*.92,.1),(-w*.60,-.65),(0,-.95),(w*.60,-.65),(w*.92,.1),(w,1.35+sheer)]:
+            vertices.append((x,y,z))
+    for j in range(len(stations)-1):
+        for k in range(6):
+            a=j*7+k;faces.append((a,a+7,a+8,a+1))
+    faces.extend([tuple(range(7)),tuple(reversed(range((len(stations)-1)*7,len(stations)*7)))])
+    mesh=bpy.data.meshes.new('Riveted displacement hull');mesh.from_pydata(vertices,[],faces);mesh.update()
+    ob=bpy.data.objects.new('Transport shaped steel hull',mesh);bpy.context.collection.objects.link(ob)
+    bpy.ops.object.select_all(action='DESELECT');ob.select_set(True);bpy.context.view_layer.objects.active=ob
+    bevel=ob.modifiers.new('Rounded plating seams','BEVEL');bevel.width=.075;bevel.segments=3
+    bpy.ops.object.modifier_apply(modifier=bevel.name)
+    for poly in ob.data.polygons:poly.use_smooth=True
+    finish(ob,ob.name,6,'Hull')
+    # A deck follows the same sheer and planform; it is not a rectangular slab.
+    deck=[]
+    for y,w in stations:deck.extend([(-w,y,1.36+.22*(abs(y)/13)**3),(w,y,1.36+.22*(abs(y)/13)**3)])
+    dm=bpy.data.meshes.new('Shaped weather deck');dm.from_pydata(deck,[],[(j*2,j*2+1,j*2+3,j*2+2) for j in range(len(stations)-1)]);dm.update()
+    ob=bpy.data.objects.new('Weather deck',dm);bpy.context.collection.objects.link(ob)
+    bpy.ops.object.select_all(action='DESELECT');ob.select_set(True);bpy.context.view_layer.objects.active=ob;finish(ob,ob.name,8,'Hull')
+    for side in [-1,1]:
+        # Hull rubbing strakes, deck rails with open spaces and individual stanchions.
+        for (y,w),(yn,wn) in zip(stations,stations[1:]):
+            for z in [.18,1.27]:cylinder('Hull rubbing strake',(side*w,y,z),(side*wn,yn,z),.045,8,'Hull',8)
+            if abs(y)<12:
+                count=max(1,round((yn-y)/1.3))
+                for i in range(count):
+                    t=i/count;px=side*(w+(wn-w)*t);py=y+(yn-y)*t
+                    cylinder('Rail stanchion',(px,py,1.42),(px,py,2.15),.025,12,'Hull',8)
+                for z in [1.77,2.14]:cylinder('Deck guardrail',(side*w,y,z),(side*wn,yn,z),.019,12,'Hull',8)
+        for y in [-8,-5,0,3,8]:
+            cylinder('Bollard post',(side*1.9,y,1.4),(side*1.9,y,1.77),.085,8,'Hull',12)
+            cylinder('Bollard crossbar',(side*1.72,y,1.68),(side*2.08,y,1.68),.06,8,'Hull',12)
+        # Rounded lifeboats sit in cradles, with thwarts and davit suspension.
+        for y in [4.3]:
+            boat=loft('Clinker lifeboat',[(side*2.0,y,2.08,.12,1.4),(side*2.0,y,2.27,.40,1.7),(side*2.0,y,2.6,.48,1.82)],5,'Hull',32)
+            box('Lifeboat interior',(side*2,y,2.60),(.67,2.65,.035),8,'Hull',.06)
+            for by in [-.85,0,.85]:box('Lifeboat thwart',(side*2,y+by,2.65),(.80,.18,.055),5,'Hull',.02)
+            for by in [-1.25,1.25]:
+                cylinder('Davit upright',(side*1.30,y+by,1.4),(side*1.30,y+by,3.45),.065,12,'Hull',12)
+                cylinder('Davit arm',(side*1.30,y+by,3.45),(side*2.0,y+by,3.50),.06,12,'Hull',12)
+                cylinder('Lifeboat falls',(side*2.0,y+by,3.50),(side*2.0,y+by,2.60),.016,1,'Hull',8)
+    # Raised accommodation, bridge windows, doors and a canvas-covered cargo hatch.
+    box('Accommodation block',(0,2.0,2.25),(3.25,5.0,1.7),12,'Hull',.12)
+    box('Bridge wheelhouse',(0,-.4,3.7),(3.55,2.15,1.4),12,'Hull',.10)
+    box('Bridge roof',(0,-.4,4.45),(3.85,2.45,.16),6,'Hull',.04)
+    for x in [-1.25,-.62,0,.62,1.25]:box('Forward bridge glazing',(x,-1.49,3.86),(.47,.035,.62),10,'Hull',.025)
+    for side in [-1,1]:
+        for y in [-.95,-.3,.35]:box('Side bridge glazing',(side*1.79,y,3.85),(.03,.48,.61),10,'Hull',.02)
+        for y in [.3,1.3,2.3,3.3]:
+            cylinder('Porthole rim',(side*1.63,y,2.45),(side*1.69,y,2.45),.16,9,'Hull',20)
+            cylinder('Porthole glass',(side*1.69,y,2.45),(side*1.70,y,2.45),.115,10,'Hull',20)
+        box('Watertight door',(side*1.64,4.0,2.08),(.05,.65,1.25),6,'Hull',.04)
+        for z in [1.9,2.25]:box('Door hinge',(side*1.69,3.72,z),(.06,.09,.12),8,'Hull',.015)
+        box('Faction identification panel',(side*1.65,1.5,2.05),(.025,.65,.28),15,'Hull',.01)
+    for y,length in [(-5.9,4.2),(8.2,3.8)]:
+        box('Cargo hatch coaming',(0,y,1.64),(3.25,length,.48),6,'Hull',.08)
+        box('Canvas hatch cover',(0,y,1.9),(3.27,length,.10),1,'Hull',.04)
+        for off in [-1.1,0,1.1]:box('Hatch securing batten',(off,y,1.98),(.07,length,.04),8,'Hull',.01)
+    cylinder('Funnel',(0,2.1,3.07),(0,2.1,5.0),.55,6,'Hull',32)
+    cylinder('Funnel cap',(0,2.1,4.85),(0,2.1,5.1),.60,8,'Hull',32)
+    cylinder('Dark funnel opening',(0,2.1,5.10),(0,2.1,5.12),.45,7,'Hull',32)
+    for y in [-3.2,6]:
+        cylinder('Cargo mast',(0,y,1.4),(0,y,6.4),.085,12,'Hull',16,r2=.055)
+        cylinder('Cargo boom',(0,y,2.2),(0,y-2.8,4.5),.075,12,'Hull',12)
+        cylinder('Boom stay',(0,y,6.2),(0,y-2.8,4.5),.015,8,'Hull',8)
+        cylinder('Cargo lifting fall',(0,y-2.8,4.5),(0,y-2.8,2.1),.014,8,'Hull',8)
+        for side in [-1,1]:cylinder('Mast shroud',(0,y,6.1),(side*1.45,y+.8,1.5),.013,8,'Hull',8)
+    for y in [-10,10]:
+        cylinder('Winch drum',(-.5,y,1.7),(.5,y,1.7),.22,8,'Hull',20)
+        box('Winch foundation',(0,y,1.48),(1.2,.65,.18),6,'Hull',.05)
+    for i in range(12):box('Bridge access stair',(1.92,1.4-i*.13,1.5+i*.14),(.42,.17,.06),8,'Hull',.01)
+    cylinder('Propeller shaft',(0,9,-.35),(0,11.4,-.35),.07,8,'Hull',16)
+    for i in range(3):
+        angle=i*math.tau/3
+        ob=ellipsoid('Bronze propeller blade',(.35*math.sin(angle),11.5,-.35+.35*math.cos(angle)),(.15,.045,.42),9,'Propeller',16,10)
+        ob.rotation_euler.y=angle
+    return rig(bones),{'scale':.72,'stride':5.0,'muzzle':[0,1.3,12]}
+
 def animate(arm,kind):
     clips={'Idle':(60,2),'Walk':(30,1),'Reverse':(36,1.2),'Fire':(90,3),
            'Reload':(90,3),'Deploy':(45,1.5),'Death':(60,2),'Run':(24,.8)}
@@ -389,15 +476,18 @@ def animate(arm,kind):
 
     def arms(aim,kick=0,reload=0):
         # Analytic two-bone IK, baked to the rig. Both hands support the rifle.
-        z=.99+aim*.37
-        offset=Vector((.10,0,z-.97))
+        z=1.04+aim*.41
         weapon=arm.pose.bones['Weapon']
-        weapon.matrix=Matrix.Translation(offset+Vector((0,kick*.025,0))) @ arm.data.bones['Weapon'].matrix_local
+        rest=arm.data.bones['Weapon'].matrix_local
+        pivot=rest.translation
+        angle=(1-aim)*.34+reload*.12
+        transform=Matrix.Translation(Vector((-.14+aim*.05,-.20+kick*.035,z))) @ Matrix.Rotation(angle,4,'X') @ Matrix.Translation(-pivot)
+        weapon.matrix=transform @ rest
         bpy.context.view_layer.update()
-        for side,s,y in [('R',-1,-.25),('L',1,-.51)]:
+        for side,s,y in [('R',-1,-.25),('L',1,-.43)]:
             shoulder=Vector((s*.195,0,1.405))
-            wrist=Vector((-.12,y,z-.02))
-            if side=='R':wrist+=Vector((-.03*reload,.10*reload,-.09*reload))
+            wrist=transform @ Vector((-.22,y,.945))
+            if side=='R':wrist+=Vector((-.025*reload,-.08*reload,.085*reload))
             upper=arm.data.bones[side+'Arm'].length;lower=arm.data.bones[side+'Forearm'].length
             delta=wrist-shoulder;d=min(delta.length,upper+lower-.002);axis=delta.normalized()
             along=(upper*upper-lower*lower+d*d)/(2*d)
@@ -411,7 +501,7 @@ def animate(arm,kind):
     # Sample poses at export cadence so the GLB needs no runtime IK or constraints.
     for name,(last,duration) in clips.items():
         action=bpy.data.actions.new(name);arm.animation_data_create();arm.animation_data.action=action
-        for f in range(0,last+1,3):
+        for f in range(0,last+1):
             t=f/last;wave=math.sin(t*math.tau)
             for p in arm.pose.bones:p.rotation_euler=(0,0,0);p.location=(0,0,0)
             if kind=='infantry':
@@ -425,13 +515,25 @@ def animate(arm,kind):
                     arm.pose.bones['Pelvis'].location.y=abs(wave)*.018
                     arm.pose.bones['Chest'].rotation_euler.y=wave*.025
                 aim=min(1,t*3) if name=='Deploy' else 1 if name in ('Fire','Reload') else .22
-                kick=max(0,1-abs(t-.14)/.045) if name=='Fire' else 0
-                arms(aim,kick,math.sin(t*math.pi) if name=='Reload' else 0)
+                kick=(math.exp(-max(0,t-.14)*38) if .14<=t<.35 else 0) if name=='Fire' else 0
+                bolt=math.sin(max(0,min(1,(t-.32)/.42))*math.pi) if name=='Fire' else 0
+                arms(aim,kick,math.sin(t*math.pi) if name=='Reload' else bolt*.65)
                 arm.pose.bones['Head'].rotation_euler.x=aim*.08
+                arm.pose.bones['Head'].location.x=-aim*.025
                 if name=='Idle':arm.pose.bones['Chest'].rotation_euler.x=wave*.006
                 if name=='Death':
-                    arm.pose.bones['Root'].rotation_euler.x=min(1,t*1.5)*1.4
+                    buckle=math.sin(math.pi*min(1,t*1.4))
+                    for side in ['L','R']:
+                        arm.pose.bones[side+'Thigh'].rotation_euler.x=buckle*.30
+                        arm.pose.bones[side+'Shin'].rotation_euler.x=-buckle*.65
+                    arm.pose.bones['Root'].rotation_euler.x=max(0,min(1,(t-.08)*1.7))*1.4
                     arm.pose.bones['Root'].location.y=-min(1,t*1.5)*.12
+            elif kind=='transport':
+                if name in ('Walk','Reverse','Run'):
+                    arm.pose.bones['Propeller'].rotation_euler.y=t*math.tau*3*(-1 if name=='Reverse' else 1)
+                if name=='Death':
+                    arm.pose.bones['Hull'].rotation_euler.y=t*.22
+                    arm.pose.bones['Hull'].location.y=-t*1.3
             else:
                 if name in ('Walk','Reverse','Run'):
                     sign=-1 if name=='Reverse' else 1
@@ -450,8 +552,9 @@ def animate(arm,kind):
                             p.location=rest.matrix_local.to_3x3().inverted() @ (Vector((s*1.25,y,z))-rest.head_local)
                     arm.pose.bones['Hull'].rotation_euler.x=wave*.008
                 if name=='Fire':
-                    kick=max(0,1-abs(t-.14)/.065)
-                    arm.pose.bones['Gun'].location.y=-kick*.20
+                    kick=math.exp(-max(0,t-.14)*24) if .14<=t<.42 else 0
+                    if kind=='armored-car':kick=max(math.exp(-(t-shot)*60) if shot<=t<shot+.10 else 0 for shot in [.14,.1933,.2467])*.3
+                    arm.pose.bones['Gun'].location.y=-kick*.24
                     arm.pose.bones['Hull'].rotation_euler.x=kick*.017
                 if kind=='artillery' and name in ('Walk','Reverse','Run','Deploy'):
                     blend=1-t if name=='Deploy' else 1
@@ -475,11 +578,11 @@ def preview(mesh,arm,kind):
     bpy.ops.mesh.primitive_plane_add(size=200)
     floor=bpy.context.object;floor.name='Preview floor'
     mat=bpy.data.materials.new('Preview floor');mat.diffuse_color=(.105,.12,.13,1);floor.data.materials.append(mat)
-    scale=1 if kind=='infantry' else 3.0
+    scale=1 if kind=='infantry' else 10 if kind=='transport' else 3.0
     target=Vector((0,0,.9 if kind=='infantry' else 1))
     bpy.ops.object.camera_add(location=(2.7*scale,-4.4*scale,2.35*scale))
     camera=bpy.context.object;camera.rotation_euler=(target-camera.location).to_track_quat('-Z','Y').to_euler()
-    camera.data.type='ORTHO';camera.data.ortho_scale=2.22 if kind=='infantry' else 7.6
+    camera.data.type='ORTHO';camera.data.ortho_scale=2.22 if kind=='infantry' else 31 if kind=='transport' else 7.6
     scene.camera=camera
     for loc,power,size in [((-3,-4,6),550,4),((4,-1,3),220,3),((0,4,5),700,3)]:
         bpy.ops.object.light_add(type='AREA',location=tuple(v*scale for v in loc))
@@ -503,12 +606,15 @@ def build(kind):
     for action in list(bpy.data.actions):bpy.data.actions.remove(action)
     PARTS=[];DETAILS=[]
     if MAT is None:MAT=textures()
-    arm,metadata=infantry() if kind=='infantry' else vehicle(kind)
+    arm,metadata=infantry() if kind=='infantry' else transport_ship() if kind=='transport' else vehicle(kind)
     if kind=='infantry':
         # Unite the tailored garment across shoulders, elbows and knees. Preserve
         # softly blended skin weights rather than leaving visible primitive seams.
         cloth=[ob for ob in PARTS if any(word in ob.name.lower() for word in
                ['trouser','wool sleeve','forearm sleeve','tailored wool','shoulder seam','knee cloth'])]
+        # Limb lofts are positioned after creation. Flush their transforms before
+        # sampling bind weights, otherwise shoulders use stale local coordinates.
+        bpy.context.view_layer.update()
         samples=[]
         for ob in cloth:
             group=ob.vertex_groups[0].name
@@ -521,20 +627,21 @@ def build(kind):
         bpy.context.view_layer.objects.active=cloth[0];bpy.ops.object.join()
         ob=bpy.context.object
         bpy.ops.object.transform_apply(location=True,rotation=True,scale=True)
-        remesh=ob.modifiers.new('Continuous garment','REMESH');remesh.mode='VOXEL';remesh.voxel_size=.007
+        remesh=ob.modifiers.new('Continuous garment','REMESH');remesh.mode='VOXEL';remesh.voxel_size=.0055
         bpy.ops.object.modifier_apply(modifier=remesh.name)
-        smooth=ob.modifiers.new('Relax tailored cloth','SMOOTH');smooth.factor=.9;smooth.iterations=4
+        smooth=ob.modifiers.new('Relax tailored cloth','SMOOTH');smooth.factor=.6;smooth.iterations=3
         bpy.ops.object.modifier_apply(modifier=smooth.name)
-        dec=ob.modifiers.new('Garment topology budget','DECIMATE');dec.ratio=.19
+        dec=ob.modifiers.new('Garment topology budget','DECIMATE');dec.ratio=.16
         bpy.ops.object.modifier_apply(modifier=dec.name)
         ob.vertex_groups.clear()
         groups={name:ob.vertex_groups.new(name=name) for name in sorted(set(g for _,g in samples))}
         for v in ob.data.vertices:
             weights={}
-            for _,i,d in tree.find_n(v.co,8):
+            for _,i,d in tree.find_n(v.co,24):
                 group=samples[i][1];weights[group]=weights.get(group,0)+1/max(.005,d)**2
-            total=sum(weights.values())
-            for name,weight in sorted(weights.items(),key=lambda pair:-pair[1])[:4]:groups[name].add([v.index],weight/total,'REPLACE')
+            strongest=sorted(weights.items(),key=lambda pair:-pair[1])[:4]
+            total=sum(weight for _,weight in strongest)
+            for name,weight in strongest:groups[name].add([v.index],weight/total,'REPLACE')
         for p in ob.data.polygons:p.use_smooth=True
         bpy.ops.object.mode_set(mode='EDIT');bpy.ops.mesh.select_all(action='SELECT');bpy.ops.uv.smart_project(island_margin=.01);bpy.ops.object.mode_set(mode='OBJECT')
         for loop in ob.data.uv_layers.active.data:loop.uv=((.025+loop.uv.x*.95)/4,(.025+loop.uv.y*.95)/4)
@@ -574,4 +681,4 @@ def build(kind):
     print('IRONFRONTS_ASSET '+json.dumps(metadata),flush=True)
 
 args=sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else []
-for kind in args or ['infantry','armored-car','tank','artillery']:build(kind)
+for kind in args or ['infantry','armored-car','tank','artillery','transport']:build(kind)
