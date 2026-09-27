@@ -1120,12 +1120,14 @@
 .ifg-army-panel__health .ifg-army-panel__eyebrow { align-self: flex-start; margin-bottom: 5px; }
 .ifg-army-panel__health-value {
   align-self: flex-start;
-  margin-bottom: 5px;
+  margin-bottom: 0;
   font-family: var(--ifg-serif);
   font-size: 22px;
   line-height: 1;
   color: var(--ifg-brass-lit);
 }
+.ifg-army-panel__health-numbers { align-self: stretch; display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 5px; }
+.ifg-army-panel__health-hp { color: var(--ifg-dim); font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ifg-army-panel__health-track {
   display: block;
   width: 100%;
@@ -1256,7 +1258,7 @@
 .ifg-army-panel__units.is-dense { grid-template-columns: repeat(auto-fill, minmax(58px, 78px)); }
 .ifg-army-panel__units.is-dense .ifg-army-unit { grid-template-rows: 52px auto 4px; }
 .ifg-army-panel__units.is-dense .ifg-army-unit__visual { height: 52px; }
-.ifg-army-panel__report { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+.ifg-army-panel__report { display: block; overflow-y: auto; overscroll-behavior: contain; padding: 10px 12px; }
 .ifg-army-panel__stats > .ifg-army-panel__eyebrow,
 .ifg-army-panel__activity > .ifg-army-panel__eyebrow { margin-bottom: 6px; }
 /* Scroll rather than clip when the combat-profile table + Speed/Troops meta
@@ -1317,10 +1319,10 @@
 }
 .ifg-army-panel__stance-icon { width: 18px; height: 18px; }
 .ifg-army-panel__activity {
-  height: 100%;
+  height: auto;
   box-sizing: border-box;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   overscroll-behavior: contain;
   padding-top: 0;
 }
@@ -1355,7 +1357,7 @@
   background: transparent;
   filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .52));
 }
-.ifg-army-panel__activity--combat { overflow: hidden; }
+.ifg-army-panel__activity--combat { overflow: visible; }
 .ifg-battle__header {
   display: flex;
   align-items: center;
@@ -1434,36 +1436,15 @@
 .ifg-battle-side.is-inactive .ifg-battle-side__health { border-color: rgba(145, 145, 135, .32); }
 .ifg-battle-side.is-inactive .ifg-battle-side__health i { background: #77786f; box-shadow: none; }
 .ifg-battle__header.is-inactive { opacity: .72; }
-.ifg-battle__live {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 10px;
-  margin-top: 7px;
-  color: #d8ccb2;
-  font-size: 10px;
-  line-height: 1.3;
-  font-variant-numeric: tabular-nums;
+.ifg-battle__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin-top: 6px; }
+.ifg-battle__stat {
+  min-width: 0; min-height: 22px; display: flex; align-items: center; justify-content: center; gap: 3px;
+  padding: 2px 3px; border: 1px solid var(--ifg-rule-soft); background: rgba(9, 11, 8, .3);
+  color: #d8ccb2; font-size: 9px; font-variant-numeric: tabular-nums; cursor: help;
 }
-.ifg-battle__modifiers {
-  margin-top: 6px;
-  overflow: hidden;
-  color: var(--ifg-dim);
-  font-size: 9.5px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ifg-battle__meta {
-  min-width: 0;
-  display: flex;
-  justify-content: space-between;
-  gap: 7px;
-  margin-top: 6px;
-  color: var(--ifg-dim);
-  font-size: 9.5px;
-  letter-spacing: 0.02em;
-}
-.ifg-battle__meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ifg-battle__stat .ifg-icon { width: 12px; height: 12px; color: var(--ifg-brass); }
+.ifg-battle__stat b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ifg-battle__stat:focus-visible { outline: 1px solid var(--ifg-brass-lit); }
 
 .ifg-command-dialog {
   width: min(440px, calc(100vw - 32px));
@@ -1892,7 +1873,7 @@
 @media (max-width: 860px) {
   .ifg-topbar__country-name { display: none; }
   .ifg-topbar__resources { gap: 7px; }
-  .ifg-army-panel { width: calc(100vw - 24px); height: clamp(210px, 29dvh, 300px); max-height: calc(100dvh - 72px); bottom: 12px; }
+  .ifg-army-panel { width: calc(100vw - 24px); height: 244px; max-height: calc(100dvh - 72px); bottom: 12px; }
   .ifg-army-panel__body { grid-template-columns: 130px minmax(270px, 1fr) 200px; }
   .ifg-army-panel__units { grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); }
 }

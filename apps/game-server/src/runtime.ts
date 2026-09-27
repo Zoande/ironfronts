@@ -172,7 +172,7 @@ export class GameRuntime {
       lastGraphNodeId: null,
       suspendedOrder: null, battleFrontIds: [], retreat: null,
       artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null, transport: null,
-      entrenchment: 0, stance: 'attack-defend', inSupply: true,
+      stance: 'attack-defend', inSupply: true,
     };
     this.session.refreshDerivedState();
     return { ok: true, message: `${definition.name} spawned for country ${countryId} in province ${provinceId}.` };

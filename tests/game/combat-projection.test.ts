@@ -24,7 +24,6 @@ function context(): SimContext {
   };
   const defenders = army('defenders', 2, 100, 0);
   defenders.stance = 'defend';
-  defenders.entrenchment = 30;
   const graph = buildLandGraph(new Float32Array([100, 100, 200, 100, 1, 0, 0, 0]), 1_000, 500);
   const world: WorldData = {
     width: 1_000, height: 500, provinces: [],
@@ -88,7 +87,7 @@ describe('authoritative combat projection', () => {
       frontageUsed: 4,
       frontageLimit: 10,
       coordination: 0.5,
-      protection: 0.68,
+      protection: 0.8,
     });
   });
 });

@@ -26,10 +26,9 @@ import type { GameState, ResourceNodeState } from './game-state';
 import type { WorldData } from './world-data';
 import type { ArmyStack, ArmyStatus, ArmyStance } from './units/army';
 import {
-  stackBaseSpeed, stackHealthFraction, stackHp, stackUnitCount,
+  stackBaseSpeed, stackHealthFraction, stackHp, stackMaxHp, stackUnitCount,
 } from './units/army';
 import { unitType } from './units/unit-catalog';
-import { ENTRENCHMENT_MAX } from './combat/constants';
 import { calculateFrontDamageRates, type CombatRateModifiers } from './combat';
 import { armySupplyPlan, supplyEffectiveness, supplyRefillMultiplier, supplyShortfalls } from './combat/supply';
 import { armyParticipatesInFront } from './combat/membership';
@@ -67,8 +66,8 @@ export interface PlayerArmyView {
   readonly composition: {
     readonly unitCount: number;
     readonly health: number;
-    /** Entrenchment, 0..1 of max — see game/combat/entrenchment.ts. */
-    readonly entrenchment: number;
+    readonly hp: number;
+    readonly maxHp: number;
     /** Combat posture — see units/army.ts ArmyStance. */
     readonly stance: ArmyStance;
     /** Within reach of the owner's own territory — see combat/supply.ts. */
@@ -153,7 +152,8 @@ function composition(army: ArmyStack): PlayerArmyView['composition'] {
   return {
     unitCount: transport ? transportShipCount(transport) : stackUnitCount(army),
     health: transport ? transportHealthFraction(transport) : stackHealthFraction(army),
-    entrenchment: (army.entrenchment ?? 0) / ENTRENCHMENT_MAX,
+    hp: transport ? transportHp(transport) : stackHp(army),
+    maxHp: transport ? transportMaxHp(transport) : stackMaxHp(army),
     stance: army.stance ?? 'attack-defend',
     inSupply: army.inSupply ?? true,
     speed: Math.round((stats?.speed ?? stackBaseSpeed(army)) * supplyEffectiveness(army)),

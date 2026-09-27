@@ -13,6 +13,8 @@ import { bindTooltip, type TooltipContent } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import { createRankInsignia, catalogueLevel } from './rank-insignia';
 import { createFlag } from './flags';
+import { stanceModifiers } from '../game/combat/stance';
+import { COMBAT_FRONTAGE } from '../game/combat/constants';
 import type { ArmyActivityKind, ArmyStackView, CombatStatus } from './ui-state';
 
 export type { ArmyStackView, CombatStatus } from './ui-state';
@@ -101,7 +103,7 @@ const STANCE_OPTIONS: ReadonlyArray<{ command: ArmyPanelCommand; icon: IconName;
   { command: 'stance-attack-defend', icon: 'stance-attack-defend', label: 'Balanced', description: 'No bonus or penalty either way — the default posture.' },
   { command: 'stance-defend', icon: 'stance-defend', label: 'Defend', description: 'Takes less damage, digs in faster, and retreats later.' },
   { command: 'stance-defend-retreat', icon: 'stance-defend-retreat', label: 'Defensive', description: 'Takes slightly less damage and retreats earlier.' },
-  { command: 'stance-retreat', icon: 'stance-retreat', label: 'Cautious', description: 'Retreats earlier and builds entrenchment more slowly.' },
+  { command: 'stance-retreat', icon: 'stance-retreat', label: 'Cautious', description: 'Retreats earlier but breaks off from combat sooner.' },
 ];
 
 export function supplyTooltip(supply: NonNullable<ArmyStackView['supply']>): TooltipContent {
@@ -119,7 +121,7 @@ export function supplyTooltip(supply: NonNullable<ArmyStackView['supply']>): Too
         ? `${supply.shortfalls.join(', ')} (−${supply.shortfalls.length * 20}% refill)` : 'None' },
       { label: 'Effectiveness', value: `${Math.round(supply.effectiveness * 100)}%`, content: {
         title: 'Low supply effects',
-        description: 'Combat output, movement speed, vision, extraction and entrenchment use this multiplier.',
+        description: 'Combat output, movement speed, vision and extraction use this multiplier.',
       } },
       { label: 'Damage taken', value: `${Math.round(100 / supply.effectiveness)}%` },
       { label: 'Low supply thresholds', value: '75% / 50% / 25% / empty', content: {
@@ -247,14 +249,18 @@ export function renderSelectedArmyPanel(
     health.append(node('b', 'ifg-army-panel__health-value', '--'), node('span', 'ifg-army-panel__unknown', 'Unknown strength'));
   } else {
     const healthPercent = Math.round(army.health * 100);
-    health.append(node('b', 'ifg-army-panel__health-value', `${healthPercent}%`));
+    const healthNumbers = node('div', 'ifg-army-panel__health-numbers');
+    healthNumbers.append(
+      node('b', 'ifg-army-panel__health-value', `${healthPercent}%`),
+      node('span', 'ifg-army-panel__health-hp', army.hp === undefined || army.maxHp === undefined
+        ? '-- / -- HP' : `${roundDisplayedHp(army.hp)} / ${roundDisplayedHp(army.maxHp)} HP`),
+    );
+    health.append(healthNumbers);
     const healthTrack = node('span', 'ifg-army-panel__health-track');
     const healthFill = node('i', 'ifg-army-panel__health-fill');
     healthFill.style.width = `${healthPercent}%`;
     healthTrack.append(healthFill);
-    const entrenchPercent = Math.round((army.entrenchment ?? 0) * 100);
     const captionParts: string[] = [];
-    if (entrenchPercent > 0) captionParts.push(`${entrenchPercent}% entrenched`);
     if (army.own && army.inSupply === false) captionParts.push('out of supply');
     health.append(healthTrack);
     if (captionParts.length) {
@@ -265,7 +271,7 @@ export function renderSelectedArmyPanel(
   }
 
   const stats = node('section', 'ifg-army-panel__stats');
-  stats.append(node('small', 'ifg-army-panel__eyebrow', 'Combat profile'));
+  stats.append(node('small', 'ifg-army-panel__eyebrow', 'Combat Profile Per Hour'));
   const statTable = node('table', 'ifg-army-panel__stat-table');
   const statHead = node('thead');
   const headingRow = node('tr');
@@ -455,7 +461,7 @@ export function renderSelectedArmyPanel(
     const battleHeader = node('div', `ifg-battle__header${battle ? '' : ' is-inactive'}`);
     const battleTitle = node('span');
     battleTitle.append(
-      node('small', 'ifg-army-panel__eyebrow', battle ? 'Combat overview' : 'Battle readiness'),
+      node('small', 'ifg-army-panel__eyebrow', 'Combat overview'),
       node('strong', undefined, battle
         ? battle.role === 'mixed' ? 'Contested battle' : battle.role === 'attack' ? 'Offensive' : 'Defensive line'
         : 'Not engaged'),
@@ -467,61 +473,74 @@ export function renderSelectedArmyPanel(
 
     const battleSides = node('div', 'ifg-battle__sides');
       const appendSide = (
-        label: string, side: BattleSidePresentation, tone: 'friendly' | 'enemy',
+        label: string, side: BattleSidePresentation | null, tone: 'friendly' | 'enemy',
     ): void => {
-      const row = node('article', `ifg-battle-side ifg-battle-side--${tone}${battle ? '' : ' is-inactive'}`);
+      const row = node('article', `ifg-battle-side ifg-battle-side--${tone}${side ? '' : ' is-inactive'}`);
       const sideHeader = node('div', 'ifg-battle-side__header');
       sideHeader.append(
         node('strong', undefined, label),
-        node('b', undefined, `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP`),
+        node('b', undefined, side ? `${roundDisplayedHp(side.hp)} / ${roundDisplayedHp(side.baselineHp)} HP` : '---'),
       );
       const healthTrack = node('span', 'ifg-battle-side__health');
       healthTrack.setAttribute('role', 'progressbar');
       healthTrack.setAttribute('aria-label', `${label} health`);
       healthTrack.setAttribute('aria-valuemin', '0');
       healthTrack.setAttribute('aria-valuemax', '100');
-      healthTrack.setAttribute('aria-valuenow', String(side.healthPercent));
+      if (side) healthTrack.setAttribute('aria-valuenow', String(side.healthPercent));
       const healthFill = node('i');
-      healthFill.style.width = `${side.healthPercent}%`;
+      healthFill.style.width = `${side?.healthPercent ?? 0}%`;
       healthTrack.append(healthFill);
       row.append(sideHeader, healthTrack);
       battleSides.append(row);
     };
-    const friendlySide = battle?.friendly ?? {
-      hp: army.identified === false ? 0 : army.health,
-      baselineHp: army.identified === false ? 0 : 1,
-      healthPercent: army.identified === false ? 0 : Math.round(army.health * 100),
-      damagePerGameHour: 0,
-    };
-    const enemySide = battle?.enemy ?? { hp: 0, baselineHp: 0, healthPercent: 0, damagePerGameHour: 0 };
+    const friendlySide = battle?.friendly ?? (army.identified === false || army.hp === undefined || army.maxHp === undefined
+      ? null : {
+        hp: army.hp, baselineHp: army.maxHp,
+        healthPercent: Math.round(army.health * 100), damagePerGameHour: 0,
+      });
+    const enemySide = battle?.enemy ?? null;
     appendSide(army.own ? 'Your forces' : 'Selected forces', friendlySide, army.own ? 'friendly' : 'enemy');
     appendSide(army.own ? 'Enemy forces' : 'Opposing forces', enemySide, army.own ? 'enemy' : 'friendly');
 
     activity.append(battleHeader, battleSides);
-    // Damage rates, modifiers, and reinforcement/retreat counts only mean
-    // anything once a front actually exists — showing them as "--" placeholders
-    // while idle was just clutter (and at the small size they need to stay
-    // legible, they don't have room for a "no data" long-form fallback).
-    if (battle) {
-      const battleLive = node('div', 'ifg-battle__live');
-      battleLive.append(
-        node('span', undefined, `Outgoing ${formatDamageRate(battle.outgoingDamagePerGameHour)} HP / game h`),
-        node('span', undefined, `Incoming ${formatDamageRate(battle.incomingDamagePerGameHour)} HP / game h`),
-        node('span', undefined, `Losses ${roundDisplayedHp(battle.friendlyCasualties)} friendly / ${roundDisplayedHp(battle.enemyCasualties)} enemy HP`),
-        node('span', undefined, `Estimated ${formatGameDuration(battle.estimatedGameHours)} · ${formatRealDuration(battle.estimatedRealSeconds)}`),
-      );
-      const battleModifiers = node('div', 'ifg-battle__modifiers', battle.modifiers.join(' · '));
-      const battleMeta = node('div', 'ifg-battle__meta');
-      battleMeta.append(
-        node('span', undefined, battle.reinforcementCount
-          ? `${battle.reinforcementCount} supporting ${battle.reinforcementCount === 1 ? 'army' : 'armies'}`
-          : 'No reinforcements'),
-        node('span', undefined, army.legalRetreatExits?.length
-          ? `${army.legalRetreatExits.length} retreat ${army.legalRetreatExits.length === 1 ? 'route' : 'routes'} available`
-          : 'No safe retreat'),
-      );
-      activity.append(battleLive, battleModifiers, battleMeta);
-    }
+    const fronts = army.battleFronts ?? [];
+    const averageModifier = (key: 'supply' | 'protection'): number | null => fronts.length
+      ? fronts.reduce((sum, front) => sum + front.friendlyModifiers[key], 0) / fronts.length : null;
+    const supply = averageModifier('supply') ?? army.supply?.effectiveness ?? 1;
+    const protection = averageModifier('protection') ?? stanceModifiers(army.stance).damageTaken / supply;
+    const frontageUsed = fronts.length
+      ? fronts.reduce((sum, front) => sum + front.friendlyModifiers.frontageUsed, 0)
+      : Math.min(COMBAT_FRONTAGE, army.unitCount);
+    const frontageLimit = fronts.length ? COMBAT_FRONTAGE * fronts.length : COMBAT_FRONTAGE;
+    const battleStats = node('div', 'ifg-battle__stats');
+    const stat = (icon: IconName, label: string, value: string, description: string): void => {
+      const item = node('span', 'ifg-battle__stat');
+      item.tabIndex = 0;
+      item.setAttribute('role', 'img');
+      item.setAttribute('aria-label', `${label}: ${value}`);
+      item.append(createIcon(icon), node('b', undefined, value));
+      bindTooltip(item, () => ({ title: label, description, status: value }));
+      battleStats.append(item);
+    };
+    stat('stat-attack', 'Outgoing damage', battle ? formatDamageRate(battle.outgoingDamagePerGameHour) : '---',
+      'HP dealt to enemy forces per game hour during this battle.');
+    stat('stat-defence', 'Incoming damage', battle ? formatDamageRate(battle.incomingDamagePerGameHour) : '---',
+      'HP your forces are expected to lose per game hour during this battle.');
+    stat('stat-speed', 'Estimated resolution', battle?.estimatedGameHours == null ? '---' : `${battle.estimatedGameHours.toFixed(1)}h`,
+      battle ? `${formatGameDuration(battle.estimatedGameHours)} · ${formatRealDuration(battle.estimatedRealSeconds)}` : 'No active battle.');
+    stat('stat-health', 'Friendly losses', battle ? String(roundDisplayedHp(battle.friendlyCasualties)) : '---',
+      'Friendly HP lost since this battle began.');
+    stat('note-attacked', 'Enemy losses', battle ? String(roundDisplayedHp(battle.enemyCasualties)) : '---',
+      'Enemy HP lost since this battle began.');
+    stat('stat-troops', 'Frontage', `${frontageUsed}/${frontageLimit}`,
+      battle ? 'Troops committed across active fronts versus their frontage limit.' : 'Potential frontage if this army enters combat.');
+    stat('supply', 'Supply effectiveness', `${Math.round(supply * 100)}%`,
+      'Supply multiplier used for combat output and defence.');
+    stat('stat-defence', 'Damage taken multiplier', `×${protection.toFixed(2)}`,
+      'Combined stance and supply effect on incoming damage; lower is better.');
+    stat('cmd-retreat', 'Safe retreat routes', battle ? String(army.legalRetreatExits?.length ?? 0) : '---',
+      'Routes available to withdraw this army from close combat.');
+    activity.append(battleStats);
   }
   if (army.artillery?.targetArmyId) {
     activity.append(node('span', undefined,

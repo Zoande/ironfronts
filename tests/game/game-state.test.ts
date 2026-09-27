@@ -27,7 +27,7 @@ function minimalState(): GameState {
       'army-1': {
         id: 'army-1', ownerCountryId: 24, name: '1st Army', x: 100, z: 200,
         graphNodeId: 5, status: 'idle', order: null, extractingNodeId: null,
-        navalCrossing: null, entrenchment: 0, stance: 'attack-defend', inSupply: true,
+        navalCrossing: null, stance: 'attack-defend', inSupply: true,
         units: [{ typeId: 'infantry', count: 4, hp: 400, experience: 0 }],
       },
     },

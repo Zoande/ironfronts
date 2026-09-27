@@ -62,7 +62,6 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
     transport: z.object({ kind: z.literal('transport'), level: id.min(1).max(8), cargo: z.array(z.object({
       cargoTypeId: unit, shipHp: z.array(number.positive()),
     })) }).nullable().optional(),
-    entrenchment: positive.optional(),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']).optional(),
     inSupply: z.boolean().optional(), supply: positive.optional(), supplyCapacity: positive.optional(),
     supplyStores: z.object({ funds: positive, food: positive, metal: positive, oil: positive }).partial().optional() })),
@@ -133,7 +132,6 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
         parsed.countries[army.ownerCountryId]?.technologies?.navy ?? 1,
       );
     } else army.transport ??= null;
-    army.entrenchment ??= 0;
     army.stance ??= 'attack-defend';
     army.inSupply ??= true;
     const types = new Set<string>();

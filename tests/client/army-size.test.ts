@@ -7,7 +7,7 @@ function army(overrides: Partial<ProjectedArmy>): ProjectedArmy {
   return {
     id: 'a', name: 'Army', ownerCountryId: 1, ownerName: 'A', ownerColor: '#fff',
     x: 0, z: 0, own: true, contact: 'visible', status: 'idle',
-    composition: { unitCount: 0, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] },
+    composition: { unitCount: 0, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] },
     moveOrder: null,
     ...overrides,
   };
@@ -41,11 +41,11 @@ class FakeConnection extends EventTarget {
 describe('RemoteGameSession.armySize', () => {
   it('sums unit counts across own army stacks only, ignoring foreign armies', () => {
     const connection = new FakeConnection(state({
-      infantry: army({ id: 'infantry', own: true, composition: { unitCount: 4, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
-      tanks: army({ id: 'tanks', own: true, composition: { unitCount: 2, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
+      infantry: army({ id: 'infantry', own: true, composition: { unitCount: 4, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
+      tanks: army({ id: 'tanks', own: true, composition: { unitCount: 2, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
       enemy: army({
         id: 'enemy', own: false, ownerCountryId: 2,
-        composition: { unitCount: 99, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] },
+        composition: { unitCount: 99, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] },
       }),
     }));
     const session = new RemoteGameSession(connection as unknown as GameConnection, () => {});
@@ -54,22 +54,22 @@ describe('RemoteGameSession.armySize', () => {
 
   it('updates as armies are built (added) and destroyed (removed) via a state refresh', () => {
     const connection = new FakeConnection(state({
-      infantry: army({ id: 'infantry', composition: { unitCount: 4, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
+      infantry: army({ id: 'infantry', composition: { unitCount: 4, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
     }));
     const session = new RemoteGameSession(connection as unknown as GameConnection, () => {});
     expect(session.armySize).toBe(4);
 
     // A new tank stack is produced.
     connection.state = state({
-      infantry: army({ id: 'infantry', composition: { unitCount: 4, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
-      tanks: army({ id: 'tanks', composition: { unitCount: 1, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
+      infantry: army({ id: 'infantry', composition: { unitCount: 4, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
+      tanks: army({ id: 'tanks', composition: { unitCount: 1, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
     });
     connection.dispatchEvent(new Event('state'));
     expect(session.armySize).toBe(5);
 
     // The infantry stack is wiped out in combat and removed from the projection.
     connection.state = state({
-      tanks: army({ id: 'tanks', composition: { unitCount: 1, health: 1, entrenchment: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
+      tanks: army({ id: 'tanks', composition: { unitCount: 1, health: 1, hp: 0, maxHp: 0, stance: 'attack-defend' as const, inSupply: true, speed: 1, groups: [] } }),
     });
     connection.dispatchEvent(new Event('state'));
     expect(session.armySize).toBe(1);

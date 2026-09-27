@@ -288,7 +288,8 @@ export interface ArmyStackView {
   /** 0..1 */
   readonly health: number;
   /** 0..1. Grows while the stack holds ground; reduces incoming damage. */
-  readonly entrenchment?: number;
+  readonly hp?: number;
+  readonly maxHp?: number;
   /** Combat posture; see game/units/army.ts ArmyStance. Own armies only. */
   readonly stance?: 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
   /** Within reach of the owner's own territory. */

@@ -118,12 +118,6 @@ export interface ArmyStack {
   /** Temporary sea-domain manifestation. Cargo remains in `units` on its
    * normal land HP scale; ship HP and the snapshotted naval tech live here. */
   transport?: TransportManifestation | null;
-  /**
-   * Entrenchment, 0..100. Grows while the stack is stationary and not engaged
-   * (see combat/entrenchment.ts); clears the moment it takes a move order.
-   * Reduces incoming damage while defending in place.
-   */
-  entrenchment?: number;
   /** Combat posture; see ArmyStance. Defaults to 'attack-defend' (balanced). */
   stance?: ArmyStance;
   /** Whether a supply route exists; low stored supply applies the penalties. */
@@ -150,7 +144,6 @@ export function ensureArmyRuntimeState(stack: ArmyStack): void {
   stack.artillery ??= { targetArmyId: null, manualTarget: false };
   stack.navalCrossing ??= null;
   stack.transport ??= null;
-  stack.entrenchment ??= 0;
   stack.stance ??= 'attack-defend';
   stack.inSupply ??= true;
   stack.supplyCapacity ??= 0;

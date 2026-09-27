@@ -1487,6 +1487,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       army.activityKind ?? '', Math.floor((army.activityProgress ?? 0) * 20),
       Math.round(army.activityDurationSeconds ?? 0),
       Math.round((army.health ?? 0) * 100), Math.round((army.strength ?? 0) * 100),
+      Math.round(army.hp ?? 0), Math.round(army.maxHp ?? 0),
       army.unitCount, army.canMove, army.moveDisabledReason ?? '', army.canAttack, army.canRetreat,
       army.canSplit, army.canStop, army.canExtract,
       army.legalRetreatExits?.length ?? 0,

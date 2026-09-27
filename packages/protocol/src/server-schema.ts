@@ -27,7 +27,7 @@ const army = point.extend({
   contact: z.enum(['contact', 'visible']), status: z.enum(['idle', 'moving', 'extracting', 'engaged', 'retreating', 'embarking', 'atSea', 'disembarking', 'unknown']),
   graphNodeId: integer.optional(),
   composition: z.object({ unitCount: integer, health: nonnegative.max(1),
-    entrenchment: nonnegative.max(1),
+    hp: nonnegative, maxHp: nonnegative,
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']), inSupply: z.boolean(), speed: nonnegative,
     groups: z.array(z.object({ typeId: z.string(), count: integer, health: nonnegative.max(1) })),
     domain: z.enum(['land', 'naval']).optional(),

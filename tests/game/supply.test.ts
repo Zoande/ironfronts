@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { fixture, army } from '../helpers/simulation';
 import { emptyStockpile, setRelation } from '../../src/game/game-state';
 import { stepCombat } from '../../src/game/combat';
-import { stepEntrenchment } from '../../src/game/combat/entrenchment';
 import { armySupplyPlan, stepSupply, supplyEffectiveness, SUPPLY_RANGE } from '../../src/game/combat/supply';
 import { mergeStacks } from '../../src/game/units/army';
 import { applyCommand } from '../../src/game/commands';
@@ -119,17 +118,6 @@ describe('supply effects', () => {
     expect(child.supply).toBe(40);
     expect(parent.supplyCapacity).toBe(100);
     expect(child.supplyCapacity).toBe(100);
-  });
-
-  it('an out-of-supply army digs in more slowly than a supplied one', () => {
-    const ctx = fixture();
-    ctx.state.armies = {
-      supplied: { ...army('supplied', 1), status: 'idle', entrenchment: 0, supply: 100, supplyCapacity: 100 },
-      cutOff: { ...army('cutOff', 1), status: 'idle', entrenchment: 0, supply: 0, supplyCapacity: 100 },
-    };
-    stepEntrenchment(ctx, 5);
-    expect(ctx.state.armies.cutOff.entrenchment!).toBeGreaterThan(0);
-    expect(ctx.state.armies.cutOff.entrenchment!).toBeLessThan(ctx.state.armies.supplied.entrenchment!);
   });
 
   it('an out-of-supply defender loses a fight it would otherwise have won', () => {

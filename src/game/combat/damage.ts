@@ -5,7 +5,6 @@ import type { ArmyStack, UnitGroup } from '../units/army';
 import { unitType } from '../units/unit-catalog';
 import type { ArmorClass, DamageProfile } from '../units/unit-types';
 import { COMBAT_FRONTAGE, MIN_COMBAT_EFFECTIVENESS } from './constants';
-import { entrenchmentDamageMultiplier } from './entrenchment';
 import { stanceModifiers } from './stance';
 import { supplyEffectiveness } from './supply';
 
@@ -97,11 +96,11 @@ export function calculateDamage(
     const classDamage = fire[armor] * coordination * ratio[armor] * Math.max(0, dtHours);
     if (classDamage <= 0 || hp[armor] <= 0) continue;
     for (const army of defenders) {
-      const entrenchFactor = entrenchmentDamageMultiplier(army.entrenchment ?? 0) * stanceModifiers(army.stance).damageTaken
+      const protectionFactor = stanceModifiers(army.stance).damageTaken
         / supplyEffectiveness(army); // low supply weakens defense as well as output
       for (const group of army.units) {
         if (unitType(group.typeId).armorClass !== armor) continue;
-        result.push({ ref: { army, group }, amount: classDamage * group.hp / hp[armor] * entrenchFactor });
+        result.push({ ref: { army, group }, amount: classDamage * group.hp / hp[armor] * protectionFactor });
       }
     }
   }

@@ -10,7 +10,6 @@ import {
 import { autoRetreat } from './combat/retreat';
 import { stepArtillery } from './combat/artillery';
 import { terrainDefenseMultiplier } from './combat/terrain';
-import { entrenchmentDamageMultiplier } from './combat/entrenchment';
 import { stanceModifiers } from './combat/stance';
 import { supplyEffectiveness } from './combat/supply';
 import type { CombatEvent } from './combat/events';
@@ -30,7 +29,7 @@ export interface CombatRateModifiers {
   readonly coordination: number;
   readonly stanceOutput: number;
   readonly supply: number;
-  /** Combined entrenchment, defensive-stance, and supply multiplier on damage received. */
+  /** Defensive-stance and supply multiplier on damage received. */
   readonly protection: number;
   readonly terrain: number;
   readonly devastation: number;
@@ -70,8 +69,7 @@ function rateModifiers(
     coordination: 1 / Math.sqrt(Math.max(1, frontageUsed)),
     stanceOutput: weightedAverage(armies, (army) => stanceModifiers(army.stance).attackOutput),
     supply: weightedAverage(armies, supply),
-    protection: weightedAverage(armies, (army) => entrenchmentDamageMultiplier(army.entrenchment ?? 0)
-      * stanceModifiers(army.stance).damageTaken / supply(army)),
+    protection: weightedAverage(armies, (army) => stanceModifiers(army.stance).damageTaken / supply(army)),
     terrain: role === 'defense' ? terrainDefenseMultiplier(session.world, front.x, front.z) : 1,
     devastation: role === 'defense' && isDevastated(session, front.provinceId)
       ? DEVASTATED_DEFENDER_STRENGTH_MULTIPLIER : 1,

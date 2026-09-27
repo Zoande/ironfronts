@@ -177,8 +177,8 @@ export interface ProjectedArmy {
   composition: null | {
     unitCount: number;
     health: number;
-    /** Entrenchment, 0..1 of max. */
-    entrenchment: number;
+    hp: number;
+    maxHp: number;
     /** Combat posture; see game/units/army.ts ArmyStance. */
     stance: 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
     /** Within reach of the owner's own territory. */
