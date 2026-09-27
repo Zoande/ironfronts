@@ -130,7 +130,7 @@ fn combatEffectVertex(
   output.seed = effect.b.x;
   output.intensity = clamp(effect.b.z, 0.0, 4.0);
   output.dir = dir;
-  output.alpha = lifeFade * zoomFade * (1.0 - horizontalWorldFog(worldPos.x));
+  output.alpha = lifeFade * zoomFade * (1.0 - mapFog(worldPos.xz));
   if (clip.w <= 0.0001) {
     output.position = vec4f(0.0, 0.0, -10.0, 1.0);
     output.alpha = 0.0;

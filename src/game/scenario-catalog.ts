@@ -10,6 +10,13 @@ import type { ScenarioDef, ScenarioSelection } from './scenario';
 
 export const SCENARIOS: readonly ScenarioDef[] = [
   {
+    id: 'OP-EUROPE-01', name: 'Europe at War', theater: 'global', theaterLabel: 'Europe',
+    startDate: '1 Sep 1939', mode: 'campaign', playableCountries: 'all',
+    minimumStartingCities: 5, featuredCountries: ['Germany', 'France', 'United Kingdom', 'Italy', 'Poland'],
+    fogOfWar: true, economyEnabled: true,
+    blurb: 'Take command of a nation in the European theater.',
+  },
+  {
     id: 'OP-1939-01',
     name: 'World at War',
     theater: 'global',

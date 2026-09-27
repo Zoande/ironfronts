@@ -1,15 +1,26 @@
 import { spawn } from 'node:child_process';
 
 const services = [
-  { label: 'client', script: 'dev' },
+  { label: 'client', script: 'client:dev' },
   { label: 'auth', script: 'auth:dev' },
-  { label: 'game', script: 'game:dev' },
+  { label: 'game', script: 'game:serve' },
+  { label: 'europe game', script: 'game:europe:serve' },
 ];
 
 if (process.argv.includes('--help')) {
   console.log('Starts the complete Ironfronts local development stack:');
   for (const service of services) console.log(`  ${service.label}: npm run ${service.script}`);
   process.exit(0);
+}
+
+for (const [label, env] of [['world', process.env], ['europe', { ...process.env, MAP_KIND: 'europe' }]]) {
+  console.log(`Preparing ${label} map...`);
+  const result = await new Promise((resolve) => {
+    const child = spawn(process.execPath, ['scripts/build-world.mjs'], { stdio: 'inherit', windowsHide: true, env });
+    child.on('exit', (code) => resolve(code ?? 1));
+    child.on('error', () => resolve(1));
+  });
+  if (result !== 0) process.exit(result);
 }
 
 const npmExecPath = process.env.npm_execpath;

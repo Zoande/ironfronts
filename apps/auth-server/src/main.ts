@@ -77,8 +77,15 @@ function remoteKey(request: IncomingMessage): string {
   return request.socket.remoteAddress ?? 'unknown';
 }
 
-async function gameRequest<T>(pathname: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${config.gameInternalUrl}${pathname}`, {
+const EUROPE_GAME_ID = 'europe-at-war-1';
+function gameService(gameId: string) {
+  if (gameId === GAME_ID) return { internalUrl: config.gameInternalUrl, websocketUrl: config.gamePublicWsUrl };
+  if (gameId === EUROPE_GAME_ID) return { internalUrl: config.europeInternalUrl, websocketUrl: config.europePublicWsUrl };
+  throw new Error('Unknown campaign.');
+}
+
+async function gameRequest<T>(gameId: string, pathname: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${gameService(gameId).internalUrl}${pathname}`, {
     ...init,
     signal: AbortSignal.timeout(5_000),
     headers: { 'content-type': 'application/json', authorization: `Bearer ${config.internalSecret}`, ...init?.headers },
@@ -88,17 +95,19 @@ async function gameRequest<T>(pathname: string, init?: RequestInit): Promise<T> 
   return value;
 }
 
-async function assignment(accountId: string): Promise<{ gameId: string; countryId: number } | null> {
-  const lobby = await gameRequest<GameLobby>(`/internal/v2/lobby?accountId=${encodeURIComponent(accountId)}`);
+async function assignment(accountId: string, gameId = GAME_ID): Promise<{ gameId: string; countryId: number } | null> {
+  const lobby = await gameRequest<GameLobby>(gameId, `/internal/v2/lobby?accountId=${encodeURIComponent(accountId)}`);
   return lobby.assignedCountryId === null ? null : { gameId: lobby.gameId, countryId: lobby.assignedCountryId };
 }
 
 async function sessionResponse(account: Account | null): Promise<SessionResponse> {
   if (!account) return { authenticated: false };
+  const assignments = await Promise.all([GAME_ID, EUROPE_GAME_ID]
+    .map((gameId) => assignment(account.id, gameId).catch(() => null)));
   return {
     authenticated: true,
     account: { id: account.id, username: account.username },
-    assignment: await assignment(account.id),
+    assignment: assignments.find((item) => item !== null) ?? null,
     profile: store.commanderProfile(account.id),
   };
 }
@@ -146,26 +155,29 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === 'GET' && url.pathname === '/v2/game') {
-      sendJson(response, 200, await gameRequest<GameLobby>(`/internal/v2/lobby?accountId=${encodeURIComponent(account.id)}`));
+      const gameId = url.searchParams.get('gameId') ?? GAME_ID;
+      sendJson(response, 200, await gameRequest<GameLobby>(gameId, `/internal/v2/lobby?accountId=${encodeURIComponent(account.id)}`));
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v2/game/join') {
       const input = joinGameSchema.parse(await body(request));
-      const joined = await gameRequest<{ ok: true; countryId: number }>('/internal/v2/join', {
+      const gameId = url.searchParams.get('gameId') ?? GAME_ID;
+      const joined = await gameRequest<{ ok: true; countryId: number }>(gameId, '/internal/v2/join', {
         method: 'POST', body: JSON.stringify({ accountId: account.id, countryId: input.countryId }),
       });
-      sendJson(response, 200, { assignment: { gameId: GAME_ID, countryId: joined.countryId } });
+      sendJson(response, 200, { assignment: { gameId, countryId: joined.countryId } });
       return;
     }
     if (request.method === 'POST' && url.pathname === '/v2/game/connect') {
-      const assigned = await assignment(account.id);
+      const gameId = url.searchParams.get('gameId') ?? GAME_ID;
+      const assigned = await assignment(account.id, gameId);
       if (!assigned) { sendJson(response, 409, { error: 'Choose a country before connecting.' }); return; }
       const ticket = signGameTicket({
         accountId: account.id, gameId: assigned.gameId, countryId: assigned.countryId,
         audience: 'game-server', protocolVersion: PROTOCOL_VERSION,
         expiresAt: Date.now() + 30_000, nonce: randomUUID(),
       }, config.ticketSecret);
-      sendJson(response, 200, { ticket, websocketUrl: config.gamePublicWsUrl, protocolVersion: PROTOCOL_VERSION });
+      sendJson(response, 200, { ticket, websocketUrl: gameService(gameId).websocketUrl, protocolVersion: PROTOCOL_VERSION });
       return;
     }
     sendJson(response, 404, { error: 'Not found.' });

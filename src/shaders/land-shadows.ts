@@ -30,9 +30,9 @@ struct ShadowOut {
   output.position=uniforms.viewProjection*vec4f(xz.x,select(heightAt(xz/uniforms.map.xy)+.035,seaSurface,ship),xz.y,1);
   output.uv=corner;
   output.alpha=select(.32,0.0,kind>3u)*(1.0-smoothstep(1500.0,1900.0,uniforms.interaction.y))
-    *(1.0-horizontalWorldFog(xz.x));
+    *(1.0-mapFog(xz));
   output.ship=select(0.0,1.0,ship);
-  if(ship){output.alpha=select(0.0,.42,(u32(unit.b.z)&2u)!=0u)*(1.0-smoothstep(1500.0,1900.0,uniforms.interaction.y))*(1.0-horizontalWorldFog(xz.x));}
+  if(ship){output.alpha=select(0.0,.42,(u32(unit.b.z)&2u)!=0u)*(1.0-smoothstep(1500.0,1900.0,uniforms.interaction.y))*(1.0-mapFog(xz));}
   if((u32(unit.b.z)&16u)!=0u){output.alpha*=1.0-smoothstep(3.0,5.0,uniforms.sunTime.w-unit.c.y);}
   return output;
 }

@@ -1,6 +1,3 @@
-import {
-  GAME_ID, GAME_VERSION,
-} from '@ironfronts/protocol';
 import { config } from './config';
 import { loadWorld } from './world-loader';
 import { GameRuntime } from './runtime';
@@ -43,11 +40,11 @@ if (config.diagnosticsPath) {
 const loaded = await loadWorld(config.worldDirectory);
 const gamePersistence = new GamePersistence(config.gameDataPath);
 let persisted = await gamePersistence.load();
-const currentWorld = persisted?.gameVersion === GAME_VERSION && persisted.worldHash === loaded.hash;
+const currentWorld = persisted?.gameVersion === config.gameVersion && persisted.worldHash === loaded.hash;
 const migratableV2World = persisted?.gameVersion === 'world-at-war@2' && persisted.worldHash === loaded.legacyHash;
 if (persisted && (
   persisted.formatVersion !== 2 || persisted.runtime?.version !== 2
-  || persisted.gameId !== GAME_ID || !currentWorld && !migratableV2World
+  || persisted.gameId !== config.gameId || !currentWorld && !migratableV2World
 )) {
   const archivePath = await gamePersistence.archiveExisting();
   log('warn', 'incompatible_save_archived', { archivePath, previousGameId: persisted.gameId });
@@ -94,8 +91,8 @@ runtime.updateWeather();
 function persistedGame(): PersistedGame {
   return {
     formatVersion: 2,
-    gameId: GAME_ID,
-    gameVersion: GAME_VERSION,
+    gameId: config.gameId,
+    gameVersion: config.gameVersion,
     worldHash: loaded.hash,
     savedAtEpochMs: Date.now(),
     gameStartedAtEpochMs: gameClock.gameStartedAtEpochMs,
@@ -229,7 +226,7 @@ const healthTimer = setInterval(() => {
   maximumPublishMilliseconds = 0;
 }, 5_000);
 
-server.listen(config.port, '127.0.0.1', () => log('info', 'listening', { port: config.port, gameId: GAME_ID }));
+server.listen(config.port, '127.0.0.1', () => log('info', 'listening', { port: config.port, gameId: config.gameId }));
 
 let shuttingDown = false;
 function shutdown(signal: string): void {

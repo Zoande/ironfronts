@@ -1,6 +1,6 @@
 import type { Mesh } from './scene-meshes';
 import type { PropChunkRange, WorldManifest } from './types';
-import { WORLD_COPY_INDICES } from './visibility';
+import { worldCopies } from './visibility';
 
 export interface TerrainVisibility {
   instances: Uint32Array;
@@ -27,7 +27,7 @@ export function buildTerrainVisibility(
   const chunkHeight = manifest.world.height / chunksY;
   const chunkRadius = Math.hypot(chunkWidth, chunkHeight) * 0.72;
   const lodEntries: number[][] = [[], [], [], []];
-  for (const copy of WORLD_COPY_INDICES) {
+  for (const copy of worldCopies(manifest.world.wrapX)) {
     const copyOffset = (copy - 1) * manifest.world.width;
     for (let chunkY = 0; chunkY < chunksY; chunkY += 1) {
       for (let chunkX = 0; chunkX < chunksX; chunkX += 1) {
@@ -75,7 +75,7 @@ export function buildPropVisibility(
   const chunkRadius = Math.hypot(chunkWidth, chunkHeight) * 0.55;
   const buckets = groupMeshes.map((meshes) => meshes.map(() => [] as number[]));
   let visibleChunks = 0;
-  for (const copy of WORLD_COPY_INDICES) {
+  for (const copy of worldCopies(manifest.world.wrapX)) {
     const copyOffset = (copy - 1) * manifest.world.width;
     for (let chunkIndex = 0; chunkIndex < ranges.length; chunkIndex += 1) {
       const range = ranges[chunkIndex];

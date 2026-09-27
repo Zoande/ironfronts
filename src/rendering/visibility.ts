@@ -10,6 +10,8 @@ export type FrustumPlanes = Float32Array;
  * frustum test decides which chunks are actually submitted to the GPU.
  */
 export const WORLD_COPY_INDICES = [0, 1, 2] as const;
+const NON_WRAPPING_COPY_INDICES = [1] as const;
+export const worldCopies = (wrapX: boolean): readonly number[] => wrapX ? WORLD_COPY_INDICES : NON_WRAPPING_COPY_INDICES;
 
 export function sphereIntersectsHorizontalWorldWindow(
   centerX: number,

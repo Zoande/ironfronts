@@ -15,10 +15,10 @@ async function request<T>(pathname: string, init?: RequestInit): Promise<T> {
 }
 
 export const getSession = (): Promise<SessionResponse> => request('/v1/auth/session');
-export const getGame = (): Promise<GameLobby> => request('/v2/game');
-export const joinGame = (countryId: number): Promise<{ assignment: { gameId: string; countryId: number } }> =>
-  request('/v2/game/join', { method: 'POST', body: JSON.stringify({ countryId }) });
-export const connectGame = (): Promise<ConnectResponse> => request('/v2/game/connect', { method: 'POST', body: '{}' });
+export const getGame = (gameId = 'world-at-war-2'): Promise<GameLobby> => request(`/v2/game?gameId=${encodeURIComponent(gameId)}`);
+export const joinGame = (gameId: string, countryId: number): Promise<{ assignment: { gameId: string; countryId: number } }> =>
+  request(`/v2/game/join?gameId=${encodeURIComponent(gameId)}`, { method: 'POST', body: JSON.stringify({ countryId }) });
+export const connectGame = (gameId = 'world-at-war-2'): Promise<ConnectResponse> => request(`/v2/game/connect?gameId=${encodeURIComponent(gameId)}`, { method: 'POST', body: '{}' });
 export const logout = (): Promise<void> => request('/v1/auth/logout', { method: 'POST', body: '{}' });
 export const login = (username: string, password: string): Promise<SessionResponse> =>
   request('/v1/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });

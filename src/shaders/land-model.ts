@@ -141,7 +141,7 @@ fn landModelVertex(
   output.uv = uv;
   output.ownerColor = unpackLandRgb(model.a.z);
   output.alpha = (1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y))
-    * (1.0 - horizontalWorldFog(worldPosition.x))
+    * (1.0 - mapFog(worldPosition.xz))
     * select(1.0,1.0-smoothstep(3.0,5.0,uniforms.sunTime.w-model.c.y),dead);
   output.selected = f32(flags & 1u);
   output.worldPosition = worldPosition;

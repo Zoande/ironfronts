@@ -4,11 +4,12 @@ import {
   type GameCommand, type GameState, type WorldData,
 } from '@ironfronts/game-core';
 import {
-  GAME_ID, GAME_VERSION, PROTOCOL_VERSION,
+  PROTOCOL_VERSION,
   type CommandPayload, type GameLobby, type PlayerProjection, type PresentationCatalogs,
 } from '@ironfronts/protocol';
 import { projectFor } from './projection';
 import { SIMULATION_INTERVAL_MS, SIMULATION_TICK_HOURS } from './timing';
+import { config } from './config';
 
 export class GameRuntime {
   readonly session: GameSession;
@@ -23,7 +24,7 @@ export class GameRuntime {
     this.session = snapshot
       ? GameSession.restore(snapshot.state, world)
       : GameSession.create({
-        scenarioId: 'OP-1939-01', theater: 'global', startDate: '1 Sep 1939',
+        scenarioId: config.scenarioId, theater: 'global', startDate: '1 Sep 1939',
         playerCountryId: 0, sandbox: false,
       }, world);
     if (snapshot) {
@@ -48,9 +49,9 @@ export class GameRuntime {
     }
     const aliveCountryIds = new Set(Object.values(this.session.state.provinceOwners));
     return {
-      gameId: GAME_ID,
-      name: 'World at War',
-      gameVersion: GAME_VERSION,
+      gameId: config.gameId,
+      name: config.gameName,
+      gameVersion: config.gameVersion,
       protocolVersion: PROTOCOL_VERSION,
       assignedCountryId: accountId ? this.seatsByAccount.get(accountId) ?? null : null,
       // The lobby map shows every territorial country. `join` still enforces

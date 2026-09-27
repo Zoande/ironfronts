@@ -42,7 +42,7 @@ fn infrastructureFragment(input: InfrastructureOutput) -> @location(0) vec4f {
   if (dotted && fract(input.roadUv.x / 6.4) > 0.40) { discard; }
   let debugMode = u32(uniforms.map.w + 0.5);
   if (debugMode == 8u || debugMode == 9u) {
-    let worldFog = horizontalWorldFog(input.worldPosition.x);
+    let worldFog = mapFog(input.worldPosition.xz);
     return vec4f(select(vec3f(0.98, 0.20, 0.07), vec3f(0.96, 0.78, 0.22), dotted), input.visibility * (1.0 - worldFog));
   }
   let grit = fract(sin(dot(floor(input.worldPosition.xz * 2.2), vec2f(12.9898, 78.233))) * 43758.5453);
@@ -53,7 +53,7 @@ fn infrastructureFragment(input: InfrastructureOutput) -> @location(0) vec4f {
   color = mix(color, color * vec3f(0.69, 0.75, 0.78), uniforms.weather.x * 0.44);
   let normal = normalize(input.normal);
   let fog = smoothstep(3500.0, 11000.0, distance(uniforms.camera.xyz, input.worldPosition));
-  let worldFog = horizontalWorldFog(input.worldPosition.x);
+  let worldFog = mapFog(input.worldPosition.xz);
   color = mix(mix(color * surfaceLight(normal) + wetSurfaceSheen(normal, input.worldPosition), distanceFogColor(), fog * 0.39), worldFogColor(), worldFog);
   return vec4f(color, input.visibility * (1.0 - worldFog));
 }

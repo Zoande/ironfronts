@@ -12,7 +12,8 @@ export function nodeName(node) {
 }
 
 export function isRiver(node) {
-  return node?.kind === 'sea_point' && RIVER_NAMES.has(nodeName(node));
+  return node?.kind === 'sea_point' && (RIVER_NAMES.has(nodeName(node))
+    || process.env.MAP_KIND === 'europe' && / River$/.test(nodeName(node)));
 }
 
 export function isCanal(node) {

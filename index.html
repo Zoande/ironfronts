@@ -55,7 +55,7 @@
           </header>
 
           <nav class="ifm__grid" id="ifm-grid">
-            <button class="ifm__card" id="ifm-new-campaign" data-open="campaign" aria-label="New Campaign">
+            <button class="ifm__card" id="ifm-new-campaign" data-open="theater" aria-label="New Campaign">
               <i class="ifm__corner ifm__corner--tl"></i><i class="ifm__corner ifm__corner--tr"></i>
               <i class="ifm__corner ifm__corner--bl"></i><i class="ifm__corner ifm__corner--br"></i>
               <span class="ifm__icon" style="--icon:url(/menu/icons/laurels.svg)"></span>
@@ -84,6 +84,21 @@
           </nav>
         </main>
 
+        <section class="ifm__subpage" id="ifm-theater" data-screen="theater" hidden>
+          <article class="ifm__file">
+            <i class="ifm__file-grunge"></i>
+            <header class="ifm__file-header">
+              <button class="ifm__back" data-back>&larr; Command</button>
+              <div><small>Operation Order</small><h2>Select Theater</h2><p>Choose the campaign map for your new command.</p></div>
+              <div class="ifm__doc-code"><span>DMO File <b>IF-00</b></span></div>
+            </header>
+            <div class="ifm__theater-choices">
+              <button class="ifm__theater-choice" id="ifm-choose-world"><strong>World at War</strong><span>Global theater &middot; 3,303 provinces</span></button>
+              <button class="ifm__theater-choice" id="ifm-choose-europe"><strong>Europe at War</strong><span>European theater &middot; 634 provinces</span></button>
+            </div>
+          </article>
+        </section>
+
         <section class="ifm__subpage ifm__subpage--dossier" id="ifm-campaign" data-screen="campaign" hidden>
           <article class="ifm__file ifm__file--dossier">
             <i class="ifm__file-grunge"></i>
@@ -91,8 +106,8 @@
             <i class="ifm__file-corner ifm__file-corner--bl"></i><i class="ifm__file-corner ifm__file-corner--br"></i>
             <header class="ifm__file-header">
               <button class="ifm__back" data-back>&larr; Command</button>
-              <div><small>Operation Order</small><h2>World at War</h2><p>Theater briefing and strategic assessment.</p></div>
-              <div class="ifm__doc-code"><span>DMO File <b>IF-01</b></span><span>Clearance <b>New</b></span></div>
+              <div><small>Operation Order</small><h2 id="ifm-campaign-title">World at War</h2><p>Theater briefing and strategic assessment.</p></div>
+              <div class="ifm__doc-code"><span>DMO File <b id="ifm-campaign-file">IF-01</b></span><span>Clearance <b>New</b></span></div>
             </header>
 
             <div class="ifm__dossier">
@@ -100,7 +115,7 @@
                 <div class="ifm__map-frame">
                   <div class="ifm__map-photo"><span id="ifm-map-theater">Global</span><i class="ifm__map-compass"></i></div>
                 </div>
-                <div class="ifm__op-stamp"><i class="ifm__row-insignia" style="--icon:url(/menu/kit/insignia-globe.png)"></i><span><b>OP-1939-01</b>World at War</span></div>
+                <div class="ifm__op-stamp"><i class="ifm__row-insignia" style="--icon:url(/menu/kit/insignia-globe.png)"></i><span><b id="ifm-campaign-code">OP-1939-01</b><span id="ifm-campaign-stamp">World at War</span></span></div>
               </div>
 
               <div class="ifm__dossier-info">
@@ -116,7 +131,7 @@
                 </div>
                 <div class="ifm__op-detail">
                   <h3>Operation Information</h3>
-                  <p>Every theater opens at once. Poland is overrun within weeks; the Low Countries, the Mediterranean and the Pacific follow as the belligerents commit. You take a single nation through the whole war &mdash; there is no separate front to sit out.</p>
+                  <p id="ifm-campaign-description">Every theater opens at once. Poland is overrun within weeks; the Low Countries, the Mediterranean and the Pacific follow as the belligerents commit. You take a single nation through the whole war &mdash; there is no separate front to sit out.</p>
                   <ul>
                     <li>All eligible nations are live from the first turn.</li>
                     <li>Borders, supply and diplomacy reflect the September 1939 situation.</li>

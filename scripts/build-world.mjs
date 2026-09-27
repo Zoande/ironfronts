@@ -22,11 +22,13 @@ import { buildPoliticalPalette } from './world/political-palette.mjs';
 import { generateCampaignMap } from './generate-campaign-map.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MATERIAL = path.join(ROOT, 'material');
+const EUROPE = process.env.MAP_KIND === 'europe';
+const MATERIAL = path.join(ROOT, 'material', ...(EUROPE ? ['europe'] : []));
 const PUBLIC = path.join(ROOT, 'public');
-const FINAL_OUTPUT = path.join(PUBLIC, 'world');
-const OUTPUT = path.join(PUBLIC, `.world-staging-${process.pid}`);
-const BACKUP_OUTPUT = path.join(PUBLIC, '.world-previous');
+const PACKAGE_NAME = EUROPE ? 'europe' : 'world';
+const FINAL_OUTPUT = path.join(PUBLIC, PACKAGE_NAME);
+const OUTPUT = path.join(PUBLIC, `.${PACKAGE_NAME}-staging-${process.pid}`);
+const BACKUP_OUTPUT = path.join(PUBLIC, `.${PACKAGE_NAME}-previous`);
 const TEXTURES = path.join(ROOT, 'public', 'textures');
 
 function assertManagedOutput(target) {
@@ -61,7 +63,7 @@ async function validateStagedWorld() {
     if (!info.isFile() || info.size === 0) throw new Error(`Generated world asset is empty: ${name}`);
   }
   const manifest = JSON.parse(await readFile(path.join(OUTPUT, 'world.json'), 'utf8'));
-  if (manifest.counts?.provinces !== 3_303) throw new Error('Generated world manifest failed province-count validation');
+  if (manifest.counts?.provinces !== (EUROPE ? 634 : 3_303)) throw new Error('Generated world manifest failed province-count validation');
 }
 
 async function promoteStagedWorld() {
@@ -120,8 +122,8 @@ async function main() {
     readMaterialJson(MATERIAL, 'topology/province_adjacency.json'),
   ]);
 
-  if (geometry.provinces.length !== 3_303 || metadata.provinces.length !== 3_303) {
-    throw new Error('Expected 3,303 provinces in geometry and metadata');
+  if (geometry.provinces.length !== mapMetadata.province_count || metadata.provinces.length !== mapMetadata.province_count) {
+    throw new Error('Province count differs from map metadata');
   }
 
   console.log(`Rasterizing ${geometry.provinces.length} provinces at ${ID_WIDTH}x${ID_HEIGHT}…`);
@@ -376,7 +378,7 @@ async function main() {
     version: 13,
     source: { mapId: mapMetadata.map_id, mapVersion: mapMetadata.map_version },
     generatedSeed: SEED,
-    world: { width: WORLD_WIDTH, height: WORLD_HEIGHT, overlapX: 250, wrapX: true },
+    world: { width: WORLD_WIDTH, height: WORLD_HEIGHT, overlapX: mapMetadata.overlap_x, wrapX: !EUROPE },
     fields: {
       height: { url: 'height.f32', width: FIELD_WIDTH, height: FIELD_HEIGHT, format: 'r32float' },
       surface: { url: 'surface.rgba8', width: FIELD_WIDTH, height: FIELD_HEIGHT, format: 'rgba8uint' },
@@ -483,7 +485,8 @@ async function main() {
     writeFile(path.join(OUTPUT, 'world.json'), `${JSON.stringify(manifest)}\n`),
   ]);
   await promoteStagedWorld();
-  await generateCampaignMap();
+  await generateCampaignMap(FINAL_OUTPUT, path.join(PUBLIC, 'menu', `campaign-${PACKAGE_NAME}-ids.u16`));
+  if (!EUROPE) await generateCampaignMap();
   console.log(`World assets ready: ${provinceRecords.length} provinces, ${waterways.stats.riverSystems} river systems, ${waterways.stats.canalSystems} canals, ${infrastructure.stats.logicalRoads} logical roads (${infrastructure.stats.emittedRoads} visible, ${infrastructure.stats.hiddenRoads} hidden), ${trees.length / 8} trees, ${buildings.length / 8} buildings.`);
 }
 

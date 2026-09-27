@@ -20,11 +20,13 @@ export default defineConfig({
     { src: 'public/textures', dest: '.' },
     { src: 'public/ui', dest: '.' },
     { src: 'public/world', dest: '.' },
+    { src: 'public/europe', dest: '.' },
   ] }), {
     name: 'split-cloudflare-world-assets',
     apply: 'build',
     async closeBundle() {
       await splitCloudflareWorld(resolve(__dirname, 'dist/world'));
+      await splitCloudflareWorld(resolve(__dirname, 'dist/europe'));
     },
   }],
   build: {

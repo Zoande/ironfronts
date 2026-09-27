@@ -1,6 +1,8 @@
 node_modules/
 dist/
 public/world/
+public/europe/
+*.har
 artifacts/
 data/
 *.log

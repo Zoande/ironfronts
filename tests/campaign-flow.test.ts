@@ -51,7 +51,8 @@ describe('campaign flow — dossier then nation overlay', () => {
   });
 
   it('uses the pregenerated country raster and the requested availability palette', () => {
-    expect(campaignMap).toContain("const MAP_URL = '/menu/campaign-country-ids.u16'");
+    expect(campaignMap).toContain("'/menu/campaign-country-ids.u16'");
+    expect(campaignMap).toContain("'/menu/campaign-europe-ids.u16'");
     expect(campaignMap).toContain('available: [218, 207, 181, 255]');
     expect(campaignMap).toContain('unavailable: [92, 95, 91, 255]');
     expect(campaignMap).toContain('selected: [81, 124, 68, 255]');
@@ -68,7 +69,7 @@ describe('campaign flow — dossier then nation overlay', () => {
   it('Begin Operation opens the overlay; Cancel/Escape return to the dossier', () => {
     expect(menu).toContain('function openNationPicker()');
     expect(menu).toContain('function closeNationPicker()');
-    expect(menu).toMatch(/beginOperation\?\.addEventListener\('click', \(\) => openNationPicker\(\)\)/);
+    expect(menu).toContain('else openNationPicker();');
     expect(menu).toMatch(/nationCancel\?\.addEventListener\('click', \(\) => closeNationPicker\(\)\)/);
     // Escape backs out of the overlay before it closes the dossier.
     const esc = menu.slice(menu.indexOf("if (event.key !== 'Escape')"), menu.indexOf("if (event.key !== 'Escape')") + 260);
@@ -88,11 +89,11 @@ describe('campaign flow — dossier then nation overlay', () => {
     expect(menu).toMatch(/confirmNation\?\.addEventListener\('click',[\s\S]{0,120}deployFromPicker\(selectedCountryId\)/);
   });
 
-  it('disables New Campaign once a campaign exists, but Continue still launches', () => {
-    expect(menu).toContain('const hasCampaign = assignedCountry !== null');
-    expect(menu).toContain('newCampaign.disabled = hasCampaign');
-    expect(menu).toContain("newCampaign.classList.toggle('is-disabled', hasCampaign)");
-    expect(menu).toContain("continueButton.addEventListener('click', () => void deploy(assignedCountry.id))");
+  it('keeps both campaigns accessible and resumes an assignment', () => {
+    expect(html).toContain('id="ifm-choose-world"');
+    expect(html).toContain('id="ifm-choose-europe"');
+    expect(menu).toContain('newCampaign.disabled = false');
+    expect(menu).toContain("void deploy(assignedCountry.id)");
     expect(menu).not.toContain('previewOnly');
     expect(html).not.toContain('ifm-registry-preview');
   });

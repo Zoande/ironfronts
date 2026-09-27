@@ -15,6 +15,7 @@ import { loadCountryLabelFont } from '../country-labels/atlas';
 import { isValidCountryLabelPoint } from '../country-labels/territory';
 import { buildDiplomacyColorData, findCountryByName } from './diplomacy';
 import { EnvironmentController, type TimeOfDayState } from './environment-controller';
+import { safeEdgeFogWidth } from './edge-fog';
 import { FRAME_UNIFORM_BYTES, packFrameUniforms } from './frame-uniforms';
 import { align4, uploadMipmappedTexture, uploadTexture } from './gpu-utils';
 import { loadLandModel, loadLandEffects, type LandModel } from './land-model';
@@ -42,7 +43,7 @@ import type {
   CanonicalRoadNetworkMetadata, ProvinceRecord, WorldManifest,
 } from './types';
 import {
-  extractFrustumPlanes, sphereIntersectsFrustum, sphereIntersectsHorizontalWorldWindow, WORLD_COPY_INDICES,
+  extractFrustumPlanes, sphereIntersectsFrustum, sphereIntersectsHorizontalWorldWindow, WORLD_COPY_INDICES, worldCopies,
 } from './visibility';
 import { sampleWrappedField } from './world-sampling';
 import { loadWorldAssetBuffers, fetchWorldBinary, fetchWorldJson } from './world-assets';
@@ -101,6 +102,7 @@ export class WorldRenderer {
   private combatMaterial?: GPUBindGroup;
   private commonBindGroup!: GPUBindGroup;
   private uniformBuffer!: GPUBuffer;
+  private edgeFogWidth = 0;
   private terrainPipeline!: GPURenderPipeline;
   private polarCapPipeline!: GPURenderPipeline;
   private waterPipeline!: GPURenderPipeline;
@@ -485,7 +487,7 @@ export class WorldRenderer {
       ?? this.manifest.politics.countries[0];
     if (!defaultPlayer) throw new Error('The world has no countries');
     this.playerCountryId = defaultPlayer.id;
-    this.camera.configureWorld(this.manifest.world.width, this.manifest.world.height);
+    this.camera.configureWorld(this.manifest.world.width, this.manifest.world.height, this.manifest.world.wrapX);
 
     report('Requesting WebGPU device', 0.1);
     this.adapter = (await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
@@ -655,6 +657,12 @@ export class WorldRenderer {
       size: this.manifest.terrain.chunksX * this.manifest.terrain.chunksY * 3 * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    if (!this.manifest.world.wrapX && this.provinceCenterById.size === 0) {
+      throw new Error('Europe edge fog requires province centers.');
+    }
+    this.edgeFogWidth = this.manifest.world.wrapX ? 0 : safeEdgeFogWidth(
+      this.manifest.world.width, this.manifest.world.height, this.provinceCenterById.values(),
+    );
     this.commonBindGroup = this.device.createBindGroup({
       label: 'world resources',
       layout: this.commonLayout,
@@ -954,7 +962,7 @@ export class WorldRenderer {
   setWaterwaysVisible(enabled: boolean): void { this.showWaterways = enabled; }
 
   focus(x: number, z: number, distance = 520, yaw = -0.48, pitch = 0.82): void {
-    this.camera.target[0] = wrap(x, this.manifest.world.width);
+    this.camera.target[0] = this.manifest.world.wrapX ? wrap(x, this.manifest.world.width) : clamp(x, 0, this.manifest.world.width);
     this.camera.target[2] = clamp(z, 0, this.manifest.world.height);
     this.camera.distance = clamp(distance, this.camera.minDistance, this.camera.maxDistance);
     this.camera.yaw = yaw;
@@ -1309,7 +1317,7 @@ export class WorldRenderer {
   isWorldPointVisible(worldX: number, worldZ: number, radius = 120): boolean {
     if (this.renderingSuspended || !this.initialized) return false;
     const width = this.manifest.world.width;
-    for (const copy of WORLD_COPY_INDICES) {
+    for (const copy of worldCopies(this.manifest.world.wrapX)) {
       const copyX = worldX + (copy - 1) * width;
       if (this.chunkIntersectsView(copyX, worldZ, radius)) return true;
     }
@@ -1453,7 +1461,7 @@ export class WorldRenderer {
       const x = this.armyModelSource[sourceOffset];
       const z = this.armyModelSource[sourceOffset + 1];
       let visible = false;
-      for (const copy of WORLD_COPY_INDICES) {
+      for (const copy of worldCopies(this.manifest.world.wrapX)) {
         const copyX=x+(copy-1)*worldWidth;
         const inView=this.armyModelSource[sourceOffset+3]===5
           ? sphereIntersectsFrustum(this.frustumPlanes,copyX,.35,z,22)
@@ -1548,8 +1556,10 @@ export class WorldRenderer {
     const center = this.provinceCenterById.get(provinceId);
     if (!center) return null;
     let dx = center[0] - ground[0];
-    if (dx > this.manifest.world.width / 2) dx -= this.manifest.world.width;
-    else if (dx < -this.manifest.world.width / 2) dx += this.manifest.world.width;
+    if (this.manifest.world.wrapX) {
+      if (dx > this.manifest.world.width / 2) dx -= this.manifest.world.width;
+      else if (dx < -this.manifest.world.width / 2) dx += this.manifest.world.width;
+    }
     const radius = Math.max(28, this.camera.distance * 0.045);
     return Math.hypot(dx, center[1] - ground[1]) <= radius ? provinceId : null;
   }
@@ -1560,6 +1570,8 @@ export class WorldRenderer {
     if (this.camera.distance >= 5_000) return null;
     const ground = this.groundPointAt(clientX, clientY);
     if (!ground) return null;
+    if (!this.manifest.world.wrapX && (ground[0] < 0 || ground[0] >= this.manifest.world.width
+      || ground[1] < 0 || ground[1] >= this.manifest.world.height)) return null;
     const radius = Math.max(28, this.camera.distance * 0.045);
     return this.armyPicker.pick(ground[0], ground[1], radius, this.manifest.world.width, this.elapsed);
   }
@@ -1570,6 +1582,8 @@ export class WorldRenderer {
     if (this.camera.distance >= 5_000) return [];
     const ground = this.groundPointAt(clientX, clientY);
     if (!ground) return [];
+    if (!this.manifest.world.wrapX && (ground[0] < 0 || ground[0] >= this.manifest.world.width
+      || ground[1] < 0 || ground[1] >= this.manifest.world.height)) return [];
     const radius = Math.max(28, this.camera.distance * 0.045);
     return this.armyPicker.pickAll(ground[0], ground[1], radius, this.manifest.world.width, this.elapsed);
   }
@@ -1796,7 +1810,7 @@ export class WorldRenderer {
       interaction: [this.hoveredId, this.camera.distance, tintMode, countryBordersEnabled],
       terrainInfo: [this.manifest.terrain.chunksX, this.manifest.terrain.chunksY, this.manifest.terrain.gridResolution, this.showWireframe ? 1 : 0],
       lighting: [lighting.daylight, lighting.twilight, lighting.night, this.environment.dayPhase],
-      sky: [...skyColor, 0],
+      sky: [...skyColor, this.edgeFogWidth],
       // weather.y = quality index (0 low .. 3 ultra), weather.z = 0..1 detail
       // factor. Shaders can scale purely-decorative expensive work by these
       // without a struct change. weather.w = encoded (1-based) selected
@@ -1827,11 +1841,13 @@ export class WorldRenderer {
     const pass = frame.pass;
 
     pass.setBindGroup(0, this.commonBindGroup);
-    pass.setPipeline(this.polarCapPipeline);
-    pass.setVertexBuffer(0, this.polarCapMesh.vertex);
-    pass.setIndexBuffer(this.polarCapMesh.index, 'uint16');
-    pass.drawIndexed(this.polarCapMesh.indexCount, 6);
-    this.recordIndexedDraw('polarCaps', this.polarCapMesh.indexCount, 6);
+    if (this.manifest.world.wrapX) {
+      pass.setPipeline(this.polarCapPipeline);
+      pass.setVertexBuffer(0, this.polarCapMesh.vertex);
+      pass.setIndexBuffer(this.polarCapMesh.index, 'uint16');
+      pass.drawIndexed(this.polarCapMesh.indexCount, 6);
+      this.recordIndexedDraw('polarCaps', this.polarCapMesh.indexCount, 6);
+    }
     this.frameWorkload.visibleChunks.terrain = this.terrainLodDraws.reduce((sum, draw) => sum + draw.instanceCount, 0);
     for (const draw of this.terrainLodDraws) this.frameWorkload.lodInstances.terrain[draw.lod] += draw.instanceCount;
     if (this.performanceLayers.ocean) {
@@ -2096,10 +2112,11 @@ export class WorldRenderer {
 
   private drawCountryLabels(pass: GPURenderPassEncoder, glyphCount: number): void {
     if (glyphCount <= 0 || !this.countryLabelBindGroup) return;
-    const instances = glyphCount * WORLD_COPY_INDICES.length;
+    const copies = worldCopies(this.manifest.world.wrapX);
+    const instances = glyphCount * copies.length;
     pass.setPipeline(this.countryLabelPipeline);
     pass.setBindGroup(1, this.countryLabelBindGroup);
-    pass.draw(6, instances);
+    pass.draw(6, instances, 0, copies[0] * glyphCount);
     this.recordTriangleDraw('labels', instances * 2, instances);
   }
 
@@ -2115,6 +2132,7 @@ export class WorldRenderer {
    * zoomed out far enough that its reach exceeds half the world width.
    */
   private visibleWorldCopies(): readonly number[] {
+    if (!this.manifest.world.wrapX) return worldCopies(false);
     if (this.worldCopyCache.revision === this.camera.revision) return this.worldCopyCache.copies;
     const width = this.manifest.world.width;
     // Generous margin over the farthest any of these layers draws (routes /
@@ -2152,7 +2170,7 @@ export class WorldRenderer {
   private drawIndexedWorldCopies(
     pass: GPURenderPassEncoder, indexCount: number, perCopyCount: number, category: RenderCategory, copyMask=7,
   ): void {
-    for (const copy of WORLD_COPY_INDICES) {
+    for (const copy of worldCopies(this.manifest.world.wrapX)) {
       if(!(copyMask & (1<<copy)))continue;
       pass.drawIndexed(indexCount, perCopyCount, 0, 0, copy * perCopyCount);
       this.recordIndexedDraw(category, indexCount, perCopyCount);
@@ -2205,7 +2223,7 @@ export class WorldRenderer {
     const chunkHeight = this.manifest.world.height / chunksY;
     const radius = clamp(this.camera.distance * 1.48 + 720, 940, maximumDistance + 300);
     const chunkRadius = Math.hypot(chunkWidth, chunkHeight) * 0.6;
-    for (const copy of WORLD_COPY_INDICES) {
+    for (const copy of worldCopies(this.manifest.world.wrapX)) {
       const visibleRanges: Array<{ firstIndex: number; indexCount: number }> = [];
       for (let chunkY = 0; chunkY < chunksY; chunkY += 1) {
         for (let chunkX = 0; chunkX < chunksX; chunkX += 1) {
@@ -2266,7 +2284,7 @@ export class WorldRenderer {
       const chunkRadius = Math.hypot(chunkWidth, chunkHeight) * 0.62;
       const perCopy: Array<{ firstInstance: number; instanceCount: number }[]> = [];
       let visibleChunks = 0;
-      for (const copy of WORLD_COPY_INDICES) {
+      for (const copy of worldCopies(this.manifest.world.wrapX)) {
         const copyOffset = (copy - 1) * this.manifest.world.width;
         const visibleRanges: Array<{ firstInstance: number; instanceCount: number }> = [];
         for (let chunkIndex = 0; chunkIndex < ranges.length; chunkIndex += 1) {
@@ -2288,16 +2306,15 @@ export class WorldRenderer {
           }
           merged.push({ ...range });
         }
-        perCopy.push(merged);
+        perCopy[copy] = merged;
       }
       this.borderVisibleCache.revision = this.camera.revision;
       this.borderVisibleCache.visibleChunks = visibleChunks;
       this.borderVisibleCache.perCopy = perCopy;
     }
     this.frameWorkload.visibleChunks.borders += this.borderVisibleCache.visibleChunks;
-    for (let i = 0; i < WORLD_COPY_INDICES.length; i += 1) {
-      const copy = WORLD_COPY_INDICES[i];
-      for (const merged of this.borderVisibleCache.perCopy[i] ?? []) {
+    for (const copy of worldCopies(this.manifest.world.wrapX)) {
+      for (const merged of this.borderVisibleCache.perCopy[copy] ?? []) {
         pass.draw(6, merged.instanceCount, 0, copy * layer.count + merged.firstInstance);
         this.recordTriangleDraw(category, merged.instanceCount * 2, merged.instanceCount);
       }
@@ -2389,6 +2406,8 @@ export class WorldRenderer {
   }
 
   private sampleProvince(worldX: number, worldZ: number): number {
+    if (!this.manifest.world.wrapX && (worldX < 0 || worldX >= this.manifest.world.width
+      || worldZ < 0 || worldZ >= this.manifest.world.height)) return 0;
     return sampleWrappedField(
       this.provinceData,
       this.manifest.fields.provinceIds,
@@ -2413,6 +2432,8 @@ export class WorldRenderer {
   }
 
   private sampleWaterway(worldX: number, worldZ: number): boolean {
+    if (!this.manifest.world.wrapX && (worldX < 0 || worldX >= this.manifest.world.width
+      || worldZ < 0 || worldZ >= this.manifest.world.height)) return false;
     const field = this.manifest.fields.navigation;
     const x = wrap(Math.floor(worldX / this.manifest.world.width * field.width), field.width);
     const y = clamp(Math.floor(worldZ / this.manifest.world.height * field.height), 0, field.height - 1);

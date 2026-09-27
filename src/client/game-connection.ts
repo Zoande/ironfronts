@@ -56,9 +56,11 @@ export class GameConnection extends EventTarget {
     clientEpochMs: number; fields: DiagnosticFields;
   }> = [];
   private diagnosticUploadEnabled = false;
+  private gameId = 'world-at-war-2';
 
-  static async open(onStage?: (stage: string) => void): Promise<GameConnection> {
+  static async open(onStage?: (stage: string) => void, gameId = 'world-at-war-2'): Promise<GameConnection> {
     const connection = new GameConnection();
+    connection.gameId = gameId;
     try { await connection.connect(onStage); return connection; }
     catch (error) { connection.close(); throw error; }
   }
@@ -90,7 +92,7 @@ export class GameConnection extends EventTarget {
     const descriptorStarted = performance.now();
     let descriptor: Awaited<ReturnType<typeof connectGame>>;
     try {
-      descriptor = await connectGame();
+      descriptor = await connectGame(this.gameId);
     } catch (error) {
       this.trace('error', 'connection_descriptor_failed', {
         attempt, milliseconds: performance.now() - descriptorStarted,

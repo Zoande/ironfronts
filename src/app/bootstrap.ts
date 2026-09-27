@@ -325,16 +325,18 @@ if (!authenticated.authenticated || !authenticated.account) {
   window.location.replace('/login.html');
   await new Promise(() => { /* stop dossier bootstrap during navigation */ });
 }
-const lobby = await getGame();
+const lobbies = await Promise.all([getGame('world-at-war-2'), getGame('europe-at-war-1')]);
+let currentLobby = lobbies[0];
 
 mountMenu({
   audio,
-  lobby,
+  lobbies,
   username: authenticated.account!.username,
   profile: authenticated.profile,
   onLogout: () => { void logout().finally(() => window.location.replace('/login.html')); },
-  onLaunch: (countryId: number) => new Promise<void>((resolve, reject) => {
+  onLaunch: (gameId: string, countryId: number) => new Promise<void>((resolve, reject) => {
     if (rendererStarted) { resolve(); return; }
+    currentLobby = lobbies.find((item) => item.gameId === gameId) ?? lobbies[0];
     rendererStarted = true;
     currentLaunchCountryId = countryId;
     launchOutcome = { resolve, reject };
@@ -467,10 +469,10 @@ async function runLaunch(countryId: number): Promise<void> {
   uiStore.patch({ phase: 'loading' });
 
   try {
-    if (lobby.assignedCountryId === null) {
+    if (currentLobby.assignedCountryId === null) {
       setLoadingStage('Registering for the operation', 0.02);
-      await withTimeout(joinGame(countryId), 15_000, 'Joining the campaign');
-      lobby.assignedCountryId = countryId;
+      await withTimeout(joinGame(currentLobby.gameId, countryId), 15_000, 'Joining the campaign');
+      currentLobby.assignedCountryId = countryId;
     }
 
     // Renderer module graph, WebGPU device and world assets are all deferred
@@ -521,7 +523,7 @@ function startLoadingQuotes(): () => void {
 
 async function startGame(token: number): Promise<void> {
   const connection = await withTimeout(
-    GameConnection.open((stage) => setLoadingStage(stage, 0.08)),
+    GameConnection.open((stage) => setLoadingStage(stage, 0.08), currentLobby.gameId),
     20_000,
     'Connecting to command server',
   );

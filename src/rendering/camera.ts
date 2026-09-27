@@ -19,6 +19,7 @@ export class StrategyCamera {
   minimumAltitude = 80;
   worldWidth = 13_562;
   worldHeight = 7_000;
+  wrapX = true;
   viewportWidth = 1;
   viewportHeight = 1;
   revision = 0;
@@ -49,9 +50,10 @@ export class StrategyCamera {
     vec3.set(this.target, this.worldWidth * 0.5, 0, this.worldHeight * 0.5);
   }
 
-  configureWorld(width: number, height: number): void {
+  configureWorld(width: number, height: number, wrapX = true): void {
     this.worldWidth = width;
     this.worldHeight = height;
+    this.wrapX = wrapX;
     vec3.set(this.target, width * 0.5, 0, height * 0.5);
     this.maxDistance = Math.max(width, height) * 0.8;
     this.distance = Math.max(width, height) * 0.66;
@@ -215,8 +217,10 @@ export class StrategyCamera {
   }
 
   private normalizeTarget(): void {
-    this.target[0] = ((this.target[0] % this.worldWidth) + this.worldWidth) % this.worldWidth;
-    this.target[2] = clamp(this.target[2], -160, this.worldHeight + 160);
+    this.target[0] = this.wrapX
+      ? ((this.target[0] % this.worldWidth) + this.worldWidth) % this.worldWidth
+      : clamp(this.target[0], -250, this.worldWidth + 250);
+    this.target[2] = clamp(this.target[2], this.wrapX ? -160 : -250, this.worldHeight + (this.wrapX ? 160 : 250));
   }
 
   private onPointerDown = (event: PointerEvent): void => {

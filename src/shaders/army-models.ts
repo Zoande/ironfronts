@@ -178,7 +178,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   output.normal = normal;
   output.color = unpackModelRgb(model.a.z) * part.shade;
   let closeFade = 1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y);
-  output.alpha = closeFade * (1.0 - horizontalWorldFog(worldPosition.x));
+  output.alpha = closeFade * (1.0 - mapFog(worldPosition.xz));
   let modelFlags = u32(model.b.z + 0.5);
   if ((modelFlags & 1u) != 0u) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
   // Four authored land families share a single pipeline; missing files retain a fallback.
@@ -225,7 +225,7 @@ fn armyKindCountVertex(
   output.uv = corner;
   output.color = unpackModelRgb(model.a.z);
   output.count = model.b.x;
-  output.alpha = (1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y)) * (1.0 - horizontalWorldFog(worldPosition.x));
+  output.alpha = (1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y)) * (1.0 - mapFog(worldPosition.xz));
   let pixelCenter = vec2f(23.0, 1.0);
   // viewport.z (backing-store scale) holds the count badge at a constant CSS
   // size so it doesn't grow when the graphics preset lowers the render scale.

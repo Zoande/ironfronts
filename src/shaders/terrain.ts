@@ -374,6 +374,6 @@ fn terrainFragment(input: TerrainVertexOutput) -> @location(0) vec4f {
   let fog = smoothstep(3600.0, 11500.0, distanceToCamera);
   let fogColor = distanceFogColor();
   let distanceFogged = mix(lit, fogColor, fog * 0.39);
-  return vec4f(mix(distanceFogged, worldFogColor(), horizontalWorldFog(input.worldPosition.x)), 1.0);
+  return vec4f(mix(distanceFogged, worldFogColor(), mapFog(input.worldPosition.xz)), 1.0);
 }
 `;
