@@ -64,14 +64,22 @@
               <span class="ifm__card-foot"><i>01</i><span>Command</span></span>
             </button>
 
-            <button class="ifm__card is-disabled" id="ifm-continue" disabled aria-label="Continue assigned campaign" title="No country assignment yet">
-              <i class="ifm__corner ifm__corner--tl"></i><i class="ifm__corner ifm__corner--tr"></i>
-              <i class="ifm__corner ifm__corner--bl"></i><i class="ifm__corner ifm__corner--br"></i>
-              <span class="ifm__icon" style="--icon:url(/menu/icons/history.svg)"></span>
-              <strong>Continue</strong>
-              <small id="ifm-continue-detail">No field assignment.</small>
-              <span class="ifm__card-foot"><i>02</i><span>Archive</span></span>
-            </button>
+            <div class="ifm__continue-group">
+              <button class="ifm__card is-disabled" id="ifm-continue" disabled aria-label="Continue assigned campaign" title="No country assignment yet">
+                <i class="ifm__corner ifm__corner--tl"></i><i class="ifm__corner ifm__corner--tr"></i>
+                <i class="ifm__corner ifm__corner--bl"></i><i class="ifm__corner ifm__corner--br"></i>
+                <span class="ifm__icon" style="--icon:url(/menu/icons/history.svg)"></span>
+                <strong>Continue</strong>
+                <small id="ifm-continue-detail">No field assignment.</small>
+                <span class="ifm__card-foot"><i>02</i><span>Archive</span></span>
+              </button>
+              <button class="ifm__card ifm__card--other" id="ifm-continue-other" hidden aria-label="Continue game">
+                <i class="ifm__corner ifm__corner--tl"></i><i class="ifm__corner ifm__corner--tr"></i>
+                <i class="ifm__corner ifm__corner--bl"></i><i class="ifm__corner ifm__corner--br"></i>
+                <span class="ifm__icon" style="--icon:url(/menu/icons/history.svg)"></span>
+                <span class="ifm__other-copy"><strong>Continue Game</strong><small id="ifm-continue-other-detail"></small></span>
+              </button>
+            </div>
 
             <button class="ifm__card" data-open="settings" aria-label="Settings">
               <i class="ifm__corner ifm__corner--tl"></i><i class="ifm__corner ifm__corner--tr"></i>

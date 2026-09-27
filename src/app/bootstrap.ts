@@ -331,6 +331,7 @@ let currentLobby = lobbies[0];
 mountMenu({
   audio,
   lobbies,
+  accountId: authenticated.account!.id,
   username: authenticated.account!.username,
   profile: authenticated.profile,
   onLogout: () => { void logout().finally(() => window.location.replace('/login.html')); },

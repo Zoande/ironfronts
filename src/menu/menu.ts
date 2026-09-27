@@ -8,6 +8,7 @@ import { assignedCountry as resolveAssignedCountry, selectableCountries } from '
 import { resolveFlagUrl } from '../ui/flags';
 import { mountCommander } from './commander';
 import { mountCampaignMap, type CampaignMapController } from './campaign-map';
+import { safeLocalStorage } from '../app/dom';
 
 export interface MenuHandlers {
   /**
@@ -15,6 +16,7 @@ export interface MenuHandlers {
    * scenario + country selection. Nothing downstream re-reads the DOM.
    */
   lobbies: readonly GameLobby[];
+  accountId: string;
   username: string;
   /** Persisted commander progression from the auth server's session response. */
   profile?: CommanderProfile;
@@ -44,16 +46,25 @@ export function mountMenu(handlers: MenuHandlers): void {
   const musicVolume = document.getElementById('ifm-music-volume') as HTMLInputElement | null;
   const newCampaign = requiredId<HTMLButtonElement>('ifm-new-campaign');
   const continueButton = requiredId<HTMLButtonElement>('ifm-continue');
+  const otherButton = requiredId<HTMLButtonElement>('ifm-continue-other');
   let currentLobby = handlers.lobbies[0];
-  const assignedLobby = handlers.lobbies.find((lobby) => resolveAssignedCountry(lobby)) ?? null;
+  const assignedLobbies = handlers.lobbies.filter((lobby) => resolveAssignedCountry(lobby));
+  const lastGameKey = `ironfronts:last-entered-game:${handlers.accountId}`;
+  let lastGameId: string | null = null;
+  try { lastGameId = safeLocalStorage()?.getItem(lastGameKey) ?? null; } catch { /* Storage can be unavailable. */ }
+  const assignedLobby = assignedLobbies.find((lobby) => lobby.gameId === lastGameId) ?? assignedLobbies[0] ?? null;
   const assignedCountry = assignedLobby ? resolveAssignedCountry(assignedLobby) : null;
   mountCommander({
     username: handlers.username,
     profile: handlers.profile,
     onLogout: handlers.onLogout,
   });
-  newCampaign.disabled = false;
+  newCampaign.disabled = handlers.lobbies.length > 0 && assignedLobbies.length === handlers.lobbies.length;
+  newCampaign.classList.toggle('is-disabled', newCampaign.disabled);
+  if (newCampaign.disabled) newCampaign.title = 'All available campaigns have been joined';
   continueButton.disabled = assignedCountry === null;
+  continueButton.title = assignedCountry ? `Continue ${assignedLobby?.name} as ${assignedCountry.name}` : 'No country assignment yet';
+  continueButton.setAttribute('aria-label', continueButton.title);
   continueButton.classList.toggle('is-disabled', assignedCountry === null);
   continueButton.classList.toggle('is-assigned', assignedCountry !== null);
   requiredId<HTMLElement>('ifm-continue-detail').textContent = assignedCountry
@@ -69,6 +80,20 @@ export function mountMenu(handlers: MenuHandlers): void {
       else continueButton.classList.remove('is-assigned');
     } else {
       continueButton.classList.remove('is-assigned');
+    }
+  }
+  const otherLobby = assignedLobbies.find((lobby) => lobby !== assignedLobby);
+  const otherCountry = otherLobby ? resolveAssignedCountry(otherLobby) : null;
+  otherButton.hidden = !otherLobby || !otherCountry;
+  if (otherLobby && otherCountry) {
+    requiredId<HTMLElement>('ifm-continue-other-detail').textContent = `${otherLobby.name}: ${otherCountry.name}`;
+    otherButton.setAttribute('aria-label', `Continue ${otherLobby.name} as ${otherCountry.name}`);
+    otherButton.addEventListener('click', () => { currentLobby = otherLobby; void deploy(otherCountry.id); });
+    const flagUrl = resolveFlagUrl(otherCountry.name);
+    if (flagUrl) {
+      const icon = otherButton.querySelector<HTMLElement>('.ifm__icon');
+      icon?.style.setProperty('--flag', `url("${flagUrl}")`);
+      otherButton.classList.add('is-assigned');
     }
   }
 
@@ -462,6 +487,7 @@ export function mountMenu(handlers: MenuHandlers): void {
       root.hidden = true;
       if (brand) brand.hidden = false;
       await handlers.onLaunch(currentLobby.gameId, countryId);
+      try { safeLocalStorage()?.setItem(lastGameKey, currentLobby.gameId); } catch { /* Storage can be unavailable. */ }
     } catch (error) {
       // The launch was abandoned (e.g. "Return to Command"). Bring the menu
       // back on its primary screen with interaction fully restored.

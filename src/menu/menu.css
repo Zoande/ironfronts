@@ -86,6 +86,9 @@
 .ifm__eyebrow b { font: 700 .68em/1 var(--ifm-sans); letter-spacing: .38em; text-transform: uppercase; }
 
 .ifm__grid { display: flex; gap: clamp(18px, 2vw, 32px); }
+.ifm__continue-group { display: flex; flex-direction: column; gap: 10px; width: clamp(200px, 15.5vw, 268px); }
+.ifm__continue-group > .ifm__card { width: 100%; }
+.ifm__card[hidden] { display: none; }
 
 .ifm__card {
   position: relative; width: clamp(200px, 15.5vw, 268px); height: clamp(238px, 26vh, 276px);
@@ -152,6 +155,14 @@
   font: 700 .58em/1 var(--ifm-sans); letter-spacing: .12em; color: var(--hud-text-dim);
 }
 .ifm__card-foot i { font-style: normal; color: var(--hud-gold); }
+.ifm__card--other {
+  width: 100%; height: 64px; padding: 8px 14px;
+  flex-direction: row; justify-content: flex-start; gap: 12px; text-align: left;
+}
+.ifm__card--other .ifm__icon { width: 42px; height: 42px; margin: 0; }
+.ifm__other-copy { min-width: 0; display: flex; flex-direction: column; }
+.ifm__card--other strong { margin: 0; font-size: 1.05em; }
+.ifm__card--other small { margin: .25em 0 0; padding: 0; min-height: 0; }
 
 /* ---------- footer ---------- */
 .ifm__footer {
@@ -681,11 +692,16 @@
     gap: 10px;
     width: min(100%, 430px);
   }
+  .ifm__continue-group { width: 100%; }
   .ifm__card { width: 100%; height: clamp(128px, 18.5svh, 168px); }
   .ifm__icon { width: 25%; margin-top: 9%; }
   .ifm__card strong { margin-top: 8%; font-size: 1.16em; }
   .ifm__card small { margin-top: .35em; font-size: .72em; min-height: 2.2em; }
   .ifm__card-foot { padding: .55em .7em; }
+  .ifm__card--other { height: 58px; padding: 7px; gap: 7px; }
+  .ifm__card--other .ifm__icon { width: 32px; height: 32px; margin: 0; }
+  .ifm__card--other strong { margin: 0; font-size: .9em; }
+  .ifm__card--other small { margin: .2em 0 0; font-size: .65em; min-height: 0; }
 
   .ifm__footer {
     min-height: 52px;
@@ -743,6 +759,7 @@
   .ifm__eyebrow { display: none; }
   .ifm__grid { display: grid; grid-template-columns: repeat(3, minmax(132px, 1fr)); width: min(94vw, 620px); gap: 8px; }
   .ifm__card { width: 100%; height: 142px; }
+  .ifm__card--other { height: 46px; }
   .ifm__card small { display: none; }
   .ifm__footer { min-height: 44px; }
 }
