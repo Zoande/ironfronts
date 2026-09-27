@@ -34,11 +34,14 @@ export function validateWorldState(ctx: SimContext): void {
     if (naval) {
       const crossing = army.navalCrossing;
       const transport = army.transport;
+      const openWaterLeg = crossing?.fromNodeId === crossing?.toNodeId
+        && (army.status === 'atSea' || Boolean(army.order?.seaDestination));
       if (!crossing || !transport || !nodeExists(crossing.fromNodeId) || !nodeExists(crossing.toNodeId)
-        || !graph.seaAdjacency[crossing.fromNodeId]?.includes(crossing.toNodeId)
+        || (!openWaterLeg && !graph.seaAdjacency[crossing.fromNodeId]?.includes(crossing.toNodeId))
+        || (openWaterLeg && !graph.seaAdjacency[crossing.fromNodeId]?.length)
         || (army.status === 'embarking' && army.graphNodeId !== crossing.fromNodeId)
         || (army.status === 'atSea' && (army.graphNodeId !== crossing.fromNodeId
-          || !onSeaEdge(army, crossing.fromNodeId, crossing.toNodeId)))
+          || (!openWaterLeg && !onSeaEdge(army, crossing.fromNodeId, crossing.toNodeId))))
         || (army.status === 'disembarking' && army.graphNodeId !== crossing.toNodeId)) {
         throw new Error('Invalid naval crossing.');
       }
@@ -90,6 +93,11 @@ export function validateWorldState(ctx: SimContext): void {
     }
     for (const order of [army.order, army.suspendedOrder]) if (order) {
       if (order.edgeProgress < 0 || order.path.some((id) => !nodeExists(id))) throw new Error('Invalid order node.');
+      if (order.seaDestination && (!nodeExists(order.seaDestination.anchorNodeId)
+        || !graph.seaAdjacency[order.seaDestination.anchorNodeId]?.length
+        || world.provinceAt(order.seaDestination.x, order.seaDestination.z) >= 0)) {
+        throw new Error('Invalid sea destination.');
+      }
       let previous = army.graphNodeId;
       for (let index = 0; index < order.path.length; index += 1) {
         const next = order.path[index];

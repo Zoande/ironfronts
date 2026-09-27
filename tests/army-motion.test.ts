@@ -30,6 +30,15 @@ describe('bounded authoritative army presentation', () => {
     const secondCorner = motion.sample('a', 200, 100, next, 1200, 1000);
     expect(secondCorner.x).toBeCloseTo(100); expect(secondCorner.z).toBeCloseTo(100);
   });
+  it('advances the displayed counter to the next corner at the route speed', () => {
+    const motion = new ArmyMotionInterpolator();
+    const leg = { targetX: 100, targetZ: 0, durationMs: 1000, sampledAtEpochMs: 0,
+      route: [{ x: 0, z: 0 }, { x: 100, z: 0 }, { x: 100, z: 100 }] };
+    const sample = motion.sample('route', 0, 0, leg, 450, 1000);
+    expect(sample.x).toBeCloseTo(50);
+    expect(sample.remainingMs).toBeCloseTo(250);
+    expect(presentedArmyPosition(sample, 250)).toMatchObject({ x: 100, z: 0 });
+  });
   it('uses the short wrapped edge and shares the marker trajectory with picking', () => {
     const motion=new ArmyMotionInterpolator();
     const point=motion.sample('a',990,0,{targetX:10,targetZ:0,durationMs:1000,sampledAtEpochMs:0},500,1000);

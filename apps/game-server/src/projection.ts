@@ -57,8 +57,12 @@ export function projectFor(
     if (graph && army.own) {
       const order = state.armies[army.id]?.order;
       const source = state.armies[army.id];
-      const roadRoute = order ? roadRouteForClient(order, graph, source?.graphNodeId ?? -1, source?.edge) : null;
-      const route = order && !roadRoute ? orderRouteForClient(order, graph, army.x, army.z, source?.edge) : null;
+      const returnAnchor = source?.navalCrossing?.returningToAnchor
+        ? { x: graph.nodeX[source.graphNodeId], z: graph.nodeZ[source.graphNodeId] } : undefined;
+      const roadRoute = order && !order.seaDestination && !returnAnchor
+        ? roadRouteForClient(order, graph, source?.graphNodeId ?? -1, source?.edge) : null;
+      const route = order && !roadRoute
+        ? orderRouteForClient(order, graph, army.x, army.z, source?.edge, returnAnchor) : null;
       if (roadRoute || route) projected = {
         ...projected, ...(roadRoute ? { moveRoadRoute: roadRoute } : { moveRoute: route! }),
         moveIntent: order!.intent,
@@ -91,9 +95,14 @@ export function projectFor(
       }
       const leg = source ? currentMovementLeg({ state, world, graph }, source) : null;
       if (leg && leg.worldUnitsPerGameHour > 0) {
-        const route = !source!.order?.path.length ? undefined
+        const returnAnchor = source?.navalCrossing?.returningToAnchor
+          ? { x: graph.nodeX[source.graphNodeId], z: graph.nodeZ[source.graphNodeId] } : undefined;
+        const route = returnAnchor ? [{ x: source!.x, z: source!.z }, returnAnchor]
+          : !source!.order?.path.length && !source!.order?.seaDestination ? undefined
           : orderRouteForClient(
-            { path: [source!.order.path[0]],
+            { path: source!.order.path.length ? [source!.order.path[0]] : [],
+              ...(source!.order.seaDestination && !source!.order.path.length
+                ? { seaDestination: source!.order.seaDestination } : {}),
               ...(source!.order.path.length === 1 && source!.order.roadDestination
                 ? { roadDestination: source!.order.roadDestination } : {}) },
             graph, source!.x, source!.z, source!.edge,
@@ -293,18 +302,23 @@ export function bearingLabel(dx: number, dz: number): string {
  * order carries no path (e.g. an already-arrived order still being cleaned up).
  */
 export function orderRouteForClient(
-  order: { path: readonly number[]; roadDestination?: { edgeId: number; from: number; to: number; distanceAlongEdge: number } },
+  order: { path: readonly number[]; roadDestination?: { edgeId: number; from: number; to: number; distanceAlongEdge: number };
+    seaDestination?: { x: number; z: number } },
   graph: LandGraph | { nodeX: ArrayLike<number>; nodeZ: ArrayLike<number> },
   armyX: number, armyZ: number,
   occupied?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null,
+  returnAnchor?: { x: number; z: number },
 ): Array<{ x: number; z: number }> | null {
-  if (!order.path.length) return null;
+  if (!order.path.length && !order.seaDestination && !returnAnchor) return null;
   if (!('edges' in graph)) return [
     { x: armyX, z: armyZ },
+    ...(returnAnchor ? [returnAnchor] : []),
     ...Array.from(order.path, (nodeId) => ({ x: graph.nodeX[nodeId], z: graph.nodeZ[nodeId] })),
+    ...(order.seaDestination ? [{ x: order.seaDestination.x, z: order.seaDestination.z }] : []),
   ];
-  const route = [{ x: armyX, z: armyZ }];
-  let from = occupied?.from ?? nearestNode(graph, armyX, armyZ, 0.1);
+  const route = [{ x: armyX, z: armyZ }, ...(returnAnchor ? [returnAnchor] : [])];
+  let from = occupied?.from ?? nearestNode(graph,
+    returnAnchor?.x ?? armyX, returnAnchor?.z ?? armyZ, 0.1);
   for (const to of order.path) {
     const firstOccupied = occupied && route.length === 1;
     const edgeId = firstOccupied
@@ -324,6 +338,7 @@ export function orderRouteForClient(
     } else route.push({ x: graph.nodeX[to], z: graph.nodeZ[to] });
     from = to;
   }
+  if (order.seaDestination) route.push({ x: order.seaDestination.x, z: order.seaDestination.z });
   return route;
 }
 

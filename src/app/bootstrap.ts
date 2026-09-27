@@ -1592,7 +1592,12 @@ function syncArmyMarkers(
         routeCursor += 8;
         routeCount += 1;
       };
-      const route = moveRoute;
+      // Keep the route attached to the same interpolated position as the
+      // clickable counter, including immediately after an order update.
+      const route = [
+        { x: armyMotion.x, z: armyMotion.z },
+        ...moveRoute.slice(1),
+      ];
       const legs = Math.max(1, route.length - 1);
       const worldW = renderer.manifest?.world.width ?? 0;
       const wrapDelta = (d: number): number => {
@@ -2526,14 +2531,15 @@ function refreshSelectedArmy(
       ? battle.estimatedRealSeconds / Math.max(0.0001, 1 - (combatProgress ?? 0))
       : view.motion && movementRemainingMs > 0
         ? movementRemainingMs / 1_000 / Math.max(0.0001, 1 - (movementProgress ?? 0)) : undefined;
+  const anchoredAtSea = view.status === 'atSea' && !view.moveOrder;
   const moveDisabledReason = !session.fresh
     ? 'Waiting for an authoritative update from the game server.'
     : inCloseCombat
       ? 'This formation is currently locked in close combat.'
       : view.status === 'retreating'
         ? 'This formation is withdrawing and cannot receive a new move order.'
-        : NAVAL_TRANSIT_STATUSES.has(view.status)
-          ? 'This formation is in transit and cannot receive a land move order.'
+        : NAVAL_TRANSIT_STATUSES.has(view.status) && !anchoredAtSea
+          ? 'This formation is in transit and cannot receive a new move order yet.'
           : 'Movement is unavailable in the current state.';
   uiStore.patch({
     selectedArmy: {
@@ -2576,7 +2582,7 @@ function refreshSelectedArmy(
       // card never reflects it.
       targetingMode: view.own && targetingMode !== 'strike' ? targetingMode : null,
       canMove: session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
-        && !NAVAL_TRANSIT_STATUSES.has(view.status),
+        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || anchoredAtSea),
       moveDisabledReason,
       canAttack: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),

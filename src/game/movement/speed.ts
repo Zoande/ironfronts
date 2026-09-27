@@ -144,11 +144,13 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
   const crossing = army.navalCrossing;
   if (crossing && (army.status === 'embarking' || army.status === 'atSea')) {
     if (army.status === 'embarking') hours += Math.max(0, crossing.hoursRemaining);
+    const finalSeaLeg = crossing.fromNodeId === crossing.toNodeId
+      && order.seaDestination && !crossing.returningToAnchor;
     hours += seaSegmentHours(session, army, wrappedDistance(
-      army.x, army.z, session.graph.nodeX[crossing.toNodeId],
-      session.graph.nodeZ[crossing.toNodeId], session.world.width,
+      army.x, army.z, finalSeaLeg ? order.seaDestination!.x : session.graph.nodeX[crossing.toNodeId],
+      finalSeaLeg ? order.seaDestination!.z : session.graph.nodeZ[crossing.toNodeId], session.world.width,
     ));
-    hours += GAME_PACE.movement.navalDwellHours;
+    if (!finalSeaLeg && !order.seaDestination) hours += GAME_PACE.movement.navalDwellHours;
     fromNode = crossing.toNodeId;
     fromX = session.graph.nodeX[fromNode];
     fromZ = session.graph.nodeZ[fromNode];
@@ -199,6 +201,13 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
     fromX = toX;
     fromZ = toZ;
   }
+  if (order.seaDestination && !(crossing && crossing.fromNodeId === crossing.toNodeId
+    && !crossing.returningToAnchor)) {
+    hours += seaSegmentHours(session, army, wrappedDistance(
+      fromX, fromZ, order.seaDestination.x, order.seaDestination.z, session.world.width,
+    ));
+    if (!crossing) hours += GAME_PACE.movement.navalDwellHours;
+  }
   return hours;
 }
 
@@ -207,8 +216,22 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
  * terrain, road, retreat, and global movement multipliers as simulation. */
 export function currentMovementLeg(session: SimContext, army: ArmyStack): CurrentMovementLeg | null {
   const order = army.order;
-  if (!order?.path.length || army.status === 'engaged'
+  if (!order || army.status === 'engaged'
     || army.status === 'embarking' || army.status === 'disembarking') return null;
+  if (!order.path.length && !order.seaDestination && !army.navalCrossing?.returningToAnchor) return null;
+  if (army.navalCrossing?.returningToAnchor) {
+    const anchor = army.graphNodeId;
+    return { targetX: session.graph.nodeX[anchor], targetZ: session.graph.nodeZ[anchor],
+      worldUnitsPerGameHour: transportWorldUnitsPerGameHour(session, army),
+      distance: wrappedDistance(army.x, army.z, session.graph.nodeX[anchor],
+        session.graph.nodeZ[anchor], session.world.width) };
+  }
+  if (order.seaDestination && !order.path.length) {
+    return { targetX: order.seaDestination.x, targetZ: order.seaDestination.z,
+      worldUnitsPerGameHour: transportWorldUnitsPerGameHour(session, army),
+      distance: wrappedDistance(army.x, army.z, order.seaDestination.x,
+        order.seaDestination.z, session.world.width) };
+  }
   const targetNode = order.path[0];
   const finalPartial = order.path.length === 1 && order.roadDestination?.to === targetNode;
   const targetX = finalPartial ? order.destX : session.graph.nodeX[targetNode];

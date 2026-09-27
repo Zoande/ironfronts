@@ -20,6 +20,7 @@ const unit = z.string().refine((value) => UNIT_TYPE_BY_ID.has(value), 'Unknown u
 const building = z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']);
 const order = z.object({ path: z.array(id), destX: number, destZ: number, intent: z.enum(['move', 'attack']), edgeProgress: positive,
   roadDestination: z.object({ edgeId: id, from: id, to: id, distanceAlongEdge: positive }).optional(),
+  seaDestination: point.extend({ anchorNodeId: id }).optional(),
   target: z.discriminatedUnion('kind', [point.extend({ kind: z.literal('position') }),
     z.object({ kind: z.literal('province'), provinceId: id, x: number.optional(), z: number.optional() }),
     z.object({ kind: z.literal('army'), armyId: z.string(), lastKnownX: number, lastKnownZ: number })]).optional() });
@@ -58,7 +59,8 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
     lastGraphNodeId: id.nullable().optional(), suspendedOrder: order.nullable().optional(), battleFrontIds: z.array(z.string()).optional(),
     retreat: z.object({ destinationProvinceId: id, protectedUntilNodeId: id, protected: z.boolean() }).nullable().optional(),
     artillery: z.object({ targetArmyId: z.string().nullable(), manualTarget: z.boolean() }).optional(),
-    navalCrossing: z.object({ fromNodeId: id, toNodeId: id, hoursRemaining: positive }).nullable().default(null),
+    navalCrossing: z.object({ fromNodeId: id, toNodeId: id, hoursRemaining: positive,
+      returningToAnchor: z.boolean().optional() }).nullable().default(null),
     transport: z.object({ kind: z.literal('transport'), level: id.min(1).max(8), cargo: z.array(z.object({
       cargoTypeId: unit, shipHp: z.array(number.positive()),
     })) }).nullable().optional(),

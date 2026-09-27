@@ -8,7 +8,7 @@ import { contactDistance } from '../movement/contact';
 import { movementEdgeAllowed } from '../movement/policy';
 import { revalidateOrder } from '../movement/pursuit';
 import { landMovementSpeedMultiplierAt, STRATEGIC_MOVEMENT_SCALE } from '../movement/speed';
-import { beginNavalCrossing, isNavalStatus, isSeaEdge, stepNavalCrossing } from '../movement/naval';
+import { beginFinalSeaLeg, beginNavalCrossing, isNavalStatus, isSeaEdge, stepNavalCrossing } from '../movement/naval';
 import { wrappedDistance } from '../geometry';
 import { computeArmyVisibility } from '../visibility';
 import { relationOf } from '../game-state';
@@ -190,6 +190,10 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         && relationOf(session.state, army.ownerCountryId, other.ownerCountryId) === 'war'
         && wrappedDistance(army.x, army.z, other.x, other.z, world.width) <= COMBAT_SNAP)) {
       army.retreat.protected = false;
+    }
+    if (order.path.length === 0 && order.seaDestination) {
+      beginFinalSeaLeg(session, army);
+      continue;
     }
     if (order.path.length === 0) {
       const tracking = order.target?.kind === 'army';

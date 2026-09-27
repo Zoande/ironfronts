@@ -43,8 +43,12 @@ function interpolatePath(points: ReadonlyArray<{x:number;z:number}>, fraction: n
   for (let index=0; index<lengths.length; index++) {
     if (distance<=lengths[index] || index===lengths.length-1) {
       const point=between(points[index],points[index+1],distance/Math.max(1e-9,lengths[index]));
+      // The GPU marker and CPU picker advance linearly to targetX/Z. Give
+      // them the time left on this segment, not on the entire polyline:
+      // otherwise each projection eases towards a corner and jumps forward.
+      const segmentRemaining = Math.max(0, lengths[index] - distance);
       return { ...point, targetX:points[index+1].x,targetZ:points[index+1].z,
-        remainingMs:Math.max(0,(1-fraction)*durationMs) };
+        remainingMs:total > 0 ? segmentRemaining / total * durationMs : 0 };
     }
     distance-=lengths[index];
   }
@@ -114,7 +118,7 @@ export class ArmyMotionInterpolator {
         if (Math.hypot(next.x-previous.x,next.z-previous.z)>1e-6) points.push(next);
       }
       if (points.length>1) return interpolatePath(
-        points, elapsed/newest.motion.durationMs, Math.min(MAX_EXTRAPOLATION_MS,newest.motion.durationMs),
+        points, elapsed/newest.motion.durationMs, newest.motion.durationMs,
       );
     }
     const point = between(newest,target,elapsed/newest.motion.durationMs);

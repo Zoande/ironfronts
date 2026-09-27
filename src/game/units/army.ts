@@ -61,6 +61,8 @@ export interface MoveOrder {
     readonly edgeId: number; readonly from: number; readonly to: number;
     readonly distanceAlongEdge: number;
   };
+  /** Final open-water position, reached from a connected sea-graph anchor. */
+  readonly seaDestination?: { readonly x: number; readonly z: number; readonly anchorNodeId: number };
   /** 'move' = cream route, 'attack' = red route. */
   readonly intent: 'move' | 'attack';
   /** Typed strategic target. Unit targets are re-pathed while detected. */
@@ -114,6 +116,8 @@ export interface ArmyStack {
     /** Counts down during 'embarking'/'disembarking'; unused during 'atSea'
      *  (that phase instead consumes the normal movement distance budget). */
     hoursRemaining: number;
+    /** A new order from an offshore stop first returns to its graph anchor. */
+    returningToAnchor?: boolean;
   } | null;
   /** Temporary sea-domain manifestation. Cargo remains in `units` on its
    * normal land HP scale; ship HP and the snapshotted naval tech live here. */

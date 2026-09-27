@@ -2041,19 +2041,12 @@
   .ifg-card__iconbtn,
   .ifg-army-panel__command
 ) {
-  /* Solid dark chip UNDER the painted plate so the control always reads as a
-     control — the plate art alone was disappearing into the panel. !important
-     to beat the `.ifg button { background: none }` reset, same as the sibling
-     ribbon block below. */
-  background-color: rgba(16, 18, 13, 0.94) !important;
-  background-image: var(--ifg-skin-control) !important;
-  background-position: center !important;
-  background-size: 100% 100% !important;
-  background-repeat: no-repeat !important;
-  border: 1px solid rgba(0, 0, 0, 0.55) !important;
-  border-radius: 2px !important;
-  box-shadow: inset 0 0 0 1px rgba(232, 201, 136, 0.16) !important;
-  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.48));
+  /* Keep the full hit area while showing only the transparent icon art. */
+  background-color: transparent !important;
+  background-image: none !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
 :is(
@@ -2067,7 +2060,6 @@
 
 .ifg-army-panel__command.is-active,
 .ifg-dock__btn--primary.is-on {
-  background-image: var(--ifg-skin-control);
   filter: sepia(0.18) saturate(1.2) brightness(1.12) drop-shadow(0 0 7px rgba(201, 164, 99, 0.4));
 }
 

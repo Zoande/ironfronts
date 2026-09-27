@@ -54,13 +54,18 @@ export function isNavalStatus(status: ArmyStatus): boolean {
 
 export function beginNavalCrossing(session: SimContext, army: ArmyStack, targetNode: number): void {
   army.edge = null;
-  army.status = 'embarking';
-  beginTransportManifestation(army, session.state.countries[army.ownerCountryId]);
+  const underway = army.status === 'atSea' && Boolean(army.transport);
+  army.status = underway ? 'atSea' : 'embarking';
+  if (!army.transport) beginTransportManifestation(army, session.state.countries[army.ownerCountryId]);
   army.navalCrossing = {
     fromNodeId: army.graphNodeId,
     toNodeId: targetNode,
-    hoursRemaining: NAVAL_DWELL_HOURS,
+    hoursRemaining: underway ? 0 : NAVAL_DWELL_HOURS,
   };
+}
+
+export function beginFinalSeaLeg(session: SimContext, army: ArmyStack): void {
+  beginNavalCrossing(session, army, army.graphNodeId);
 }
 
 /** Advance one explicit embark, transit, and disembark state machine. */
@@ -68,7 +73,8 @@ export function stepNavalCrossing(
   session: SimContext, army: ArmyStack, order: MoveOrder, dtHours: number,
 ): void {
   const crossing = army.navalCrossing;
-  if (!crossing || !isSeaEdge(session.graph, crossing.fromNodeId, crossing.toNodeId)) {
+  const finalSeaLeg = crossing?.fromNodeId === crossing?.toNodeId;
+  if (!crossing || (!finalSeaLeg && !isSeaEdge(session.graph, crossing.fromNodeId, crossing.toNodeId))) {
     army.navalCrossing = null;
     endTransportManifestation(army);
     army.order = null;
@@ -81,8 +87,12 @@ export function stepNavalCrossing(
     return;
   }
   if (army.status === 'atSea') {
-    const targetX = session.graph.nodeX[crossing.toNodeId];
-    const targetZ = session.graph.nodeZ[crossing.toNodeId];
+    const targetX = finalSeaLeg && !crossing.returningToAnchor
+      ? (order.seaDestination?.x ?? session.graph.nodeX[crossing.toNodeId])
+      : session.graph.nodeX[crossing.toNodeId];
+    const targetZ = finalSeaLeg && !crossing.returningToAnchor
+      ? (order.seaDestination?.z ?? session.graph.nodeZ[crossing.toNodeId])
+      : session.graph.nodeZ[crossing.toNodeId];
     const remaining = wrappedDistance(
       army.x, army.z, targetX, targetZ, session.world.width,
     );
@@ -91,10 +101,25 @@ export function stepNavalCrossing(
     if (remaining <= 1e-9 || advance >= remaining) {
       army.x = targetX;
       army.z = targetZ;
+      if (finalSeaLeg && order.seaDestination && !crossing.returningToAnchor) {
+        army.order = null;
+        army.status = 'atSea';
+        army.retreat = null;
+        return;
+      }
       army.lastGraphNodeId = army.graphNodeId;
       army.graphNodeId = crossing.toNodeId;
-      order.path.shift();
+      crossing.returningToAnchor = false;
+      if (!finalSeaLeg) order.path.shift();
       order.edgeProgress = 0;
+      if (order.path.length && isSeaEdge(session.graph, army.graphNodeId, order.path[0])) {
+        beginNavalCrossing(session, army, order.path[0]);
+        return;
+      }
+      if (order.seaDestination && order.path.length === 0) {
+        beginFinalSeaLeg(session, army);
+        return;
+      }
       army.status = 'disembarking';
       crossing.hoursRemaining = NAVAL_DWELL_HOURS;
     } else {

@@ -58,6 +58,10 @@ export function routeFromArmy(
   ctx: SimContext, army: ArmyStack, goal: number, allowed?: EdgeAllowed,
   graph: LandGraph = ctx.graph, edgeCost?: EdgeCost,
 ): number[] | null {
+  // An anchored transport first sails back to its sea-graph anchor. Its world
+  // position is off the graph, but graphNodeId remains that anchor.
+  if (army.status === 'atSea' && army.navalCrossing?.fromNodeId === army.navalCrossing?.toNodeId
+    && !army.order) return findPath(graph, army.graphNodeId, goal, allowed, edgeCost);
   if (armyAtNode(ctx, army)) return findPath(graph, army.graphNodeId, goal, allowed, edgeCost);
   const edge = occupiedEdge(ctx, army);
   if (!edge) return null;
