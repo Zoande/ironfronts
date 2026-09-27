@@ -26,7 +26,7 @@ export interface TooltipContent {
 }
 
 const SHOW_DELAY_MS = 170;
-const CLOSE_DELAY_MS = 120;
+const CLOSE_DELAY_MS = 350;
 const HOLD_MS = 420;
 const GAP = 10;
 type ContentSource = TooltipContent | (() => TooltipContent | null);
@@ -74,7 +74,7 @@ function scheduleClose(depth = 0): void {
   cancelClose();
   closeTimer = window.setTimeout(() => {
     const panel = panels[depth];
-    if (panel && (panel.anchor.matches(':hover') || panel.element.matches(':hover'))) {
+    if (panel && (panel.anchor.matches(':hover') || panels.slice(depth).some((item) => item.element.matches(':hover')))) {
       scheduleClose(depth);
       return;
     }
