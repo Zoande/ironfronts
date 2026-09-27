@@ -12,6 +12,7 @@ import { roundDisplayedHp, summarizeBattleFronts, type BattleSidePresentation } 
 import { bindTooltip, type TooltipContent } from './tooltip';
 import { createUnitPortrait, UNIT_ROLE_NOTE } from './unit-portraits';
 import { createRankInsignia, catalogueLevel } from './rank-insignia';
+import { createFlag } from './flags';
 import type { ArmyActivityKind, ArmyStackView, CombatStatus } from './ui-state';
 
 export type { ArmyStackView, CombatStatus } from './ui-state';
@@ -181,12 +182,14 @@ export function renderSelectedArmyPanel(
   army: ArmyStackView,
   onCommand: (command: ArmyPanelCommand) => void,
   onInspectUnit?: (typeId: string) => void,
+  onRename?: (name: string) => void,
 ): void {
   host.style.setProperty('--army-country', army.countryColor);
   host.dataset.combat = army.combat;
   const header = node('header', 'ifg-army-panel__header');
   const identity = node('span', 'ifg-army-panel__identity');
-  identity.append(node('strong', undefined, army.name), node('small', undefined, army.country));
+  const nameLabel = node('strong', 'ifg-army-panel__name', army.name);
+  identity.append(nameLabel);
   const battle = army.combat === 'engaged' ? summarizeBattleFronts(army.battleFronts) : null;
   const activityKind = army.activityKind ?? (army.combat === 'engaged' ? 'combat'
     : army.combat === 'retreating' ? 'retreating' : army.combat === 'moving' ? 'moving' : 'holding');
@@ -313,6 +316,7 @@ export function renderSelectedArmyPanel(
     }
   }
   const headerControls = node('span', 'ifg-army-panel__header-controls');
+  headerControls.append(createFlag(army.country, army.countryColor, 'command'));
   if (army.supply) {
     const supplyBar = node('span', 'ifg-army-panel__supply-bar');
     supplyBar.setAttribute('role', 'img');
@@ -530,6 +534,60 @@ export function renderSelectedArmyPanel(
   center.append(composition);
   body.append(summary, center, report);
   host.replaceChildren(commands, header, body);
+  const nameStyle = getComputedStyle(nameLabel);
+  const nameCanvas = document.createElement('canvas');
+  const nameContext = nameCanvas.getContext('2d');
+  if (nameContext) nameContext.font = nameStyle.font;
+  const sample = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  const averageGlyphWidth = nameContext ? nameContext.measureText(sample).width / sample.length : 9;
+  const letterSpacing = Number.parseFloat(nameStyle.letterSpacing) || 0;
+  const availableNameWidth = Math.max(1, identity.clientWidth - 8);
+  const maxNameLength = Math.max(1, Math.min(24,
+    Math.floor(availableNameWidth / (averageGlyphWidth + letterSpacing))));
+  const fitsName = (value: string): boolean => !nameContext
+    || nameContext.measureText(value).width + Math.max(0, value.length - 1) * letterSpacing <= availableNameWidth;
+  let visibleName = army.name.slice(0, maxNameLength);
+  while (visibleName.length > 1 && !fitsName(visibleName)) visibleName = visibleName.slice(0, -1);
+  nameLabel.textContent = visibleName;
+  if (army.own && onRename) {
+    nameLabel.tabIndex = 0;
+    nameLabel.setAttribute('role', 'button');
+    nameLabel.setAttribute('aria-label', `Rename ${army.name}`);
+    nameLabel.title = 'Click to rename army';
+    const edit = (): void => {
+      const input = node('input', 'ifg-army-panel__name-input');
+      input.type = 'text';
+      input.setAttribute('aria-label', 'Army name');
+      input.maxLength = maxNameLength;
+      const initialValue = visibleName;
+      input.value = initialValue;
+      input.addEventListener('input', () => {
+        while (input.value.length > 1 && !fitsName(input.value)) input.value = input.value.slice(0, -1);
+      });
+      let cancelled = false;
+      const finish = (): void => {
+        const next = input.value.trim();
+        input.replaceWith(nameLabel);
+        if (!cancelled && next && next !== initialValue) {
+          visibleName = next;
+          nameLabel.textContent = next;
+          onRename(next);
+        }
+      };
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancelled = true; input.blur(); }
+        event.stopPropagation();
+      });
+      input.addEventListener('blur', finish, { once: true });
+      nameLabel.replaceWith(input);
+      input.focus(); input.select();
+    };
+    nameLabel.addEventListener('click', edit);
+    nameLabel.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); edit(); }
+    });
+  }
   startActivityClock(headerActivity, activityTime, liveFills, army.activityRemainingSeconds,
     army.activityDurationSeconds, initialActivityProgress, army.activitySampledAtEpochMs ?? Date.now());
 }

@@ -798,6 +798,7 @@ async function startGame(token: number): Promise<void> {
     focusWorld: (x, z) => renderer.focus(x, z, 900),
     zoomMap: (factor) => renderer.zoomMap(factor),
     armyCommand: (command) => handleArmyCommand(command),
+    renameArmy: (armyId, name) => { if (activeSession?.ownsArmy(armyId)) activeSession.renameArmy(armyId, name); },
     produceUnit: (provinceId, unitTypeId) => handleProduce(provinceId, unitTypeId),
     buildStructure: (provinceId, buildingId) => handleBuild(provinceId, buildingId),
     unitInfo: (typeId) => session.unit(typeId),

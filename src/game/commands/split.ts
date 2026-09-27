@@ -2,7 +2,7 @@
 
 import type { SimContext } from '../sim-context';
 import {
-  canExtract, ensureArmyRuntimeState, stackUnitCount, SUPPLY_CAPACITY_PER_UNIT, type ArmyStack, type UnitGroup,
+  canExtract, ensureArmyRuntimeState, generatedArmyName, stackUnitCount, SUPPLY_CAPACITY_PER_UNIT, type ArmyStack, type UnitGroup,
 } from '../units/army';
 import { supplyFraction } from '../combat/supply';
 import { issueMoveOrder } from '../units/movement';
@@ -51,7 +51,7 @@ export function issueSplit(ctx: SimContext, command: SplitArmyCommand): CommandR
   const child: ArmyStack = {
     id,
     ownerCountryId: parent.ownerCountryId,
-    name: `${parent.name} Detachment`,
+    name: generatedArmyName(`Detachment ${ctx.state.nextArmyId}`),
     x: parent.x,
     z: parent.z,
     graphNodeId: parent.graphNodeId,

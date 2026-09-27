@@ -12,6 +12,14 @@ import { unitType } from './unit-catalog';
 import type { TransportManifestation } from '../naval/transport';
 
 export const SUPPLY_CAPACITY_PER_UNIT = 100;
+/** Short labels leave room for the activity readout, flag, and orders in the army header. */
+export const AUTO_ARMY_NAME_LENGTH = 16;
+export function generatedArmyName(value: string): string {
+  const name = value.trim();
+  if (name.length <= AUTO_ARMY_NAME_LENGTH) return name;
+  const cut = name.slice(0, AUTO_ARMY_NAME_LENGTH + 1).lastIndexOf(' ');
+  return name.slice(0, cut >= 8 ? cut : AUTO_ARMY_NAME_LENGTH).trimEnd();
+}
 
 /**
  * Combat posture — see combat/stance.ts for what each one actually does.

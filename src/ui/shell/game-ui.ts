@@ -67,6 +67,7 @@ export interface GameUiActions {
   zoomMap?: (factor: number) => void;
   /** Selected-army orders. 'deselect' clears the selection. */
   armyCommand(command: ArmyPanelCommand): void;
+  renameArmy(armyId: string, name: string): void;
   /** Queue a unit in the selected (own) province. */
   produceUnit(provinceId: number, unitTypeId: string): void;
   /** Start a building in the selected (own, urban) province. */
@@ -1482,7 +1483,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     // patches the store every in-game minute; a full JSON.stringify(army) here
     // rebuilt the whole panel (portraits included) on every one of those.
     const nextArmyKey = showArmy && army ? [
-      army.id, army.identified, army.combat, army.targetingMode ?? '', army.activity,
+      army.id, army.name, army.identified, army.combat, army.targetingMode ?? '', army.activity,
       army.activityKind ?? '', Math.floor((army.activityProgress ?? 0) * 20),
       Math.round(army.activityDurationSeconds ?? 0),
       Math.round((army.health ?? 0) * 100), Math.round((army.strength ?? 0) * 100),
@@ -1494,10 +1495,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       (army.battleFronts ?? []).map((front) =>
         `${front.id}:${Math.round(front.friendlyHp)}:${Math.round(front.enemyHp)}`).join(','),
     ].join('|') : '';
-    if (nextArmyKey !== armyKey) {
+    if (nextArmyKey !== armyKey && !(army && armyCard.querySelector('.ifg-army-panel__name-input') && armyCard.dataset.armyId === army.id)) {
       armyKey = nextArmyKey;
       if (showArmy && army) {
-        renderSelectedArmyPanel(armyCard, army, (command) => actions.armyCommand(command), (typeId) => dossier.openUnit(typeId));
+        armyCard.dataset.armyId = army.id;
+        renderSelectedArmyPanel(armyCard, army, (command) => actions.armyCommand(command),
+          (typeId) => dossier.openUnit(typeId), (name) => actions.renameArmy(army.id, name));
       }
     }
 

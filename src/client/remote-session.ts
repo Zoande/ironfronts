@@ -326,6 +326,7 @@ export class RemoteGameSession extends EventTarget {
     return this.send({ type: 'splitArmy', armyId, groups: [...groups], x, z });
   }
   orderStop(armyId: string): boolean { this.send({ type: 'stopArmy', armyId }); return true; }
+  renameArmy(armyId: string, name: string): void { this.send({ type: 'renameArmy', armyId, name }); }
   orderStance(armyId: string, stance: ArmyStance): boolean {
     this.send({ type: 'setStance', armyId, stance });
     return true;

@@ -27,6 +27,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
     x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars,
   }),
   z.object({ type: z.literal('stopArmy'), armyId: z.string() }),
+  z.object({ type: z.literal('renameArmy'), armyId: z.string(), name: z.string().trim().min(1).max(24) }),
   z.object({
     type: z.literal('setStance'), armyId: z.string(),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']),
