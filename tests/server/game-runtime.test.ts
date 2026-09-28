@@ -33,6 +33,20 @@ function tinyWorld(): WorldData {
 }
 
 describe('single authoritative game runtime', () => {
+  it('passes swept contact times through the live runtime before charging combat damage', () => {
+    const runtime=new GameRuntime(tinyWorld());
+    const state=runtime.session.state;
+    state.armies={};Object.assign(state,{fogOfWar:false,economyEnabled:false});
+    runtime.cheatSpawnUnit(0,1,'infantry');runtime.cheatSpawnUnit(1,2,'infantry');
+    const [mover,defender]=Object.values(state.armies);
+    state.relations['1:2']='war';
+    defender.x=mover.x+45;defender.graphNodeId=mover.graphNodeId;
+    defender.edge={edgeId:0,from:mover.graphNodeId,to:1,distanceAlongEdge:45};
+    expect(runtime.command(1,{type:'moveArmy',armyId:mover.id,x:150,z:100}).ok).toBe(true);
+    runtime.tick(0.25);
+    expect(mover.status).toBe('engaged');
+    expect(defender.units[0].hp).toBeCloseTo(100-(0.25-19/(70*1.35*0.9))*75,5);
+  });
   it('selects five-city countries, initializes them equally, and assigns seats atomically', () => {
     const runtime = new GameRuntime(tinyWorld());
     // The lobby map includes the ineligible minor in grey; join remains gated.

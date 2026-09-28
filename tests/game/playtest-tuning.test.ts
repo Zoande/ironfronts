@@ -6,6 +6,10 @@ import {
 } from '../../src/game/scenario-init';
 import { UNIT_TYPE_BY_ID } from '../../src/game/units/unit-catalog';
 import type { ResourceCost } from '../../src/game/units/unit-types';
+import { fixture, army } from '../helpers/simulation';
+import { stepMovement } from '../../src/game/units/movement';
+import { stackBaseSpeed } from '../../src/game/units/army';
+import { GAME_PACE } from '../../src/game/pacing';
 
 const root = process.cwd();
 
@@ -83,8 +87,14 @@ describe('strategic movement pacing', () => {
   const src = ['src/game/movement/speed.ts','src/game/units/movement.ts'].map(file => readFileSync(path.join(root,file),'utf8')).join('\n');
 
   it('uses the centralized 1x pacing scale in the travel budget', () => {
-    expect(src).toContain('STRATEGIC_MOVEMENT_SCALE = GAME_PACE.movement.scale');
-    expect(src).toMatch(/budget = stackBaseSpeed\(army\) \* dtHours \* STRATEGIC_MOVEMENT_SCALE/);
+    const ctx = fixture(), stack = army();
+    stack.status = 'moving';
+    stack.order = {path:[1],destX:300,destZ:100,intent:'move',edgeProgress:0};
+    ctx.state.armies[stack.id] = stack;
+    stepMovement(ctx,0.1);
+    expect(GAME_PACE.movement.scale).toBe(1);
+    expect(stack.x - 100).toBeCloseTo(stackBaseSpeed(stack) * 0.1
+      * GAME_PACE.movement.scale * GAME_PACE.movement.roadMultiplier, 8);
   });
 
   it('leaves the terrain-speed ordering intact (plain > forest > hill > mountain)', () => {

@@ -2,6 +2,38 @@ import { describe, expect, it } from 'vitest';
 import { ArmyMotionInterpolator, presentedArmyPosition } from '../src/rendering/army-motion';
 import { ArmyPicker } from '../src/client/army-picker';
 describe('bounded authoritative army presentation', () => {
+  it('bounds the GPU/picker trajectory as well as the stale road sample', () => {
+    const motion=new ArmyMotionInterpolator();
+    const leg={targetX:100,targetZ:0,durationMs:1000,sampledAtEpochMs:0,route:[{x:0,z:0},{x:100,z:0}]};
+    const sample=motion.sample('a',0,0,leg,700,1000);
+    expect(presentedArmyPosition(sample,400).x).toBe(50);
+    expect(motion.sample('a',0,0,leg,1100,1000).x).toBe(50);
+    const fresh=motion.sample('b',0,0,leg,400,1000);
+    expect(presentedArmyPosition(fresh,1000).x).toBe(50);
+  });
+  it('retains the verified approach when a timestamped combat stop arrives', () => {
+    const motion=new ArmyMotionInterpolator();
+    const leg={targetX:100,targetZ:0,durationMs:1000,sampledAtEpochMs:0,route:[{x:0,z:0},{x:100,z:0}]};
+    motion.sample('a',0,0,leg,0,1000);
+    const stopped=motion.sample('a',40,0,undefined,550,1000,{sampledAtEpochMs:500});
+    expect(stopped.x).toBeCloseTo(28);
+    expect(presentedArmyPosition(stopped,150).x).toBe(40);
+    expect(motion.sample('a',40,0,undefined,900,1000,{sampledAtEpochMs:800})).toMatchObject({x:40,remainingMs:0});
+  });
+  it('uses fresh equal-position samples to stop predicting through a contact blocker', () => {
+    const motion=new ArmyMotionInterpolator();
+    const leg={targetX:100,targetZ:0,durationMs:1000,route:[{x:0,z:0},{x:100,z:0}]};
+    motion.sample('a',0,0,{...leg,sampledAtEpochMs:0},0,1000);
+    const blocked=motion.sample('a',0,0,{...leg,sampledAtEpochMs:250},300,1000);
+    expect(presentedArmyPosition(blocked,100).x).toBe(0);
+  });
+  it('reconstructs multiple crossed graph edges without using full-route duration for prediction', () => {
+    const motion=new ArmyMotionInterpolator();
+    motion.sample('a',0,0,{targetX:100,targetZ:0,durationMs:500,sampledAtEpochMs:0,
+      route:[{x:0,z:0},{x:100,z:0}],verifiedRoute:[{x:0,z:0},{x:100,z:0},{x:100,z:100},{x:200,z:100}]},0,1000);
+    const next={targetX:200,targetZ:200,durationMs:500,sampledAtEpochMs:1500,route:[{x:200,z:100},{x:200,z:200}]};
+    expect(motion.sample('a',200,100,next,1200,1000)).toMatchObject({x:100,z:100});
+  });
   it('buffers samples and freezes prediction after half a second', () => {
     const motion = new ArmyMotionInterpolator();
     const leg = {targetX:100,targetZ:0,durationMs:1000,sampledAtEpochMs:0};

@@ -132,7 +132,8 @@ export class GameSession {
     }
 
     // --- gameplay systems, fixed order ------------------------------
-    for (const cap of stepMovement(this, dtHours)) this.pendingCaptures.push(cap);
+    const contactTimes = new Map<string,number>();
+    for (const cap of stepMovement(this, dtHours, contactTimes)) this.pendingCaptures.push(cap);
     if (cadence.supplyHours + 1e-12 >= SUPPLY_INTERVAL) {
       const elapsedSupplyHours = cadence.supplyHours;
       cadence.supplyHours %= SUPPLY_INTERVAL;
@@ -143,7 +144,7 @@ export class GameSession {
     stepWarheads(this, dtHours);
     stepTechnology(this.state.countries, dtHours);
     for (const done of stepProduction(this, dtHours)) this.pendingCompletions.push(done);
-    for (const ev of stepCombat(this, dtHours)) this.pendingCombat.push(ev);
+    for (const ev of stepCombat(this, dtHours, contactTimes)) this.pendingCombat.push(ev);
     for (const cap of stepCapture(this)) this.pendingCaptures.push(cap);
     // --- simple defensive AI (slow cadence) -----------------------
     if (cadence.aiHours + 1e-12 >= AI_INTERVAL) {

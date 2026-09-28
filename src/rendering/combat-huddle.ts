@@ -1,3 +1,5 @@
+import { wrappedDeltaX, wrapX } from '../game/geometry';
+
 /**
  * Purely visual "combat huddle" for engaged army-stack pairs.
  *
@@ -49,8 +51,9 @@ export function combatHuddleOffset(
   anchor: Point,
   targetRadius: number = HUDDLE_TARGET_RADIUS,
   maxPull: number = HUDDLE_MAX_PULL,
+  worldWidth = 0,
 ): HuddleOffset {
-  const dx = anchor.x - self.x;
+  const dx = worldWidth > 0 ? wrappedDeltaX(self.x, anchor.x, worldWidth) : anchor.x - self.x;
   const dz = anchor.z - self.z;
   const dist = Math.hypot(dx, dz);
   if (dist <= targetRadius) return ZERO;
@@ -82,12 +85,12 @@ export interface BattleCluster {
  * with each cluster's position the centroid of its current members. Stacks
  * with no front id contribute nothing.
  */
-export function groupEngagedByFront(stacks: Iterable<EngagedStackLike>): Map<string, BattleCluster> {
-  const sums = new Map<string, { sumX: number; sumZ: number; owners: Set<number>; members: string[] }>();
+export function groupEngagedByFront(stacks: Iterable<EngagedStackLike>, worldWidth = 0): Map<string, BattleCluster> {
+  const sums = new Map<string, { referenceX: number; sumX: number; sumZ: number; owners: Set<number>; members: string[] }>();
   for (const stack of stacks) {
     for (const frontId of stack.frontIds) {
-      const group = sums.get(frontId) ?? { sumX: 0, sumZ: 0, owners: new Set<number>(), members: [] };
-      group.sumX += stack.x;
+      const group = sums.get(frontId) ?? { referenceX:stack.x, sumX: 0, sumZ: 0, owners: new Set<number>(), members: [] };
+      group.sumX += worldWidth > 0 ? group.referenceX + wrappedDeltaX(group.referenceX, stack.x, worldWidth) : stack.x;
       group.sumZ += stack.z;
       group.owners.add(stack.ownerCountryId);
       group.members.push(stack.id);
@@ -97,7 +100,7 @@ export function groupEngagedByFront(stacks: Iterable<EngagedStackLike>): Map<str
   const clusters = new Map<string, BattleCluster>();
   for (const [frontId, group] of sums) {
     clusters.set(frontId, {
-      x: group.sumX / group.members.length,
+      x: worldWidth > 0 ? wrapX(group.sumX / group.members.length, worldWidth) : group.sumX / group.members.length,
       z: group.sumZ / group.members.length,
       ownerCountryIds: group.owners,
       memberIds: group.members,
@@ -106,14 +109,12 @@ export function groupEngagedByFront(stacks: Iterable<EngagedStackLike>): Map<str
   return clusters;
 }
 
-/** One shared anchor per army id, taken from its cluster's centroid. An army
- *  in more than one cluster (fighting two fronts) gets whichever cluster is
- *  visited last — still a real fight it's in, never a no-op. */
+/** Choose a stable front for multi-front armies, independent of member order. */
 export function buildBattleAnchors(clusters: ReadonlyMap<string, BattleCluster>): Map<string, Point> {
   const anchors = new Map<string, Point>();
-  for (const cluster of clusters.values()) {
+  for (const [, cluster] of [...clusters.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const anchor: Point = { x: cluster.x, z: cluster.z };
-    for (const id of cluster.memberIds) anchors.set(id, anchor);
+    for (const id of cluster.memberIds) if (!anchors.has(id)) anchors.set(id, anchor);
   }
   return anchors;
 }

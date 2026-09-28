@@ -5,8 +5,7 @@ import { UNIT_TYPE_BY_ID } from '../units/unit-catalog';
 import { qualifyingPhaseFromBuildings } from '../phase';
 import { initialTechnologyLevels } from '../technology';
 import { createTransportManifestation, transportType } from '../naval/transport';
-import { SUPPLY_CAPACITY_PER_UNIT } from '../combat/supply';
-import type { ArmyStack } from '../units/army';
+import { SUPPLY_CAPACITY_PER_UNIT, type ArmyStack } from '../units/army';
 
 const number = z.number().finite();
 const positive = number.nonnegative();

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameConnection } from '../src/client/game-connection';
 import { connectGame } from '../src/client/auth-api';
+import { ArmyMotionInterpolator } from '../src/rendering/army-motion';
 vi.mock('../src/client/auth-api',()=>({connectGame:vi.fn()}));
 class Socket extends EventTarget {
   static CONNECTING=0; static OPEN=1; static instances:Socket[]=[];
@@ -26,6 +27,25 @@ beforeEach(()=>{
 });
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('connection handshake cleanup',()=>{
+  it('presents server movement independently of browser wall-clock skew and never rewinds time on a pong',async()=>{
+    let monotonic=0;
+    const time=vi.spyOn(performance,'now').mockImplementation(()=>monotonic);
+    try {
+      const opened=GameConnection.open();await Promise.resolve();handshake(Socket.instances[0]);
+      const connection=await opened;
+      Socket.instances[0].message({type:'pong',sentAt:0,serverEpochMs:100000});
+      monotonic=500;
+      const leg={targetX:100,targetZ:0,durationMs:10000,sampledAtEpochMs:100000};
+      for(const skew of [-60000,60000]) {
+        vi.setSystemTime(skew);
+        expect(new ArmyMotionInterpolator().sample('a',0,0,leg,connection.serverNow(),1000).x).toBeCloseTo(3);
+      }
+      Socket.instances[0].message({type:'pong',sentAt:500,serverEpochMs:99900});
+      expect(connection.serverNow()).toBe(100500);
+      monotonic=1600;expect(connection.serverNow()).toBe(101000);
+      connection.close();
+    } finally { time.mockRestore(); }
+  });
   it('rejects and closes a socket when the baseline times out',async()=>{
     const result=GameConnection.open().catch(error=>error);
     await Promise.resolve();

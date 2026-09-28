@@ -7,7 +7,7 @@ import { supplyEffectiveness } from '../combat/supply';
 import { GAME_PACE } from '../pacing';
 import { relationOf } from '../game-state';
 import type { LandGraph } from './graph';
-import { edgeIdBetween, edgePolyline } from './graph';
+import { edgeIdBetween, edgePolyline, edgePositionFrom } from './graph';
 import type { EdgeCost } from './pathfind';
 import { activeTransportStats, countryTransportLevel, transportType } from '../naval/transport';
 
@@ -59,6 +59,44 @@ export function landMovementSpeedMultiplierAt(
   return terrain * ROAD_BONUS * (hostile ? ENEMY_LAND_SPEED_MULTIPLIER : 1);
 }
 
+/** Consume a base-speed distance budget across terrain/ownership boundaries.
+ * Probes are anchored to the road distance, independent of caller dt. Only
+ * boundaries that change speed need a binary search; live tiny steps stay cheap.
+ */
+export function advanceLandRoad(
+  session: SimContext, army: ArmyStack, edgeId: number, from: number,
+  start: number, limit: number, budget: number,
+): { distance: number; used: number } {
+  const scaleAt = (distance: number): number => {
+    const point = edgePositionFrom(session.graph, edgeId, from, distance);
+    return landMovementSpeedMultiplierAt(session, army.ownerCountryId, point.x, point.z);
+  };
+  const initial = budget;
+  let distance = 0;
+  while (distance < limit - 1e-9 && budget > 1e-9) {
+    const at = start + distance;
+    const gridEnd = (Math.floor((at + 1e-7) / 0.5) + 1) * 0.5;
+    let segment = Math.min(limit - distance, gridEnd - at);
+    const scale = scaleAt(at + Math.min(segment / 2, 1e-7));
+    const middle = segment / 2;
+    const middleScale = scaleAt(at + middle);
+    const endScale = scaleAt(at + Math.max(0, segment - 1e-7));
+    if (middleScale !== scale || endScale !== scale) {
+      let low = middleScale !== scale ? 0 : middle;
+      let high = middleScale !== scale ? middle : segment;
+      for (let i = 0; i < 24 && high - low > 1e-7; i++) {
+        const mid = (low + high) / 2;
+        if (scaleAt(at + mid) === scale) low = mid; else high = mid;
+      }
+      segment = Math.max(1e-7, high);
+    }
+    const advance = Math.min(segment, budget * scale);
+    distance += advance;
+    budget = Math.max(0, budget - advance / scale);
+  }
+  return { distance, used:initial - budget };
+}
+
 function baseWorldUnitsPerGameHour(army: ArmyStack): number {
   return stackBaseSpeed(army) * STRATEGIC_MOVEMENT_SCALE
     * (army.status === 'retreating' ? GAME_PACE.movement.retreatMultiplier : 1)
@@ -92,7 +130,7 @@ function landSegmentHours(
   return hours;
 }
 
-function landRoadHours(
+export function landRoadHours(
   session: SimContext, army: ArmyStack, graph: LandGraph, from: number, to: number,
   prospectiveWars: ReadonlySet<number> = new Set(), startDistance = 0, endDistance = Infinity,
 ): number {
@@ -234,8 +272,10 @@ export function currentMovementLeg(session: SimContext, army: ArmyStack): Curren
   }
   const targetNode = order.path[0];
   const finalPartial = order.path.length === 1 && order.roadDestination?.to === targetNode;
-  const targetX = finalPartial ? order.destX : session.graph.nodeX[targetNode];
-  const targetZ = finalPartial ? order.destZ : session.graph.nodeZ[targetNode];
+  const destination = finalPartial
+    ? edgePositionFrom(session.graph,order.roadDestination!.edgeId,order.roadDestination!.from,order.roadDestination!.distanceAlongEdge) : null;
+  const targetX = destination?.x ?? session.graph.nodeX[targetNode];
+  const targetZ = destination?.z ?? session.graph.nodeZ[targetNode];
   const worldUnitsPerGameHour = army.status === 'atSea'
     ? transportWorldUnitsPerGameHour(session, army)
     : baseWorldUnitsPerGameHour(army)

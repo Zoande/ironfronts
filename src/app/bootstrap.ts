@@ -30,7 +30,7 @@ import { RemoteGameSession } from '../client/remote-session';
 import { configureWorldAssetBase, verifyWorldDescriptor } from '../rendering/world-assets';
 import { CombatEffectPool, EFFECT_KIND, effectDensityForDistance } from '../rendering/combat-effects';
 import type { SessionResponse } from '@ironfronts/protocol';
-import { buildArmyCompositionRows, buildArmyFormation } from '../rendering/army-map-presentation';
+import { buildArmyCompositionRows, buildArmyFormation, canPresentArtilleryFire } from '../rendering/army-map-presentation';
 import { ArmyMotionInterpolator, type ArmyPickEntry } from '../rendering/army-motion';
 import { buildBattleAnchors, combatHuddleOffset, groupEngagedByFront } from '../rendering/combat-huddle';
 import { MISSILE_RANGE } from '../game/strike';
@@ -1445,11 +1445,8 @@ function syncArmyMarkers(
   let modelCount = 0;
   let routeCursor = 0;
   let routeCount = 0;
-  // Must be the same epoch-ms clock as motion.sampledAtEpochMs (a server
-  // Date.now() timestamp) — performance.now() here compared cleanly-out-of-
-  // range against it, silently clamping every interpolation fraction to 0 and
-  // turning "smooth interpolation" into "snap to each new sample" instead.
-  const motionNow = Date.now();
+  const motionNow = session.serverNow();
+  const worldWidth = renderer.manifest?.world.width ?? 0;
   const activeArmyIds = new Set<string>();
   const activeModelKeys = new Set<string>();
   armyPickScratch.length = 0;
@@ -1532,7 +1529,7 @@ function syncArmyMarkers(
       .map((a) => ({
         id: a.id, x: a.x, z: a.z, ownerCountryId: a.ownerCountryId,
         frontIds: (a.battleFronts ?? []).map((f) => f.id),
-      })),
+      })), worldWidth,
   ));
 
   landCombatVisuals.clear();
@@ -1543,16 +1540,20 @@ function syncArmyMarkers(
       : relationTintedColor(army.ownerColor, diplomacyRelation(session, army.ownerCountryId));
     activeArmyIds.add(army.id);
     if (clusterSuppressed.has(army.id)) continue; // folded into a cluster marker
+    const moveRoute = army.moveRoute?.length
+      ? army.moveRoute
+      : renderer.expandRoadRoute(army.moveRoadRoute, army.x, army.z);
     const armyMotionRaw = armyMotionInterpolator.sample(
       army.id,
       army.x,
       army.z,
-      army.motion,
+      army.motion ? { ...army.motion, verifiedRoute:moveRoute } : undefined,
       motionNow,
       renderer.manifest?.world.width ?? 0,
+      session.state.timeline,
     );
     const battleAnchor = army.status === 'engaged' ? battleAnchors.get(army.id) : undefined;
-    const huddle = battleAnchor ? combatHuddleOffset({ x: army.x, z: army.z }, battleAnchor) : null;
+    const huddle = battleAnchor ? combatHuddleOffset({ x: army.x, z: army.z }, battleAnchor, undefined, undefined, worldWidth) : null;
     // Nudge the displayed x/z (and the in-flight motion target, so a stack
     // still easing toward a waypoint when combat starts doesn't un-huddle
     // mid-ease) toward the shared battle anchor. remainingMs is untouched.
@@ -1565,9 +1566,6 @@ function syncArmyMarkers(
           targetZ: armyMotionRaw.targetZ + huddle.z,
         }
       : armyMotionRaw;
-    const moveRoute = army.moveRoute?.length
-      ? army.moveRoute
-      : renderer.expandRoadRoute(army.moveRoadRoute, army.x, army.z);
 
     // Authoritative route polyline for the SELECTED own army only (move = cream,
     // attack = red, retreating = amber). Other armies' routes stay hidden so the
@@ -1721,6 +1719,9 @@ function syncArmyMarkers(
       armyMarkerScratch[cursor + 5] = 0;
       armyMarkerScratch[cursor + 6] = 0;
       armyMarkerScratch[cursor + 7] = 0;
+      armyMarkerScratch[cursor + 24] = armyMotion.targetX;
+      armyMarkerScratch[cursor + 25] = armyMotion.targetZ;
+      armyMarkerScratch[cursor + 26] = armyMotion.remainingMs / 1_000;
       cursor += 28;
       count += 1;
     }
@@ -1737,14 +1738,17 @@ function syncArmyMarkers(
       // A stopped army keeps its last facing; a marching one aims a little way
       // along the road and eases toward it, so corners are a turn, not a snap.
       const observed=landBombardmentTargets.get(army.id);
-      const rangedTargetId=army.artillery?.targetArmyId ?? (observed && Date.now()-observed.at<10000 ? observed.target : undefined);
-      const rangedTarget=rangedTargetId ? session.state.armies[rangedTargetId] : undefined;
+      const rangedTargetId=army.own ? army.artillery?.targetArmyId
+        : observed && Date.now()-observed.at<10000 ? observed.target : undefined;
+      const rangedCandidate=rangedTargetId ? session.state.armies[rangedTargetId] : undefined;
+      const rangedTarget=rangedCandidate && canPresentArtilleryFire(army, rangedCandidate, worldWidth)
+        && (!army.own || diplomacyRelation(session,rangedCandidate.ownerCountryId)==='war') ? rangedCandidate : undefined;
       const opponent = army.status === 'engaged' ? Object.values(session.state.armies).find((other) =>
         other.ownerCountryId !== army.ownerCountryId && other.contact === 'visible'
         && other.battleFronts?.some((front) => army.battleFronts?.some((own) => own.id === front.id)))
         : rangedTarget?.contact==='visible' ? rangedTarget : undefined;
       const opponentAnchor = opponent ? battleAnchors.get(opponent.id) : undefined;
-      const opponentHuddle = opponent && opponentAnchor ? combatHuddleOffset(opponent, opponentAnchor) : { x: 0, z: 0 };
+      const opponentHuddle = opponent && opponentAnchor ? combatHuddleOffset(opponent, opponentAnchor, undefined, undefined, worldWidth) : { x: 0, z: 0 };
       let opponentDx = opponent ? opponent.x + opponentHuddle.x - armyMotion.x : 0;
       if (worldW) opponentDx -= Math.round(opponentDx / worldW) * worldW;
       const desiredHeading = opponent
@@ -2490,17 +2494,17 @@ function refreshSelectedArmy(
     : session.pendingForArmy(view.id) ? 'Order pending confirmation'
       : comp?.transport ? `${baseActivity} · Transport Level ${comp.transport.level}` : baseActivity;
   const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
-    ? 0 : Math.max(0, Date.now() - view.motion.sampledAtEpochMs);
+    ? 0 : Math.max(0, session.serverNow() - view.motion.sampledAtEpochMs);
   const motionDurationMs = view.motion?.durationMs ?? 0;
   const battle = inCloseCombat ? summarizeBattleFronts(view.battleFronts) : null;
   const navalElapsedMs = view.navalPhase
-    ? Math.max(0, Date.now() - view.navalPhase.sampledAtEpochMs) : 0;
+    ? Math.max(0, session.serverNow() - view.navalPhase.sampledAtEpochMs) : 0;
   const navalRemainingMs = view.navalPhase
     ? Math.max(0, view.navalPhase.remainingMs - navalElapsedMs) : 0;
   const movementRemainingMs = view.motion
     ? Math.max(0, motionDurationMs - motionElapsedMs) : 0;
   const arrivalElapsedMs = view.arrival
-    ? Math.max(0, Date.now() - view.arrival.sampledAtEpochMs) : 0;
+    ? Math.max(0, session.serverNow() - view.arrival.sampledAtEpochMs) : 0;
   const arrivalRemainingMs = view.arrival
     ? Math.max(0, view.arrival.remainingMs - arrivalElapsedMs) : undefined;
   const movementProgress = view.motion && motionDurationMs > 0
@@ -2728,15 +2732,15 @@ function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRendere
   const density = effectDensityForDistance(lastCombatCameraDistance);
   if (density <= 0) return;
   const now = Date.now();
+  const worldWidth = renderer.manifest?.world.width ?? 0;
   const clusters = groupEngagedByFront(
     Object.values(session.state.armies)
       .filter((a) => a.status === 'engaged')
       .map((a) => ({
         id: a.id, x: a.x, z: a.z, ownerCountryId: a.ownerCountryId,
         frontIds: (a.battleFronts ?? []).map((f) => f.id),
-      })),
+      })), worldWidth,
   );
-  const worldWidth = renderer.manifest?.world.width ?? 0;
   const closeBattle = lastCombatCameraDistance <= 1_400
     && worldWidth > 0
     && [...clusters.values()].some((cluster) => wrappedDistance(

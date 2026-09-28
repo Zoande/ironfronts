@@ -1,3 +1,16 @@
+import { wrappedDistance } from '../game/geometry';
+
+/** Do not keep drawing cached bombardment shots after the target leaves range. */
+export function canPresentArtilleryFire(
+  shooter: { x:number; z:number; status:string; artillery?: { range:number } | null },
+  target: { x:number; z:number; status:string; composition?: { domain?:string } | null }, width:number,
+): boolean {
+  return (shooter.status === 'idle' || shooter.status === 'extracting') && !!shooter.artillery
+    && target.status !== 'atSea' && target.status !== 'disembarking'
+    && target.composition?.domain !== 'naval'
+    && wrappedDistance(shooter.x,shooter.z,target.x,target.z,width) <= shooter.artillery.range;
+}
+
 /** Strategic counter silhouettes. Infantry, engineers, and artillery share one
  * icon; armored cars and tanks share another so the compact counter always
  * stays within its two-icon space. */

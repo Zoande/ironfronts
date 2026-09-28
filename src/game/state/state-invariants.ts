@@ -93,6 +93,22 @@ export function validateWorldState(ctx: SimContext): void {
     }
     for (const order of [army.order, army.suspendedOrder]) if (order) {
       if (order.edgeProgress < 0 || order.path.some((id) => !nodeExists(id))) throw new Error('Invalid order node.');
+      if (order.roadDestination) {
+        const destination=order.roadDestination;
+        const road=graph.edges[destination.edgeId];
+        const last=order.path[order.path.length-1];
+        const finalEdge=order.path.length===1 && army.edge
+          ? army.edge.edgeId : edgeIdBetween(graph,order.path.length>1?order.path[order.path.length-2]:army.graphNodeId,last);
+        if (!road || destination.to!==last || finalEdge!==road.id
+          || !((destination.from===road.from && destination.to===road.to)
+            || (destination.from===road.to && destination.to===road.from))
+          || destination.distanceAlongEdge<0 || destination.distanceAlongEdge>road.length) {
+          throw new Error('Invalid exact road destination.');
+        }
+        // Repair cached destination coordinates from older interrupted/replanned orders.
+        const point=edgePositionFrom(graph,road.id,destination.from,destination.distanceAlongEdge);
+        Object.assign(order,{destX:point.x,destZ:point.z});
+      }
       if (order.seaDestination && (!nodeExists(order.seaDestination.anchorNodeId)
         || !graph.seaAdjacency[order.seaDestination.anchorNodeId]?.length
         || world.provinceAt(order.seaDestination.x, order.seaDestination.z) >= 0)) {

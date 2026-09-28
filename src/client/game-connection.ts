@@ -43,6 +43,7 @@ export class GameConnection extends EventTarget {
   private lastMessageMs = 0;
   private serverEpochMs = 0;
   private serverSampleAt = 0;
+  private lastServerNow = 0;
   private readonly pending = new Map<string, PendingCommand>();
   private readonly seenEvents = new Set<string>();
   private connectedAtMs = 0;
@@ -76,7 +77,11 @@ export class GameConnection extends EventTarget {
     return this.status === 'ready' && this.socket?.readyState === WebSocket.OPEN
       && performance.now() - this.lastMessageMs < CONNECTION_STALE_MS;
   }
-  serverNow(): number { return this.serverEpochMs + Math.max(0, performance.now() - this.serverSampleAt); }
+  serverNow(): number {
+    this.lastServerNow = Math.max(this.lastServerNow,
+      this.serverEpochMs + Math.max(0, performance.now() - this.serverSampleAt));
+    return this.lastServerNow;
+  }
 
   private async connect(onStage?: (stage: string) => void): Promise<void> {
     if (this.closed) return;
@@ -170,6 +175,7 @@ export class GameConnection extends EventTarget {
           this.baselineGeneration++;
           window.clearTimeout(this.resyncTimer);
           this.serverEpochMs = message.clock.serverEpochMs; this.serverSampleAt = performance.now();
+          this.lastServerNow = this.serverEpochMs;
           this.gameClock.synchronize(message.clock);
           this.setStatus('ready');
           this.flushDiagnosticBacklog();

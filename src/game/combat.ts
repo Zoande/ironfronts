@@ -124,19 +124,24 @@ export function destroyArmy(session: SimContext, armyId: string): void {
 }
 
 /** One fixed authoritative combat pass. All fronts use one pre-damage snapshot. */
-export function stepCombat(session: SimContext, dtHours: number): CombatEvent[] {
+export function stepCombat(session: SimContext, dtHours: number, contactTimes?: ReadonlyMap<string, number>): CombatEvent[] {
   initializeState(session);
   const events: CombatEvent[] = [];
-  detectEngagements(session, events);
+  const joinedAt = detectEngagements(session, events, contactTimes);
   const pending = new Map<string, PendingDamage>();
   const activeFronts = Object.values(session.state.battleFronts);
   for (const front of activeFronts) {
-    const damage = calculateFrontDamageRates(session, front, dtHours);
-    // Terrain protects whichever side is defending at this front by cutting
-    // the damage that lands on it — the mirror image of devastation, which
-    // instead cuts a devastated defender's own output.
-    addDamage(pending, damage.sideAToB);
-    addDamage(pending, damage.sideBToA);
+    const times = joinedAt.get(front.id)!;
+    const boundaries = [...new Set([0, dtHours, ...[...times.values()].map((at) => Math.min(dtHours, at))])].sort((a,b) => a-b);
+    for (let i=1; i<boundaries.length; i++) {
+      const start = boundaries[i-1], hours = boundaries[i]-start;
+      const active = { ...front,
+        sideA:{...front.sideA,armyIds:front.sideA.armyIds.filter((id) => (times.get(id) ?? 0) <= start)},
+        sideB:{...front.sideB,armyIds:front.sideB.armyIds.filter((id) => (times.get(id) ?? 0) <= start)} };
+      const damage = calculateFrontDamageRates(session, active, hours);
+      addDamage(pending, damage.sideAToB);
+      addDamage(pending, damage.sideBToA);
+    }
   }
   applyPendingDamage(pending);
   if (session.state.simulationTick % 10 === 0) {

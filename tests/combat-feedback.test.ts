@@ -103,7 +103,7 @@ describe('combat huddle (visual-only positioning)', () => {
     expect(block).toContain('frontIds: (a.battleFronts ?? []).map((f) => f.id)');
     expect(block).toContain('buildBattleAnchors(groupEngagedByFront(');
     expect(block).toContain("army.status === 'engaged' ? battleAnchors.get(army.id) : undefined");
-    expect(block).toContain('combatHuddleOffset({ x: army.x, z: army.z }, battleAnchor)');
+    expect(block).toContain('combatHuddleOffset({ x: army.x, z: army.z }, battleAnchor, undefined, undefined, worldWidth)');
     // The offset is added to a fresh object (armyMotionRaw spread), never assigned back onto army.x/z.
     expect(block).toMatch(/const armyMotion = huddle[\s\S]{0,160}\.\.\.armyMotionRaw,\s*x: armyMotionRaw\.x \+ huddle\.x,\s*z: armyMotionRaw\.z \+ huddle\.z,\s*targetX: armyMotionRaw\.targetX \+ huddle\.x,\s*targetZ: armyMotionRaw\.targetZ \+ huddle\.z,/);
     expect(block).not.toMatch(/army\.x\s*=/);

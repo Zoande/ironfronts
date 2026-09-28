@@ -3,11 +3,12 @@ import { supplyEffectiveness } from '../combat/supply';
 import { SpatialIndex } from '../spatial-index';
 import type { SimContext } from '../sim-context';
 import { ensureArmyRuntimeState, mergeStacks, stackBaseSpeed } from './army';
-import { leadingEdgeValid } from '../movement/position';
-import { contactDistance } from '../movement/contact';
+import { armyAtNode, leadingEdgeValid } from '../movement/position';
+import { sweptContact } from '../movement/contact';
+import { armiesInContact, canEnterCloseCombat, CONTACT_EPSILON, contactPairKey } from '../combat/contact';
 import { movementEdgeAllowed } from '../movement/policy';
 import { revalidateOrder } from '../movement/pursuit';
-import { landMovementSpeedMultiplierAt, STRATEGIC_MOVEMENT_SCALE } from '../movement/speed';
+import { advanceLandRoad, ROAD_BONUS, STRATEGIC_MOVEMENT_SCALE } from '../movement/speed';
 import { beginFinalSeaLeg, beginNavalCrossing, isNavalStatus, isSeaEdge, stepNavalCrossing } from '../movement/naval';
 import { wrappedDistance } from '../geometry';
 import { computeArmyVisibility } from '../visibility';
@@ -58,7 +59,7 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
 }
 
 /** Advance every ordered stack, including explicit timed naval crossings. */
-export function stepMovement(session: SimContext, dtHours: number): CaptureEvent[] {
+export function stepMovement(session: SimContext, dtHours: number, contactTimes?: Map<string, number>): CaptureEvent[] {
   const { graph, world } = session;
   const captures: CaptureEvent[] = [];
   const positions = new SpatialIndex(Object.values(session.state.armies), world.width);
@@ -81,12 +82,17 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
       visibilityByCountry.set(army.ownerCountryId, visibility);
     }
     revalidateOrder(session, army, order, visibility);
-    let budget = stackBaseSpeed(army) * dtHours * STRATEGIC_MOVEMENT_SCALE
+    const baseSpeed = stackBaseSpeed(army) * STRATEGIC_MOVEMENT_SCALE
       * (army.status === 'retreating' ? GAME_PACE.movement.retreatMultiplier : 1)
       * supplyEffectiveness(army);
+    let budget = baseSpeed * dtHours;
+    let contactAt: number | undefined;
 
-    while (budget > 0 && order.path.length > 0) {
+    while (budget > 1e-9 && order.path.length > 0) {
       const targetNode = order.path[0];
+      // The planner treats positions within arrival tolerance as the node.
+      // Discard its old outgoing edge before a pursuit picks another exit.
+      if (army.edge && armyAtNode(session, army)) army.edge = null;
       if (isSeaEdge(graph, army.graphNodeId, targetNode)) {
         beginNavalCrossing(session, army, targetNode);
         break;
@@ -110,14 +116,18 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
       const roadEdge = graph.edges[edgeId];
       const forward = targetNode === army.edge.to;
       const exactStop = order.path.length === 1 && order.roadDestination?.edgeId === edgeId
-        && order.roadDestination.to === targetNode;
+        && order.roadDestination.to === targetNode
+        && order.roadDestination.distanceAlongEdge > 1e-6
+        && order.roadDestination.distanceAlongEdge < roadEdge.length - 1e-6;
       const exactDistance = exactStop
         ? (army.edge.from === order.roadDestination!.from
           ? order.roadDestination!.distanceAlongEdge
           : roadEdge.length - order.roadDestination!.distanceAlongEdge)
         : null;
-      const targetX = exactStop ? order.destX : graph.nodeX[targetNode];
-      const targetZ = exactStop ? order.destZ : graph.nodeZ[targetNode];
+      const destination = exactDistance !== null
+        ? edgePositionFrom(graph, edgeId, army.edge.from, exactDistance) : null;
+      const targetX = destination?.x ?? graph.nodeX[targetNode];
+      const targetZ = destination?.z ?? graph.nodeZ[targetNode];
       const segmentLength = exactDistance !== null
         ? Math.abs(exactDistance - army.edge.distanceAlongEdge)
         : forward ? roadEdge.length - army.edge.distanceAlongEdge : army.edge.distanceAlongEdge;
@@ -139,18 +149,25 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         if (capture) captures.push(capture);
         continue;
       }
-      const speedScale = landMovementSpeedMultiplierAt(
-        session, army.ownerCountryId, army.x, army.z,
-      );
-      const requested = Math.min(segmentLength, budget * speedScale);
+      const requested = Math.min(segmentLength, budget * ROAD_BONUS);
       const increasing = exactDistance !== null
         ? exactDistance >= army.edge.distanceAlongEdge : forward;
       const travelFrom = increasing ? army.edge.from : army.edge.to;
       const travelStart = increasing
         ? army.edge.distanceAlongEdge : roadEdge.length - army.edge.distanceAlongEdge;
-      const advance = contactDistance(
+      const contact = sweptContact(
         session, army, edgeId, travelFrom, travelStart, requested, positions,
       );
+      const travel = advanceLandRoad(session, army, edgeId, travelFrom, travelStart, contact.distance, budget);
+      const advance = travel.distance;
+      budget = Math.max(0, budget - travel.used);
+      const reachedContact = contact.armyId !== undefined && advance >= contact.distance - CONTACT_EPSILON;
+      if (reachedContact && contactTimes) {
+        const key = contactPairKey(army.id, contact.armyId!);
+        const elapsed = Math.max(0, dtHours - budget / baseSpeed);
+        contactAt = elapsed;
+        contactTimes.set(key, Math.max(contactTimes.get(key) ?? 0, elapsed));
+      }
       if (advance <= 1e-9) break;
       if (advance >= segmentLength - 1e-9) {
         army.x = targetX;
@@ -159,7 +176,6 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
           army.edge.distanceAlongEdge = exactDistance!;
           order.path.shift();
           order.edgeProgress = 0;
-          budget -= segmentLength / Math.max(speedScale, 0.01);
           continue;
         }
         army.lastGraphNodeId = army.edge && targetNode === army.edge.from
@@ -170,7 +186,6 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         order.edgeProgress = 0;
         const capture = captureProvinceAtArmyNode(session, army);
         if (capture) captures.push(capture);
-        budget -= segmentLength / Math.max(speedScale, 0.01);
       } else {
         army.edge.distanceAlongEdge += increasing ? advance : -advance;
         const point = edgePositionFrom(
@@ -180,11 +195,22 @@ export function stepMovement(session: SimContext, dtHours: number): CaptureEvent
         army.z = point.z;
         order.edgeProgress = forward
           ? army.edge.distanceAlongEdge : roadEdge.length - army.edge.distanceAlongEdge;
-        budget = 0;
       }
+      if (reachedContact) break;
     }
 
     positions.update(army);
+    if (contactAt !== undefined && contactTimes) {
+      // Co-located enemies can share a front. Every participant reached at
+      // this stop has the same entry time, not just the closest sweep blocker.
+      for (const other of positions.query(army.x,army.z,COMBAT_SNAP + CONTACT_EPSILON)) {
+        if (other===army || !canEnterCloseCombat(other)
+          || relationOf(session.state,army.ownerCountryId,other.ownerCountryId)!=='war'
+          || !armiesInContact(army,other,world.width)) continue;
+        const key=contactPairKey(army.id,other.id);
+        contactTimes.set(key,Math.max(contactTimes.get(key) ?? 0,contactAt));
+      }
+    }
     if (army.retreat?.protected && !order.path.includes(army.retreat.protectedUntilNodeId)
       && !positions.query(army.x, army.z, COMBAT_SNAP).some((other) => other !== army
         && relationOf(session.state, army.ownerCountryId, other.ownerCountryId) === 'war'

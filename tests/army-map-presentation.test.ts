@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildArmyCompositionRows, buildArmyFormation, dominantVisualKind, visualKindForUnit,
+  buildArmyCompositionRows, buildArmyFormation, dominantVisualKind, visualKindForUnit, canPresentArtilleryFire,
 } from '../src/rendering/army-map-presentation';
 
 describe('army map presentation LOD data', () => {
+  it('stops presenting bombardment when its source moves or its target leaves range/domain', () => {
+    const source={x:990,z:0,status:'idle',artillery:{range:140}};
+    const target={x:10,z:0,status:'idle',composition:{domain:'land'}};
+    expect(canPresentArtilleryFire(source,target,1000)).toBe(true);
+    expect(canPresentArtilleryFire(source,{...target,x:200},1000)).toBe(false);
+    expect(canPresentArtilleryFire({...source,status:'moving'},target,1000)).toBe(false);
+    expect(canPresentArtilleryFire(source,{...target,status:'atSea'},1000)).toBe(false);
+    expect(canPresentArtilleryFire(source,{...target,composition:{domain:'naval'}},1000)).toBe(false);
+  });
   it('maps infantry and armor families onto the compact counter silhouettes', () => {
     expect(visualKindForUnit('infantry')).toBe(0);
     expect(visualKindForUnit('engineer')).toBe(0);

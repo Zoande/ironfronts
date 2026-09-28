@@ -6,18 +6,7 @@ import { stackBaseSpeed } from '../../src/game/units/army';
 import { STRATEGIC_MOVEMENT_SCALE, ROAD_BONUS } from '../../src/game/movement/speed';
 import { wrappedDistance } from '../../src/game/geometry';
 
-/**
- * Reproduces the handoff's "attack orders repeatedly repath, causing
- * stop-start movement" concern directly against the authoritative simulation
- * (not the client interpolator, which was investigated separately and found
- * to already handle ordinary repaths smoothly). If pursuit repathing ever let
- * the chaser's own x/z teleport beyond what one tick's speed budget allows,
- * that would be a real, simulation-level stutter source worth fixing. If it
- * never does — as these assertions confirm — the chaser's motion is
- * physically continuous even under constant target relocation, and any
- * visible stutter is a client-side rendering/timing concern, not a logic bug
- * here.
- */
+/** Pursuit repairs must preserve the physical occupied edge and speed budget. */
 describe('pursuit repathing does not teleport the chasing army', () => {
   it('stays within one tick\'s speed budget even when the target relocates every tick', () => {
     const ctx = fixture();

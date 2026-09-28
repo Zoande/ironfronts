@@ -12,6 +12,7 @@ import type { CombatEvent } from './events';
 import { armyParticipatesInFront } from './membership';
 import { edgePosition, nearestNode } from '../movement/graph';
 import { armyApproachNode, canonicalEdgeDistance, occupiedEdge } from '../movement/position';
+import { armiesInContact, canEnterCloseCombat, CONTACT_EPSILON, contactPairKey } from './contact';
 
 export function initializeState(session: SimContext): void {
   session.state.simulationTick ??= 0;
@@ -224,23 +225,30 @@ function findOrCreateFront(
   return front;
 }
 
-export function detectEngagements(session: SimContext, events: CombatEvent[]): void {
+export function detectEngagements(session: SimContext, events: CombatEvent[], contactTimes?: ReadonlyMap<string, number>): Map<string, Map<string, number>> {
+  const joinedAt = new Map<string, Map<string, number>>();
+  for (const front of Object.values(session.state.battleFronts)) {
+    joinedAt.set(front.id, new Map([...front.sideA.armyIds, ...front.sideB.armyIds].map((id) => [id,0])));
+  }
   const armies = Object.values(session.state.armies);
   const index = new SpatialIndex(armies, session.world.width);
   const order = new Map(armies.map((army,index) => [army.id,index]));
-  const navalTransit = (army: ArmyStack): boolean =>
-    army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
   for (let i = 0; i < armies.length; i += 1) {
     const a = armies[i];
-    if (a.retreat?.protected || navalTransit(a)) continue;
-    for (const b of index.query(a.x,a.z,COMBAT_SNAP)) {
+    if (!canEnterCloseCombat(a)) continue;
+    for (const b of index.query(a.x,a.z,COMBAT_SNAP + CONTACT_EPSILON)) {
       if (order.get(b.id)! <= i) continue;
-      if (b.retreat?.protected || navalTransit(b) || a.ownerCountryId === b.ownerCountryId) continue;
+      if (!canEnterCloseCombat(b) || a.ownerCountryId === b.ownerCountryId) continue;
       if (relationOf(session.state, a.ownerCountryId, b.ownerCountryId) !== 'war') continue;
-      if (wrappedDistance(a.x, a.z, b.x, b.z, session.world.width) > COMBAT_SNAP) continue;
-      findOrCreateFront(session, a, b, events);
+      if (!armiesInContact(a, b, session.world.width)) continue;
+      const front = findOrCreateFront(session, a, b, events);
+      const times = joinedAt.get(front.id) ?? new Map<string,number>();
+      const at = contactTimes?.get(contactPairKey(a.id,b.id)) ?? 0;
+      for (const army of [a,b]) times.set(army.id, Math.min(times.get(army.id) ?? Infinity, at));
+      joinedAt.set(front.id, times);
     }
   }
+  return joinedAt;
 }
 
 function removeArmyFromFront(session: SimContext, front: BattleFrontState, armyId: string): void {

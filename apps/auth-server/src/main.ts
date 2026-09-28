@@ -95,7 +95,7 @@ async function gameRequest<T>(gameId: string, pathname: string, init?: RequestIn
   return value;
 }
 
-async function assignment(accountId: string, gameId = GAME_ID): Promise<{ gameId: string; countryId: number } | null> {
+async function assignment(accountId: string, gameId: string = GAME_ID): Promise<{ gameId: string; countryId: number } | null> {
   const lobby = await gameRequest<GameLobby>(gameId, `/internal/v2/lobby?accountId=${encodeURIComponent(accountId)}`);
   return lobby.assignedCountryId === null ? null : { gameId: lobby.gameId, countryId: lobby.assignedCountryId };
 }

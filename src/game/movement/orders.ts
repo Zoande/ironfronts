@@ -9,6 +9,7 @@ import { combinedGraph, isNavalStatus } from './naval';
 import { armyParticipatesInFront } from '../combat/membership';
 import { movementEdgeTravelCost } from './speed';
 import { wrappedDistance, wrapX } from '../geometry';
+import { routeToRoadPosition } from './road-route';
 
 /** A final open-water leg must stay in water; the sea graph supplies its approach. */
 function clearSeaLeg(session: SimContext, from: number, x: number, z: number): boolean {
@@ -149,37 +150,9 @@ export function issueMoveOrder(
     for (const candidate of candidates) {
       const cost = movementEdgeTravelCost(session, army, candidate.graph, prospectiveWars);
       if (candidate.road) {
-        const edge = candidate.graph.edges[candidate.road.edgeId];
-        if (!edge) continue;
-        const approaches = [
-          { from: edge.from, to: edge.to, distance: candidate.road.distanceAlongEdge },
-          { from: edge.to, to: edge.from, distance: edge.length - candidate.road.distanceAlongEdge },
-        ];
-        let best: (Planned & { score: number }) | null = null;
-        for (const approach of approaches) {
-          if (approach.distance > 1e-6 && allowed && !allowed(approach.from, approach.to)) continue;
-          const base = routeFromArmy(session, army, approach.from, allowed, candidate.graph, cost);
-          if (!base) continue;
-          let score = 0;
-          for (let i = 1; i < base.length; i += 1) {
-            const from = base[i - 1], at = candidate.graph.adjacency[from].indexOf(base[i]);
-            if (at >= 0) score += cost(from, base[i], candidate.graph.edgeCost[from][at]);
-          }
-          score += edge.length > 0
-            ? cost(approach.from, approach.to, edge.length) * approach.distance / edge.length : 0;
-          const path = approach.distance <= 1e-6 ? base : [...base, approach.to];
-          const option = { graph: candidate.graph, goal: approach.to, path,
-            destX: candidate.road.x, destZ: candidate.road.z,
-            roadDestination: approach.distance <= 1e-6 ? undefined : {
-              edgeId: edge.id, from: approach.from, to: approach.to,
-              distanceAlongEdge: approach.distance,
-            }, score };
-          if (!best || score < best.score) best = option;
-        }
-        if (best) {
-          const { score: _score, ...result } = best;
-          return result;
-        }
+        const route = routeToRoadPosition(session, army, candidate.graph, candidate.road, allowed, prospectiveWars);
+        if (route) return { graph: candidate.graph, goal: route.path[route.path.length - 1], ...route,
+          destX: candidate.road.x, destZ: candidate.road.z };
         continue;
       }
       const goal = adjustedGoal(candidate.goal ?? -1);
@@ -241,7 +214,7 @@ export function issueMoveOrder(
   }
   for (const countryId of required) setRelation(session.state, army.ownerCountryId, countryId, 'war');
   const edge = occupiedEdge(session, army);
-  if (edge) army.edge = edge;
+  army.edge = edge;
   if (alreadyThere && target?.kind !== 'army') {
     army.order = null;
     if (army.status === 'moving') army.status = 'idle';
