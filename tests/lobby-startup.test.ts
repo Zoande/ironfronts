@@ -25,8 +25,10 @@ describe('lightweight lobby startup', () => {
     // A new operation registers (join) only when no country is assigned yet; a
     // Continue skips straight to the renderer. Either way the join call is
     // time-bounded so it can never hang the launch.
-    expect(main).toContain('if (lobby.assignedCountryId === null)');
-    expect(main).toMatch(/withTimeout\(joinGame\(countryId\)/);
+    const start = main.indexOf('async function runLaunch(');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const launch = main.slice(start, main.indexOf('\n}', start));
+    expect(launch).toMatch(/if \(currentLobby\.assignedCountryId === null\)\s*\{[^}]*await withTimeout\(joinGame\(currentLobby\.gameId, countryId\), 15_000, 'Joining the campaign'\);[^}]*currentLobby\.assignedCountryId = countryId;/s);
     expect(main).toContain("void music.setState('opening').catch");
     expect(main).not.toContain("await music.setState('opening')");
   });

@@ -89,13 +89,21 @@ describe('campaign flow — dossier then nation overlay', () => {
     expect(menu).toMatch(/confirmNation\?\.addEventListener\('click',[\s\S]{0,120}deployFromPicker\(selectedCountryId\)/);
   });
 
-  it('keeps both campaigns accessible and resumes an assignment', () => {
+  it('keeps both campaigns accessible and resumes either assignment in its own lobby', () => {
     expect(html).toContain('id="ifm-choose-world"');
     expect(html).toContain('id="ifm-choose-europe"');
-    expect(menu).toContain('newCampaign.disabled = false');
-    expect(menu).toContain("void deploy(assignedCountry.id)");
+    expect(menu).toContain('currentLobby = assignedLobby!; void deploy(assignedCountry.id)');
+    expect(menu).toContain('currentLobby = otherLobby; void deploy(otherCountry.id)');
+    expect(menu).toContain('otherButton.hidden = !otherLobby || !otherCountry');
+    expect(menu).toContain('await handlers.onLaunch(currentLobby.gameId, countryId)');
     expect(menu).not.toContain('previewOnly');
     expect(html).not.toContain('ifm-registry-preview');
+  });
+
+  it('disables New Campaign only when every available campaign has an assignment', () => {
+    expect(menu).toContain('const assignedLobbies = handlers.lobbies.filter((lobby) => resolveAssignedCountry(lobby))');
+    expect(menu).toContain('newCampaign.disabled = handlers.lobbies.length > 0 && assignedLobbies.length === handlers.lobbies.length');
+    expect(menu).toContain("newCampaign.classList.toggle('is-disabled', newCampaign.disabled)");
   });
 
   it('supports keyboard selection and joining from the map', () => {

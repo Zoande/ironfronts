@@ -23,10 +23,17 @@ describe('WGSL programs', () => {
     expect(armyMarkerShader).toContain('smoothstep(7600.0, 9200.0, zoom)');
   });
 
-  it('keeps strategic troop models small relative to roads and towns', () => {
-    const scale = Number(/let scale = select\(([\d.]+),/.exec(armyModelShader)?.[1]);
-    expect(scale).toBeGreaterThan(0);
-    expect(scale).toBeLessThanOrEqual(2.1);
+  it('keeps strategic troop models small with separate infantry and transport scales', () => {
+    // Infantry intentionally matches the authored model at 1.5x the base
+    // land scale. Transports keep their own scale rather than that multiplier.
+    const scales = /let\s+scale\s*=\s*select\(\s*select\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*0u\s*\)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*5u\s*\)/.exec(armyModelShader);
+    expect(scales, 'base land, infantry, and transport scale selection').not.toBeNull();
+    const [land, infantry, transport] = scales!.slice(1).map(Number);
+    expect(land).toBeGreaterThan(0);
+    expect(land).toBeLessThanOrEqual(2.1);
+    expect(infantry).toBeCloseTo(land * 1.5, 6);
+    expect(transport).toBeGreaterThan(0);
+    expect(transport).toBeLessThanOrEqual(2.15);
   });
 
   it('renders at-sea armies as procedural transport ships on the water surface', () => {
