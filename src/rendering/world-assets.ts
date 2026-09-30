@@ -27,6 +27,7 @@ export interface WorldAssetBuffers {
   provinceBuffer: ArrayBuffer;
   roadVertexBuffer: ArrayBuffer;
   roadIndexBuffer: ArrayBuffer;
+  roadCenterlineBuffer: ArrayBuffer;
   hiddenConnectionVertexBuffer: ArrayBuffer;
   hiddenConnectionIndexBuffer: ArrayBuffer;
   waterwayVertexBuffer: ArrayBuffer;
@@ -53,6 +54,7 @@ export async function loadWorldAssetBuffers(manifest: WorldManifest): Promise<Wo
     provinceBuffer: manifest.fields.provinceIds.url,
     roadVertexBuffer: manifest.buffers.roadVertices.url,
     roadIndexBuffer: manifest.buffers.roadIndices.url,
+    roadCenterlineBuffer: manifest.buffers.roadCenterlines.url,
     hiddenConnectionVertexBuffer: manifest.buffers.hiddenConnectionVertices.url,
     hiddenConnectionIndexBuffer: manifest.buffers.hiddenConnectionIndices.url,
     waterwayVertexBuffer: manifest.buffers.waterwayVertices.url,
@@ -76,7 +78,7 @@ export async function loadWorldAssetBuffers(manifest: WorldManifest): Promise<Wo
 
 function hex(buffer: ArrayBuffer): string { return [...new Uint8Array(buffer)].map((n) => n.toString(16).padStart(2, '0')).join(''); }
 export async function verifyWorldDescriptor(descriptor: WorldDescriptor): Promise<void> {
-  const required = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32'];
+  const required = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32', 'road-network.json', 'road-centerlines.f32'];
   if (required.some((name) => !/^[a-f0-9]{64}$/.test(descriptor.artifactHashes[name] ?? ''))) {
     throw new Error('Server did not identify every gameplay world artifact.');
   }

@@ -141,7 +141,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // movement path still read at strategic zoom. Selection/pick hitbox is on the
   // flat marker, not the model, so this does not hurt selectability. Trimmed
   // again this pass (1.95 -> 1.7) to sit closer to the road ribbon width.
-  let scale = select(1.7, 2.15, kind == 5u);
+  // Infantry gets a 1.5x multiplier to match its authored model size.
+  let scale = select(select(1.7, 2.55, kind == 0u), 2.15, kind == 5u);
   var local = (part.center + cube.position * part.halfSize) * scale;
 
   // Marching gait. moveAmt is how far the unit shifted between the last two
@@ -153,7 +154,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // this is a strategic-tempo WW2 campaign, not a real-time skirmish, and a
   // brisk real-life walking pace read as constant background fidgeting at
   // the zoom levels the map is actually played at.
-  let moveAmt = clamp(distance(model.a.xy, model.c.xy) / 3.0, 0.0, 1.0);
+  let moveAmt = select(0.0,1.0,(u32(model.b.z)&2u)!=0u);
   let gait = uniforms.sunTime.w * 4.2 + model.c.x * 0.15;
   if (kind == 0u) {
     local.y += abs(sin(gait)) * 0.13 * scale * moveAmt;
@@ -177,15 +178,11 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   output.normal = normal;
   output.color = unpackModelRgb(model.a.z) * part.shade;
   let closeFade = 1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y);
-  output.alpha = closeFade * (1.0 - horizontalWorldFog(worldPosition.x));
+  output.alpha = closeFade * (1.0 - mapFog(worldPosition.xz));
   let modelFlags = u32(model.b.z + 0.5);
   if ((modelFlags & 1u) != 0u) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
-  // Each skinned asset has its own indexed draw. Keep the procedural model
-  // only as a graceful fallback for whichever kinds' optional asset failed to
-  // load — mode is a bitmask: 1 infantry, 2 light tank, 4 medium tank.
-  if ((kind == 0u && (armyModelParams.mode & 1u) != 0u)
-    || (kind == 4u && (armyModelParams.mode & 2u) != 0u)
-    || (kind == 2u && (armyModelParams.mode & 4u) != 0u)) {
+  // Four authored land families share a single pipeline; missing files retain a fallback.
+  if (kind < 6u && (armyModelParams.mode & (1u << kind)) != 0u) {
     output.position = vec4f(2.0, 2.0, 2.0, 1.0);
     output.alpha = 0.0;
   }
@@ -228,7 +225,7 @@ fn armyKindCountVertex(
   output.uv = corner;
   output.color = unpackModelRgb(model.a.z);
   output.count = model.b.x;
-  output.alpha = (1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y)) * (1.0 - horizontalWorldFog(worldPosition.x));
+  output.alpha = (1.0 - smoothstep(1500.0, 1900.0, uniforms.interaction.y)) * (1.0 - mapFog(worldPosition.xz));
   let pixelCenter = vec2f(23.0, 1.0);
   // viewport.z (backing-store scale) holds the count badge at a constant CSS
   // size so it doesn't grow when the graphics preset lowers the render scale.

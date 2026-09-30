@@ -2,8 +2,7 @@ import type { GameLobby, LobbyCountry } from '@ironfronts/protocol';
 import { MIN_STARTING_CITIES, selectableCountries } from './lobby-state';
 
 export const CAMPAIGN_MAP_WIDTH = 1_024;
-export const CAMPAIGN_MAP_HEIGHT = 529;
-const MAP_URL = '/menu/campaign-country-ids.u16';
+export let CAMPAIGN_MAP_HEIGHT = 529;
 
 const COLORS = {
   ocean: [21, 27, 26, 255],
@@ -22,6 +21,7 @@ export interface CampaignMapController {
   readonly ready: Promise<void>;
   setSelection(countryId: number | null): void;
   focus(): void;
+  dispose(): void;
 }
 
 interface MapRect {
@@ -85,10 +85,14 @@ export function mountCampaignMap(
   onSelect: (country: LobbyCountry) => void,
   onStatus: (status: CampaignMapStatus) => void,
 ): CampaignMapController {
+  const europe = lobby.gameId === 'europe-at-war-1';
+  CAMPAIGN_MAP_HEIGHT = europe ? 682 : 529;
+  const mapUrl = europe ? '/menu/campaign-europe-ids.u16' : '/menu/campaign-country-ids.u16';
   canvas.width = CAMPAIGN_MAP_WIDTH;
   canvas.height = CAMPAIGN_MAP_HEIGHT;
   const context = canvas.getContext('2d', { alpha: false });
   if (!context) throw new Error('Campaign map canvas is unavailable.');
+  const listeners = new AbortController();
   const countriesById = new Map(lobby.countries.map((country) => [country.id, country]));
   const playable = selectableCountries(lobby);
   const playableIds = new Set(playable.map((country) => country.id));
@@ -205,13 +209,13 @@ export function mountCampaignMap(
     view.originY = view.zoom === 1 ? 0 : worldY - fy * nextH;
     clampOrigin();
     draw();
-  }, { passive: false });
+  }, { passive: false, signal: listeners.signal });
 
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || !ids) return;
     drag = { x: event.clientX, y: event.clientY, moved: false };
     try { canvas.setPointerCapture(event.pointerId); } catch { /* not fatal */ }
-  });
+  }, { signal: listeners.signal });
   const endDrag = (event: PointerEvent): void => {
     if (!drag) return;
     try { canvas.releasePointerCapture(event.pointerId); } catch { /* already released */ }
@@ -219,8 +223,8 @@ export function mountCampaignMap(
     // the click handler can tell a pan from a select; clear it next tick.
     setTimeout(() => { drag = null; }, 0);
   };
-  canvas.addEventListener('pointerup', endDrag);
-  canvas.addEventListener('pointercancel', endDrag);
+  canvas.addEventListener('pointerup', endDrag, { signal: listeners.signal });
+  canvas.addEventListener('pointercancel', endDrag, { signal: listeners.signal });
 
   canvas.addEventListener('pointermove', (event) => {
     if (drag) {
@@ -249,11 +253,11 @@ export function mountCampaignMap(
           ? `${country.name} · ${country.startingCities} starting cities · Available`
           : unavailableReason(country),
     });
-  });
+  }, { signal: listeners.signal });
   canvas.addEventListener('pointerleave', () => {
     canvas.style.cursor = '';
     onStatus({ country: null, message: 'Select a beige country. Grey countries cannot be claimed.' });
-  });
+  }, { signal: listeners.signal });
   canvas.addEventListener('click', (event) => {
     if (drag?.moved) return; // a pan, not a pick
     const country = countryAt(event);
@@ -261,7 +265,7 @@ export function mountCampaignMap(
     selectedCountryId = country.id;
     draw();
     onSelect(country);
-  });
+  }, { signal: listeners.signal });
   canvas.addEventListener('keydown', (event) => {
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) || !playable.length) return;
     event.preventDefault();
@@ -271,9 +275,9 @@ export function mountCampaignMap(
     selectedCountryId = next.id;
     draw();
     onSelect(next);
-  });
+  }, { signal: listeners.signal });
 
-  const ready = fetch(MAP_URL)
+  const ready = fetch(mapUrl)
     .then((response) => {
       if (!response.ok) throw new Error(`Campaign map failed to load (${response.status}).`);
       return response.arrayBuffer();
@@ -282,13 +286,13 @@ export function mountCampaignMap(
       if (buffer.byteLength !== CAMPAIGN_MAP_WIDTH * CAMPAIGN_MAP_HEIGHT * Uint16Array.BYTES_PER_ELEMENT) {
         throw new Error('Campaign map data has an unexpected size.');
       }
-      ids = new Uint16Array(buffer);
-      draw();
+      if (!listeners.signal.aborted) { ids = new Uint16Array(buffer); draw(); }
     });
 
   return {
     ready,
     setSelection(countryId) { selectedCountryId = countryId; draw(); },
     focus() { canvas.focus(); },
+    dispose() { listeners.abort(); },
   };
 }

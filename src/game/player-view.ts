@@ -26,13 +26,17 @@ import type { GameState, ResourceNodeState } from './game-state';
 import type { WorldData } from './world-data';
 import type { ArmyStack, ArmyStatus, ArmyStance } from './units/army';
 import {
-  stackBaseSpeed, stackHealthFraction, stackHp, stackUnitCount,
+  stackBaseSpeed, stackHealthFraction, stackHp, stackMaxHp, stackUnitCount,
 } from './units/army';
 import { unitType } from './units/unit-catalog';
-import { ORGANIZATION_MAX, ENTRENCHMENT_MAX } from './combat/constants';
 import { calculateFrontDamageRates, type CombatRateModifiers } from './combat';
-import { armySupplyPlan } from './combat/supply';
+import { armySupplyPlan, supplyEffectiveness, supplyRefillMultiplier, supplyShortfalls } from './combat/supply';
 import { armyParticipatesInFront } from './combat/membership';
+import {
+  activeTransportStats, combatDomain, transportHealthFraction, transportHp,
+  transportMaxHp, transportShipCount,
+} from './naval/transport';
+import type { DamageProfile } from './units/unit-types';
 
 export interface ProjectedGroup {
   readonly typeId: string;
@@ -62,17 +66,21 @@ export interface PlayerArmyView {
   readonly composition: {
     readonly unitCount: number;
     readonly health: number;
-    /** Organization/readiness, 0..1 of max — separate from health; see
-     *  game/combat/organization.ts. */
-    readonly organization: number;
-    /** Entrenchment, 0..1 of max — see game/combat/entrenchment.ts. */
-    readonly entrenchment: number;
+    readonly hp: number;
+    readonly maxHp: number;
     /** Combat posture — see units/army.ts ArmyStance. */
     readonly stance: ArmyStance;
     /** Within reach of the owner's own territory — see combat/supply.ts. */
     readonly inSupply: boolean;
     readonly speed: number;
     readonly groups: readonly ProjectedGroup[];
+    readonly domain: 'land' | 'naval';
+    readonly combatProfile?: { readonly attack: DamageProfile; readonly defense: DamageProfile };
+    readonly transport?: {
+      readonly kind: 'transport'; readonly level: number; readonly shipCount: number;
+      readonly hp: number; readonly maxHp: number; readonly health: number;
+      readonly cargo: ReadonlyArray<{ readonly typeId: string; readonly shipCount: number; readonly health: number }>;
+    } | null;
   } | null;
   /** Destination of the active move order — own armies only. */
   readonly moveOrder: { readonly x: number; readonly z: number } | null;
@@ -80,6 +88,10 @@ export interface PlayerArmyView {
    *  points from the army's position to the destination. Server projection fills
    *  it (it owns the graph); [] here. */
   readonly moveRoute?: ReadonlyArray<{ readonly x: number; readonly z: number }>;
+  readonly moveRoadRoute?: ReadonlyArray<{
+    readonly edgeId: number; readonly from: number; readonly to: number;
+    readonly startDistance: number; readonly endDistance?: number;
+  }>;
   readonly moveIntent?: 'move' | 'attack';
   /** Current visible movement leg. The client can animate continuously toward
    * this point for the remaining wall-clock duration instead of tweening
@@ -89,12 +101,15 @@ export interface PlayerArmyView {
     readonly targetZ: number;
     readonly durationMs: number;
   };
-    readonly supply?: {
-      readonly capacity: number;
-      readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
-      readonly connected: boolean;
-      readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
-    };
+  readonly supply?: {
+    readonly capacity: number;
+    readonly current: number;
+    readonly connected: boolean;
+    readonly refillMultiplier: number;
+    readonly shortfalls: ReadonlyArray<'funds' | 'food' | 'metal' | 'oil'>;
+    readonly effectiveness: number;
+    readonly depletionPerHour: number;
+  };
   readonly suspendedOrder?: { readonly x: number; readonly z: number; readonly intent: 'move' | 'attack' } | null;
   readonly battleFronts?: ReadonlyArray<{
     id: string;
@@ -131,14 +146,29 @@ function groupHealthFraction(typeId: string, count: number, hp: number): number 
 }
 
 function composition(army: ArmyStack): PlayerArmyView['composition'] {
+  const domain = combatDomain(army);
+  const transport = domain === 'naval' ? army.transport : null;
+  const stats = transport ? activeTransportStats(army) : null;
   return {
-    unitCount: stackUnitCount(army),
-    health: stackHealthFraction(army),
-    organization: (army.organization ?? 100) / ORGANIZATION_MAX,
-    entrenchment: (army.entrenchment ?? 0) / ENTRENCHMENT_MAX,
+    unitCount: transport ? transportShipCount(transport) : stackUnitCount(army),
+    health: transport ? transportHealthFraction(transport) : stackHealthFraction(army),
+    hp: transport ? transportHp(transport) : stackHp(army),
+    maxHp: transport ? transportMaxHp(transport) : stackMaxHp(army),
     stance: army.stance ?? 'attack-defend',
     inSupply: army.inSupply ?? true,
-    speed: Math.round(stackBaseSpeed(army)),
+    speed: Math.round((stats?.speed ?? stackBaseSpeed(army)) * supplyEffectiveness(army)),
+    domain,
+    combatProfile: stats ? { attack: stats.attack, defense: stats.defense } : undefined,
+    transport: transport && stats ? {
+      kind: 'transport', level: transport.level, shipCount: transportShipCount(transport),
+      hp: transportHp(transport), maxHp: transportMaxHp(transport),
+      health: transportHealthFraction(transport),
+      cargo: transport.cargo.map((cargo) => ({
+        typeId: cargo.cargoTypeId,
+        shipCount: cargo.shipHp.length,
+        health: cargo.shipHp.reduce((sum, hp) => sum + hp, 0) / (cargo.shipHp.length * stats.maxHp),
+      })),
+    } : null,
     groups: army.units.map((g) => ({
       typeId: g.typeId,
       count: g.count,
@@ -219,11 +249,11 @@ export function projectArmyView(
       enemyModifiers: friendlyIsA ? rates.sideBModifiers : rates.sideAModifiers,
     }];
   }) : undefined;
-  const artilleryGroups = fullyVisible
+  const artilleryGroups = fullyVisible && combatDomain(army) === 'land'
     ? army.units.filter((group) => unitType(group.typeId).category === 'artillery') : [];
   const artilleryRange = artilleryGroups.length
     ? Math.max(...artilleryGroups.map((group) => unitType(group.typeId).engagementRange)) : 0;
-  const supplyPlan = fullyVisible ? armySupplyPlan(army) : null;
+  const supplyPlan = own ? armySupplyPlan(army) : null;
   return {
     id: army.id,
     name: fullyVisible ? army.name : 'Unidentified force',
@@ -245,12 +275,12 @@ export function projectArmyView(
       : null,
     supply: supplyPlan ? {
       capacity: supplyPlan.capacity,
-      stores: { funds: army.supplyStores?.funds ?? supplyPlan.allocation.funds,
-        food: army.supplyStores?.food ?? supplyPlan.allocation.food,
-        metal: army.supplyStores?.metal ?? supplyPlan.allocation.metal,
-        oil: army.supplyStores?.oil ?? supplyPlan.allocation.oil },
+      current: Math.max(0, Math.min(supplyPlan.capacity, army.supply ?? supplyPlan.capacity)),
       connected: army.inSupply ?? false,
-      allocation: supplyPlan.allocation,
+      refillMultiplier: supplyRefillMultiplier(owner),
+      shortfalls: supplyShortfalls(owner),
+      effectiveness: supplyEffectiveness(army),
+      depletionPerHour: supplyPlan.upkeepPerHour,
     } : undefined,
     battleFronts: fronts,
     // The server projection, which also owns the movement graph, fills these.

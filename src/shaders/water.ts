@@ -69,6 +69,6 @@ fn waterFragment(input: WaterVertexOutput) -> @location(0) vec4f {
   );
   let color = mix(rawColor, strategicWater, 0.32);
   let distanceFogged = applyOceanDistanceFog(color, input.worldPosition);
-  return vec4f(mix(distanceFogged, worldFogColor(), horizontalWorldFog(input.worldPosition.x)), 0.97);
+  return vec4f(mix(distanceFogged, worldFogColor(), mapFog(input.worldPosition.xz)), 0.97);
 }
 `;

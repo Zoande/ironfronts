@@ -24,7 +24,7 @@ function graph(): LandGraph {
     nodeCount: 2,
     width: 10_000,
     height: 5_000,
-  };
+  } as unknown as LandGraph;
 }
 
 function world(): WorldData {

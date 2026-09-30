@@ -9,11 +9,11 @@ const WORLD = path.join(ROOT, 'public', 'world');
 const OUTPUT = path.join(ROOT, 'public', 'menu', 'campaign-country-ids.u16');
 export const CAMPAIGN_MAP_WIDTH = 1_024;
 
-export async function generateCampaignMap() {
+export async function generateCampaignMap(worldDirectory = WORLD, outputPath = OUTPUT) {
   const [manifestText, provinceBuffer, ownerBuffer] = await Promise.all([
-    readFile(path.join(WORLD, 'world.json'), 'utf8'),
-    readFile(path.join(WORLD, 'province-ids.u16')),
-    readFile(path.join(WORLD, 'province-owners.u32')),
+    readFile(path.join(worldDirectory, 'world.json'), 'utf8'),
+    readFile(path.join(worldDirectory, 'province-ids.u16')),
+    readFile(path.join(worldDirectory, 'province-owners.u32')),
   ]);
   const manifest = JSON.parse(manifestText);
   const sourceWidth = manifest.fields.provinceIds.width;
@@ -33,9 +33,9 @@ export async function generateCampaignMap() {
       countries[y * CAMPAIGN_MAP_WIDTH + x] = owners[provinces[sourceY * sourceWidth + sourceX]] ?? 0;
     }
   }
-  await mkdir(path.dirname(OUTPUT), { recursive: true });
-  await writeFile(OUTPUT, new Uint8Array(countries.buffer));
-  console.log(`Wrote ${path.relative(ROOT, OUTPUT)} — ${CAMPAIGN_MAP_WIDTH}x${height}.`);
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, new Uint8Array(countries.buffer));
+  console.log(`Wrote ${path.relative(ROOT, outputPath)} — ${CAMPAIGN_MAP_WIDTH}x${height}.`);
   return { width: CAMPAIGN_MAP_WIDTH, height };
 }
 

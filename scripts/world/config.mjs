@@ -1,5 +1,6 @@
-export const WORLD_WIDTH = 13_562;
-export const WORLD_HEIGHT = 7_000;
+const europe = process.env.MAP_KIND === 'europe';
+export const WORLD_WIDTH = europe ? 5_935 : 13_562;
+export const WORLD_HEIGHT = europe ? 3_950 : 7_000;
 export const ID_WIDTH = 4_096;
 export const ID_HEIGHT = Math.round(ID_WIDTH * WORLD_HEIGHT / WORLD_WIDTH);
 export const FIELD_WIDTH = 2_048;

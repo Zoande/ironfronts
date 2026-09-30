@@ -148,7 +148,7 @@ fn armyMarkerVertex(
     rangeFade,
     1.0 - smoothstep(7600.0, 9200.0, zoom),
     rally,
-  ) * (1.0 - horizontalWorldFog(worldPos.x));
+  ) * (1.0 - mapFog(worldPos.xz));
   if (clip.w <= 0.0001) {
     output.position = vec4f(0.0, 0.0, -10.0, 1.0);
     output.alpha = 0.0;
@@ -297,7 +297,7 @@ fn armyCompositionVertex(
     1.0 - smoothstep(1400.0, 1800.0, uniforms.interaction.y),
     identified && needsManifest && selected,
   )
-    * (1.0 - horizontalWorldFog(worldPos.x));
+    * (1.0 - mapFog(worldPos.xz));
   if (clip.w <= 0.0001) {
     output.position = vec4f(0.0, 0.0, -10.0, 1.0);
     output.alpha = 0.0;

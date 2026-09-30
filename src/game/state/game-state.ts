@@ -27,7 +27,7 @@ export type UpkeepResource = 'funds' | 'food' | 'metal' | 'oil';
 export type ResourcePotential = Record<PhysicalResource, number>;
 export type ResourceBuildingId = 'fields' | 'quarry' | 'mine' | 'oilPump';
 export type ResourceBuildingTiers = Record<ResourceBuildingId, number>;
-export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
+export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored' | 'navy';
 export type TechnologyLevels = Record<TechnologyBranch, number>;
 
 export interface ResearchState {
@@ -234,6 +234,9 @@ export interface BattleFrontState {
   readonly provinceId: number | null;
   readonly x: number;
   readonly z: number;
+  /** Canonical road contact coordinate when both forces share an edge. */
+  readonly edgeId?: number;
+  readonly distanceAlongEdge?: number;
   sideA: BattleFrontSideState;
   sideB: BattleFrontSideState;
 }

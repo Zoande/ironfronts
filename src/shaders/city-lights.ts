@@ -44,7 +44,7 @@ fn cityLightVertex(
   output.position = clip + vec4f(pixelOffset * clip.w, 0.0, 0.0);
   output.glowUv = corner;
   output.color = mix(vec3f(1.0, 0.43, 0.10), vec3f(1.0, 0.78, 0.35), seed);
-  output.opacity = strategicFade * darkness * (1.0 - horizontalWorldFog(worldX)) * mix(0.48, 0.90, seed);
+  output.opacity = strategicFade * darkness * (1.0 - mapFog(worldPosition.xz)) * mix(0.48, 0.90, seed);
   return output;
 }
 

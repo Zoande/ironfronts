@@ -26,8 +26,8 @@ describe('0 A.D.-style production/construction queue', () => {
   });
 
   it('uses dedicated production pictograms and facility icons without permanent button labels', () => {
-    expect(gameUi).toContain('const productionIcon = UNIT_PRODUCTION_ICON[u.id];');
-    expect(gameUi).toContain("createIcon(productionIcon, 'ifg-buildbtn__thumb')");
+    expect(gameUi).toContain("const icon = mode === 'build' ? FACILITY_ICON[option.id] : UNIT_PRODUCTION_ICON[family];");
+    expect(gameUi).toContain("createIcon(icon, 'ifg-province-picker__thumb')");
     expect(gameUi).not.toContain("el('span', 'ifg-buildbtn__label'");
     expect(gameUi).toContain('updateQueue(pvQueue, q, (id, label) => {');
     expect(gameUi).toContain('const thumb = createUnitPortrait(id, label);');
@@ -47,8 +47,9 @@ describe('0 A.D.-style production/construction queue', () => {
   });
 
   it('disables province actions while intent is pending and uses server affordability', () => {
-    expect(gameUi).toContain("province.commandPending === true || !u.affordable");
-    expect(gameUi).toContain("province.commandPending === true || province.canSetRally !== true");
+    expect(gameUi).toContain("selected.commandPending === true || !option.affordable || !option.available");
+    expect(gameUi).toContain("pvTrainCommand.disabled = province.commandPending === true || prod.length === 0");
+    expect(gameUi).toContain("pvBuildCommand.disabled = province.commandPending === true || buildable.length === 0");
     expect(mainTs).toContain('session.productionOptions(provinceId)');
     expect(mainTs).toContain('commandPending: session.pendingForProvince(provinceId)');
   });

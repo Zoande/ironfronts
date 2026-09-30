@@ -114,10 +114,10 @@ describe('stepConstruction', () => {
 });
 
 describe('buildableBuildings', () => {
-  it('lists the four buildings for an owned urban province, none once built', () => {
+  it('lists the currently unlocked military buildings and offers upgrades only when technology permits', () => {
     const s = state();
     const c = ctx(s);
-    expect(buildableBuildings(c, 10, 1).sort()).toEqual(['barracks', 'missileSite', 'ordnance', 'tankPlant']);
+    expect(buildableBuildings(c, 10, 1).sort()).toEqual(['barracks', 'ordnance', 'tankPlant']);
     s.provinceBuildings[10] = { barracks: 1, tankPlant: 1, ordnance: 1, missileSite: 1 };
     expect(buildableBuildings(c, 10, 1)).toEqual([]);
   });
@@ -129,23 +129,29 @@ describe('buildableBuildings', () => {
 });
 
 describe('buildOptions', () => {
-  it('still offers a building the country cannot afford, flagged unaffordable', () => {
+  it('projects every building choice with an authoritative unavailable reason', () => {
     const s = state();
     s.countries[1].stockpile = { ...emptyStockpile(), funds: 0, stone: 0, metal: 0 };
     const opts = buildOptions(ctx(s), 10, 1);
-    expect(opts.map((o) => o.id).sort()).toEqual(['barracks', 'missileSite', 'ordnance', 'tankPlant']);
+    expect(opts.map((o) => o.id).sort()).toEqual([
+      'barracks', 'fields', 'mine', 'missileSite', 'oilPump', 'ordnance', 'quarry', 'tankPlant',
+    ]);
     expect(opts.every((o) => !o.affordable)).toBe(true);
     expect(buildableBuildings(ctx(s), 10, 1)).toEqual([]); // none actually startable
   });
 
-  it('drops a building once it is built or queued', () => {
+  it('turns a queued building into a gated next-tier upgrade', () => {
     const s = state();
     const c = ctx(s);
     queueBuilding(c, 10, 'barracks', 1);
-    expect(buildOptions(c, 10, 1).map((o) => o.id).sort()).toEqual(['missileSite', 'ordnance', 'tankPlant']);
+    expect(buildOptions(c, 10, 1).find((option) => option.id === 'barracks')).toMatchObject({
+      targetTier: 2, affordable: false, reason: expect.stringMatching(/level 2/i),
+    });
   });
 
-  it('is empty for a rural province', () => {
-    expect(buildOptions(ctx(state(), false), 10, 1)).toEqual([]);
+  it('keeps military choices visible but unavailable in a rural province', () => {
+    const options = buildOptions(ctx(state(), false), 10, 1);
+    expect(options.filter((option) => ['barracks', 'tankPlant', 'ordnance'].includes(option.id))
+      .every((option) => option.reason?.includes('urban'))).toBe(true);
   });
 });

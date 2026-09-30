@@ -1,3 +1,4 @@
+import { landMuzzlePosition, nextLandShot } from '../rendering/land-animation';
 import { setDebugHandles } from '../client/debug-access';
 import { describeOrderFailure } from '../ui/order-feedback';
 import '../styles.css';
@@ -29,7 +30,7 @@ import { RemoteGameSession } from '../client/remote-session';
 import { configureWorldAssetBase, verifyWorldDescriptor } from '../rendering/world-assets';
 import { CombatEffectPool, EFFECT_KIND, effectDensityForDistance } from '../rendering/combat-effects';
 import type { SessionResponse } from '@ironfronts/protocol';
-import { buildArmyCompositionRows, buildArmyFormation } from '../rendering/army-map-presentation';
+import { buildArmyCompositionRows, buildArmyFormation, canPresentArtilleryFire } from '../rendering/army-map-presentation';
 import { ArmyMotionInterpolator, type ArmyPickEntry } from '../rendering/army-motion';
 import { buildBattleAnchors, combatHuddleOffset, groupEngagedByFront } from '../rendering/combat-huddle';
 import { MISSILE_RANGE } from '../game/strike';
@@ -73,7 +74,7 @@ const orderEtaSeconds = (o: WorkOrderView): number => Math.max(0,
     / (GAME_PACE.clock.simulationHoursPerRealSecond * (activeSession?.devSimSpeed ?? 1)));
 const technologyView = (session: RemoteGameSession) => {
   const levels = {
-    infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1,
+    infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1,
     ...(session.ownCountry.technologies ?? {}),
   };
   const stockpile = session.ownCountry.stockpile;
@@ -283,7 +284,7 @@ const announcedDiplomacyItems = new Set<string>();
 const diplomacyProposalStatuses = new Map<string, string>();
 const tradeProposalStatuses = new Map<string, string>();
 let diplomacyBootstrapped = false;
-/** Pooled world-space combat visuals; fed by drainSessionEvents, drawn from onStats. */
+/** Pooled world-space combat visuals; fed by drainSessionEvents, drawn every frame. */
 const combatEffects = new CombatEffectPool(320);
 let lastCombatCameraDistance = 3_000;
 // Launch lifecycle: a monotonically increasing token invalidates a superseded
@@ -305,29 +306,38 @@ let pendingSplitGroups: Array<{ typeId: string; count: number }> | null = null;
 let selectedProvinceId: number | null = null;
 let selectedProvinceName = '';
 let selectedProvinceTerrain = '';
-// Shift-click waypoint queue (client-side only — the server has no notion of
-// a multi-leg order). Each army's queued destinations wait until the army
+type QueuedArmyOrder =
+  | { kind: 'move'; x: number; z: number }
+  | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
+  | { kind: 'attackArmy'; targetArmyId: string };
+type QueuedAttackOrder = Exclude<QueuedArmyOrder, { kind: 'move' }>;
+// Shift-click order queue (client-side only — the server has no notion of
+// a multi-leg order). Each army's queued moves/attacks wait until the army
 // reports 'idle' (its current order finished) before the next one is issued.
 // `armyWaypointIssuing` guards against re-firing the same waypoint on every
 // subsequent 'change' event while the just-sent order is still in flight and
 // the army's locally-known status has not yet flipped away from 'idle'.
-const armyWaypointQueues = new Map<string, Array<{ x: number; z: number }>>();
+const armyWaypointQueues = new Map<string, QueuedArmyOrder[]>();
 const armyWaypointIssuing = new Set<string>();
+const lastArmyOrderMode = new Map<string, 'move' | 'attack'>();
 const authenticated = await getSession().catch((): SessionResponse => ({ authenticated: false }));
 if (!authenticated.authenticated || !authenticated.account) {
   window.location.replace('/login.html');
   await new Promise(() => { /* stop dossier bootstrap during navigation */ });
 }
-const lobby = await getGame();
+const lobbies = await Promise.all([getGame('world-at-war-2'), getGame('europe-at-war-1')]);
+let currentLobby = lobbies[0];
 
 mountMenu({
   audio,
-  lobby,
+  lobbies,
+  accountId: authenticated.account!.id,
   username: authenticated.account!.username,
   profile: authenticated.profile,
   onLogout: () => { void logout().finally(() => window.location.replace('/login.html')); },
-  onLaunch: (countryId: number) => new Promise<void>((resolve, reject) => {
+  onLaunch: (gameId: string, countryId: number) => new Promise<void>((resolve, reject) => {
     if (rendererStarted) { resolve(); return; }
+    currentLobby = lobbies.find((item) => item.gameId === gameId) ?? lobbies[0];
     rendererStarted = true;
     currentLaunchCountryId = countryId;
     launchOutcome = { resolve, reject };
@@ -460,10 +470,10 @@ async function runLaunch(countryId: number): Promise<void> {
   uiStore.patch({ phase: 'loading' });
 
   try {
-    if (lobby.assignedCountryId === null) {
+    if (currentLobby.assignedCountryId === null) {
       setLoadingStage('Registering for the operation', 0.02);
-      await withTimeout(joinGame(countryId), 15_000, 'Joining the campaign');
-      lobby.assignedCountryId = countryId;
+      await withTimeout(joinGame(currentLobby.gameId, countryId), 15_000, 'Joining the campaign');
+      currentLobby.assignedCountryId = countryId;
     }
 
     // Renderer module graph, WebGPU device and world assets are all deferred
@@ -514,7 +524,7 @@ function startLoadingQuotes(): () => void {
 
 async function startGame(token: number): Promise<void> {
   const connection = await withTimeout(
-    GameConnection.open((stage) => setLoadingStage(stage, 0.08)),
+    GameConnection.open((stage) => setLoadingStage(stage, 0.08), currentLobby.gameId),
     20_000,
     'Connecting to command server',
   );
@@ -788,6 +798,7 @@ async function startGame(token: number): Promise<void> {
     focusWorld: (x, z) => renderer.focus(x, z, 900),
     zoomMap: (factor) => renderer.zoomMap(factor),
     armyCommand: (command) => handleArmyCommand(command),
+    renameArmy: (armyId, name) => { if (activeSession?.ownsArmy(armyId)) activeSession.renameArmy(armyId, name); },
     produceUnit: (provinceId, unitTypeId) => handleProduce(provinceId, unitTypeId),
     buildStructure: (provinceId, buildingId) => handleBuild(provinceId, buildingId),
     unitInfo: (typeId) => session.unit(typeId),
@@ -807,24 +818,20 @@ async function startGame(token: number): Promise<void> {
   // The resource overlay is a GPU instanced layer inside the renderer now, so
   // this slow-cadence callback only drives audio + the debug readout. No
   // per-frame projection, no DOM marker writes.
+  // Short muzzle flashes need frame-rate updates; diagnostics run only every 20 frames.
+  renderer.onFrame = () => {
+    lastCombatCameraDistance=renderer.camera.distance;
+    const packed=combatEffects.collect(Date.now(),
+      {x:renderer.camera.target[0],z:renderer.camera.target[2]},renderer.combatEffectMaxDistance,
+      undefined,(x,z)=>renderer.isWorldPointVisible(x,z,160));
+    renderer.setCombatEffects(packed.floats, packed.count);
+  };
   renderer.onStats = (stats) => {
     const shouldHearOcean = stats.targetProvince === null && stats.distance < 2_800;
     if (shouldHearOcean !== oceanAudible) {
       oceanAudible = shouldHearOcean;
       void audio.setOceanEnabled(oceanAudible);
     }
-    // Repack the pooled combat effects for this frame (cheap: <=320*8 floats,
-    // reused buffer). Transients past the LOD range are dropped CPU-side; the
-    // renderer stops drawing everything past its own max distance.
-    lastCombatCameraDistance = stats.distance;
-    const packed = combatEffects.collect(
-      Date.now(),
-      { x: stats.camera[0], z: stats.camera[1] },
-      renderer.combatEffectMaxDistance,
-      undefined,
-      (x, z) => renderer.isWorldPointVisible(x, z, 160),
-    );
-    renderer.setCombatEffects(packed.floats, packed.count);
     if (!diagnostics.hidden) updateDiagnostics(stats);
   };
   renderer.onDiplomacyChange = (state) => {
@@ -1291,6 +1298,7 @@ async function bootstrapGameSession(
     armyMotionInterpolator.clear();
     armyWaypointQueues.clear();
     armyWaypointIssuing.clear();
+    lastArmyOrderMode.clear();
     clearAllNotificationTimers();
     session.dispose();
     window.removeEventListener('keydown', onKey);
@@ -1437,11 +1445,8 @@ function syncArmyMarkers(
   let modelCount = 0;
   let routeCursor = 0;
   let routeCount = 0;
-  // Must be the same epoch-ms clock as motion.sampledAtEpochMs (a server
-  // Date.now() timestamp) — performance.now() here compared cleanly-out-of-
-  // range against it, silently clamping every interpolation fraction to 0 and
-  // turning "smooth interpolation" into "snap to each new sample" instead.
-  const motionNow = Date.now();
+  const motionNow = session.serverNow();
+  const worldWidth = renderer.manifest?.world.width ?? 0;
   const activeArmyIds = new Set<string>();
   const activeModelKeys = new Set<string>();
   armyPickScratch.length = 0;
@@ -1524,9 +1529,10 @@ function syncArmyMarkers(
       .map((a) => ({
         id: a.id, x: a.x, z: a.z, ownerCountryId: a.ownerCountryId,
         frontIds: (a.battleFronts ?? []).map((f) => f.id),
-      })),
+      })), worldWidth,
   ));
 
+  landCombatVisuals.clear();
   for (const army of Object.values(session.state.armies)) {
     if (count >= 1_024) break;
     const identified = army.contact === 'visible';
@@ -1534,16 +1540,20 @@ function syncArmyMarkers(
       : relationTintedColor(army.ownerColor, diplomacyRelation(session, army.ownerCountryId));
     activeArmyIds.add(army.id);
     if (clusterSuppressed.has(army.id)) continue; // folded into a cluster marker
+    const moveRoute = army.moveRoute?.length
+      ? army.moveRoute
+      : renderer.expandRoadRoute(army.moveRoadRoute, army.x, army.z);
     const armyMotionRaw = armyMotionInterpolator.sample(
       army.id,
       army.x,
       army.z,
-      army.motion,
+      army.motion ? { ...army.motion, verifiedRoute:moveRoute } : undefined,
       motionNow,
       renderer.manifest?.world.width ?? 0,
+      session.state.timeline,
     );
     const battleAnchor = army.status === 'engaged' ? battleAnchors.get(army.id) : undefined;
-    const huddle = battleAnchor ? combatHuddleOffset({ x: army.x, z: army.z }, battleAnchor) : null;
+    const huddle = battleAnchor ? combatHuddleOffset({ x: army.x, z: army.z }, battleAnchor, undefined, undefined, worldWidth) : null;
     // Nudge the displayed x/z (and the in-flight motion target, so a stack
     // still easing toward a waypoint when combat starts doesn't un-huddle
     // mid-ease) toward the shared battle anchor. remainingMs is untouched.
@@ -1560,7 +1570,7 @@ function syncArmyMarkers(
     // Authoritative route polyline for the SELECTED own army only (move = cream,
     // attack = red, retreating = amber). Other armies' routes stay hidden so the
     // map isn't a web of lines; a deselect clears this on the next sync.
-    if (army.own && army.id === selectedArmyId && army.moveRoute && army.moveRoute.length >= 2) {
+    if (army.own && army.id === selectedArmyId && moveRoute && moveRoute.length >= 2) {
       const colorFlag = army.moveIntent === 'attack' ? 1 : 0;
       const retreatFlag = army.status === 'retreating' ? 1 : 0;
       // `fraction` is 0 at the army and 1 at the destination; the route shader
@@ -1580,7 +1590,12 @@ function syncArmyMarkers(
         routeCursor += 8;
         routeCount += 1;
       };
-      const route = army.moveRoute;
+      // Keep the route attached to the same interpolated position as the
+      // clickable counter, including immediately after an order update.
+      const route = [
+        { x: armyMotion.x, z: armyMotion.z },
+        ...moveRoute.slice(1),
+      ];
       const legs = Math.max(1, route.length - 1);
       const worldW = renderer.manifest?.world.width ?? 0;
       const wrapDelta = (d: number): number => {
@@ -1704,26 +1719,48 @@ function syncArmyMarkers(
       armyMarkerScratch[cursor + 5] = 0;
       armyMarkerScratch[cursor + 6] = 0;
       armyMarkerScratch[cursor + 7] = 0;
+      armyMarkerScratch[cursor + 24] = armyMotion.targetX;
+      armyMarkerScratch[cursor + 25] = armyMotion.targetZ;
+      armyMarkerScratch[cursor + 26] = armyMotion.remainingMs / 1_000;
       cursor += 28;
       count += 1;
     }
     if (identified && formation.length) {
+      const firstModelCursor=modelCursor;
       const target = army.moveOrder;
-      const marching = Boolean(target);
+      const marching = Boolean(target) && army.status !== 'engaged';
       // Head along the actual first leg of the authoritative road route (own
       // armies only) so the column sits on the road even where it bends;
       // fall back to a straight line at the destination.
-      const route = army.moveRoute;
+      const route = moveRoute;
       const worldW = renderer.manifest?.world.width ?? 0;
       const previousHeading = previousArmyHeading.get(army.id);
       // A stopped army keeps its last facing; a marching one aims a little way
       // along the road and eases toward it, so corners are a turn, not a snap.
-      const desiredHeading = routeLookaheadHeading(route, target, armyMotion.x, armyMotion.z, worldW)
-        ?? previousHeading ?? 0;
+      const observed=landBombardmentTargets.get(army.id);
+      const rangedTargetId=army.own ? army.artillery?.targetArmyId
+        : observed && Date.now()-observed.at<10000 ? observed.target : undefined;
+      const rangedCandidate=rangedTargetId ? session.state.armies[rangedTargetId] : undefined;
+      const rangedTarget=rangedCandidate && canPresentArtilleryFire(army, rangedCandidate, worldWidth)
+        && (!army.own || diplomacyRelation(session,rangedCandidate.ownerCountryId)==='war') ? rangedCandidate : undefined;
+      const opponent = army.status === 'engaged' ? Object.values(session.state.armies).find((other) =>
+        other.ownerCountryId !== army.ownerCountryId && other.contact === 'visible'
+        && other.battleFronts?.some((front) => army.battleFronts?.some((own) => own.id === front.id)))
+        : rangedTarget?.contact==='visible' ? rangedTarget : undefined;
+      const opponentAnchor = opponent ? battleAnchors.get(opponent.id) : undefined;
+      const opponentHuddle = opponent && opponentAnchor ? combatHuddleOffset(opponent, opponentAnchor, undefined, undefined, worldWidth) : { x: 0, z: 0 };
+      let opponentDx = opponent ? opponent.x + opponentHuddle.x - armyMotion.x : 0;
+      if (worldW) opponentDx -= Math.round(opponentDx / worldW) * worldW;
+      const desiredHeading = opponent
+        ? Math.atan2(opponentDx, -(opponent.z + opponentHuddle.z - armyMotion.z))
+        : routeLookaheadHeading(route, target, armyMotion.x, armyMotion.z, worldW) ?? previousHeading ?? 0;
       const heading = previousHeading === undefined
         ? desiredHeading
         : dampAngle(previousHeading, desiredHeading, marching ? 0.4 : 0.25);
       previousArmyHeading.set(army.id, heading);
+      if(opponent && !marching){
+        if(!stationaryHullHeadings.has(army.id))stationaryHullHeadings.set(army.id,previousHeading??heading);
+      } else stationaryHullHeadings.delete(army.id);
       const forwardX = Math.sin(heading);
       const forwardZ = -Math.cos(heading);
       const rightX = Math.cos(heading);
@@ -1736,10 +1773,10 @@ function syncArmyMarkers(
       // sprawled across it. Marching = a near-single-file column along the
       // heading with barely any lateral spread; resting = a small loose clump.
       const restSlots: ReadonlyArray<readonly [number, number]> = [
-        [-3, -2.6], [3, -1.8], [-2.4, 3], [2.4, 2.8],
+        [-5, 4.5], [5, 4.5], [-5, -5], [5, -5],
       ];
       const marchSlots: ReadonlyArray<readonly [number, number]> = [
-        [0, 5.5], [-1.4, 1], [1.4, -2.5], [-0.5, -6],
+        [0, 13.5], [-.3, 4.5], [.3, -4.5], [0, -13.5],
       ];
       const slots = marching ? marchSlots : restSlots;
       const jitterR = marching ? 0.9 : 1.9;
@@ -1769,20 +1806,28 @@ function syncArmyMarkers(
         armyModelScratch[modelCursor + 3] = group.kind;
         armyModelScratch[modelCursor + 4] = group.count;
         armyModelScratch[modelCursor + 5] = group.health;
-        // Model flags: bit 0 selected, bit 1 moving, bit 2 auto/manual retreat.
-        // The skinned infantry shader uses these to choose a stationary pose,
-        // Walking, Injured_Walk, or Injured_Walk_Backward.
+        // Flags: selected, moving, retreating, firing; renderer adds transition state.
         armyModelScratch[modelCursor + 6] = (army.id === selectedArmyId ? 1 : 0)
           | (marching ? 2 : 0)
-          | (army.status === 'retreating' ? 4 : 0);
+          | (army.status === 'retreating' ? 4 : 0)
+          | (army.status === 'engaged' || (group.kind===3 && opponent && !marching) ? 8 : 0);
         armyModelScratch[modelCursor + 7] = heading;
-        armyModelScratch[modelCursor + 8] = previousX;
-        armyModelScratch[modelCursor + 9] = previous.z;
+        const phase = hashUnit(modelKey);
+        const travelled = (landTravel.get(modelKey) ?? 0) + (marching ? Math.min(30, Math.hypot(x-previousX,z-previous.z)) : 0);
+        landTravel.set(modelKey, travelled);
+        armyModelScratch[modelCursor + 8] = travelled;
+        armyModelScratch[modelCursor + 9] = phase;
+        if (group.kind < 4) {
+          landCombatVisuals.set(modelKey, { recordOffset: modelCursor, armyId: army.id, kind: group.kind, x, z, heading, phase,
+            hullHeading:group.kind===0?heading:stationaryHullHeadings.get(army.id)??heading,
+            firing:!marching && (army.status==='engaged'||(group.kind===3 && !!opponent)),targetArmyId:opponent?.id });
+        }
         armyModelScratch[modelCursor + 10] = 0;
         // Facing before this update — the shader eases from it to slot +7 over
         // the same window it uses to slide the model, so the turn is smooth
         // between the 2.5 Hz marker syncs.
-        armyModelScratch[modelCursor + 11] = previousHeading ?? heading;
+        armyModelScratch[modelCursor + 11] = group.kind>0 && group.kind<4 && opponent
+          ? stationaryHullHeadings.get(army.id)??heading : previousHeading??heading;
         armyModelScratch[modelCursor + 12] = targetX;
         armyModelScratch[modelCursor + 13] = targetZ;
         armyModelScratch[modelCursor + 14] = armyMotion.remainingMs / 1_000;
@@ -1791,14 +1836,40 @@ function syncArmyMarkers(
         modelCursor += 16;
         modelCount += 1;
       }
+      lastArmyLandModels.set(army.id,{records:armyModelScratch.slice(firstModelCursor,modelCursor),at:Date.now()});
     }
   }
+  // Aim at the same visible model used by the shot effects, including across the map seam.
+  const aimTargets = new Map<string, Array<(typeof landCombatVisuals extends Map<string, infer V> ? V : never)>>();
+  for (const visual of landCombatVisuals.values()) {
+    const group = aimTargets.get(visual.armyId) ?? [];
+    group.push(visual);
+    aimTargets.set(visual.armyId, group);
+  }
+  const aimWorldWidth = renderer.manifest?.world.width ?? 0;
+  for (const [key, visual] of landCombatVisuals) {
+    const candidates = visual.targetArmyId ? aimTargets.get(visual.targetArmyId) : undefined;
+    const target = candidates?.find(candidate => candidate.kind === visual.kind) ?? candidates?.[0];
+    if (visual.firing && target) {
+      let dx = target.x - visual.x;
+      if (aimWorldWidth) dx -= Math.round(dx / aimWorldWidth) * aimWorldWidth;
+      visual.heading = Math.atan2(dx, -(target.z - visual.z));
+      armyModelScratch[visual.recordOffset + 7] = visual.heading;
+      if (visual.kind === 0) {
+        armyModelScratch[visual.recordOffset + 11] = previousLandAim.get(key) ?? visual.heading;
+        visual.hullHeading = visual.heading;
+      }
+    }
+    previousLandAim.set(key, visual.heading);
+  }
+  for (const key of previousLandAim.keys()) if (!activeModelKeys.has(key)) previousLandAim.delete(key);
+  for(const [id,last] of lastArmyLandModels)if(Date.now()-last.at>10000)lastArmyLandModels.delete(id);
   for (const key of previousArmyModelPositions.keys()) {
-    if (!activeModelKeys.has(key)) previousArmyModelPositions.delete(key);
+    if (!activeModelKeys.has(key)) { previousArmyModelPositions.delete(key); landTravel.delete(key); }
   }
   armyMotionInterpolator.retain(activeArmyIds);
   for (const id of previousArmyHeading.keys()) {
-    if (!activeArmyIds.has(id)) previousArmyHeading.delete(id);
+    if (!activeArmyIds.has(id)) {previousArmyHeading.delete(id);stationaryHullHeadings.delete(id);}
   }
   for (const id of armyPresentationCache.keys()) {
     if (!activeArmyIds.has(id)) armyPresentationCache.delete(id);
@@ -2002,11 +2073,33 @@ function armStrike(session: RemoteGameSession): void {
 /** A one-shot red reticle that snaps onto the click point and fades. Pure DOM,
  *  no renderer pipeline — the immediate "acknowledged" cue for an attack order. */
 let attackFlashEl: HTMLDivElement | null = null;
-/** Shift-click adds a waypoint instead of issuing the move immediately. */
-function queueWaypoint(armyId: string, x: number, z: number): void {
+/** Shift-click appends a typed move/attack after the active order. */
+function queueWaypoint(armyId: string, order: QueuedArmyOrder): void {
   const queue = armyWaypointQueues.get(armyId) ?? [];
-  queue.push({ x, z });
+  queue.push(order);
   armyWaypointQueues.set(armyId, queue);
+}
+
+function issueQueuedArmyOrder(
+  session: RemoteGameSession, armyId: string, order: QueuedArmyOrder,
+): { ok: boolean; reason?: string } {
+  const rejected = (reason: string): void => {
+    armyWaypointIssuing.delete(armyId);
+    pushNotification('warning', 'Queued order failed', reason);
+    advanceWaypointQueues(session);
+  };
+  if (order.kind === 'move') {
+    return session.orderMove(armyId, order.x, order.z, 'move', undefined, rejected);
+  }
+  const accepted = (): void => {
+    void audio.playUiCue('confirm');
+    pushNotification('information', 'Queued attack underway', 'Your force is advancing to the next target.');
+  };
+  return order.kind === 'attackArmy'
+    ? session.orderAttackArmy(armyId, order.targetArmyId, accepted, rejected)
+    : session.orderAttackProvince(
+      armyId, order.provinceId, order.x, order.z, accepted, rejected,
+    );
 }
 
 /** Fire the next queued waypoint once an army's current order has finished. */
@@ -2020,9 +2113,39 @@ function advanceWaypointQueues(session: RemoteGameSession): void {
     const next = queue.shift()!;
     if (!queue.length) armyWaypointQueues.delete(armyId);
     armyWaypointIssuing.add(armyId);
-    const result = session.orderMove(armyId, next.x, next.z, 'move');
+    const result = issueQueuedArmyOrder(session, armyId, next);
     if (!result.ok) armyWaypointIssuing.delete(armyId);
   }
+}
+
+function attackOrderAt(
+  renderer: WorldRenderer, session: RemoteGameSession, selectedId: string,
+  clientX: number, clientY: number,
+): QueuedAttackOrder | { kind: 'invalid'; reason: string } {
+  const ground = renderer.groundPointAt(clientX, clientY);
+  const provinceId = ground ? renderer.provinceIdAtWorld(ground[0], ground[1]) : -1;
+  const centerProvinceId = renderer.pickProvinceCenterAt(clientX, clientY);
+  // Province centres win over co-located army markers. Use the exact centre,
+  // not the marker's offset click point, so the authoritative target agrees.
+  if (centerProvinceId !== null && !session.ownsProvince(centerProvinceId)) {
+    const center = renderer.provinceCenter(centerProvinceId);
+    if (center) return {
+      kind: 'attackProvince', provinceId: centerProvinceId, x: center[0], z: center[1],
+    };
+  }
+  const targetArmyId = renderer.pickArmyAt(clientX, clientY);
+  const pickedTarget = targetArmyId && targetArmyId !== selectedId
+    ? session.army(targetArmyId) : null;
+  if (targetArmyId && targetArmyId !== selectedId && pickedTarget && !pickedTarget.own) {
+    return { kind: 'attackArmy', targetArmyId };
+  }
+  if (!ground || provinceId < 0) {
+    return { kind: 'invalid', reason: 'Aim at an enemy army or a province centre to attack.' };
+  }
+  if (session.ownsProvince(provinceId)) {
+    return { kind: 'invalid', reason: "That is your own territory — you can't attack it." };
+  }
+  return { kind: 'attackProvince', provinceId, x: ground[0], z: ground[1] };
 }
 
 function flashAttackTarget(clientX: number, clientY: number): void {
@@ -2080,18 +2203,31 @@ function handleMapClick(
   //    order instead, and keeps the Move command armed for more waypoints —
   //    like 0ad's shift-click move queue. A plain click always still cancels
   //    aiming and issues (or replaces) the immediate order.
-  if (targetingMode === 'move' && shiftKey && selectedArmyId && session.ownsArmy(selectedArmyId)) {
-    const ground = renderer.groundPointAt(clientX, clientY);
-    if (ground) {
-      queueWaypoint(selectedArmyId, ground[0], ground[1]);
+  const queuedMode = shiftKey && selectedArmyId && session.ownsArmy(selectedArmyId)
+    ? (targetingMode === 'move' || targetingMode === 'attack'
+      ? targetingMode : lastArmyOrderMode.get(selectedArmyId))
+    : undefined;
+  if (queuedMode && selectedArmyId) {
+    const queued = queuedMode === 'move'
+      ? (() => {
+        const ground = renderer.groundPointAt(clientX, clientY);
+        return ground ? { kind: 'move' as const, x: ground[0], z: ground[1] }
+          : { kind: 'invalid' as const, reason: 'Choose a destination on land.' };
+      })()
+      : attackOrderAt(renderer, session, selectedArmyId, clientX, clientY);
+    if (queued.kind === 'invalid') {
+      pushNotification('warning', 'Invalid queued order', queued.reason);
+    } else {
+      queueWaypoint(selectedArmyId, queued);
+      lastArmyOrderMode.set(selectedArmyId, queuedMode);
       advanceWaypointQueues(session);
-      void audio.playUiCue('move');
-      pushNotification('information', 'Waypoint queued',
-        'Shift-click to add more, or click without Shift to stop aiming.');
+      void audio.playUiCue(queuedMode === 'move' ? 'move' : 'confirm');
+      pushNotification('information', `${queuedMode === 'move' ? 'Move' : 'Attack'} queued`,
+        'Shift-click to add more orders; they will execute in sequence.');
       syncArmyMarkers(session, renderer);
       refreshSelectedArmy(session);
-      return true;
     }
+    return true;
   }
   if ((targetingMode === 'move' || targetingMode === 'split')
     && selectedArmyId && session.ownsArmy(selectedArmyId)) {
@@ -2107,6 +2243,7 @@ function handleMapClick(
         void audio.playUiCue('move');
         // A fresh, unqueued order supersedes anything still waiting.
         armyWaypointQueues.delete(selectedArmyId);
+        if (targetingMode === 'move') lastArmyOrderMode.set(selectedArmyId, 'move');
       }
       awaitingMoveTarget = false;
       targetingMode = null;
@@ -2117,8 +2254,10 @@ function handleMapClick(
     }
   }
   if (targetingMode === 'attack' && selectedArmyId && session.ownsArmy(selectedArmyId)) {
-    const targetArmyId = renderer.pickArmyAt(clientX, clientY);
-    const pickedTarget = targetArmyId && targetArmyId !== selectedArmyId ? session.army(targetArmyId) : null;
+    const attack = attackOrderAt(renderer, session, selectedArmyId, clientX, clientY);
+    const targetArmyId = attack.kind === 'attackArmy' ? attack.targetArmyId : null;
+    const ground = attack.kind === 'attackProvince' ? [attack.x, attack.z] as const : [0, 0] as const;
+    const provinceId = attack.kind === 'attackProvince' ? attack.provinceId : -1;
     // Fired once the server accepts the order — which is *after* any "Declare
     // war?" confirmation but still before combat opens. Do not run it
     // before acceptance: a cancelled war declaration must not leave the player
@@ -2130,24 +2269,19 @@ function handleMapClick(
       pushNotification('information', 'Attack order issued',
         'Your force is advancing to engage.');
     };
-    const result = targetArmyId && targetArmyId !== selectedArmyId && pickedTarget && !pickedTarget.own
-      ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
-      : (() => {
-        const ground = renderer.groundPointAt(clientX, clientY);
-        const provinceId = renderer.provinceIdAt(clientX, clientY);
-        if (!ground || provinceId < 0) {
-          return { ok: false as const, reason: 'Aim at an enemy army or a province centre to attack.' };
-        }
-        if (session.ownsProvince(provinceId)) {
-          return { ok: false as const, reason: "That is your own territory — you can't attack it." };
-        }
-        return session.orderAttackProvince(
-          selectedArmyId!, provinceId, ground[0], ground[1], acknowledgeAttack,
+    const result = attack.kind === 'invalid'
+      ? { ok: false as const, reason: attack.reason }
+      : targetArmyId
+        ? session.orderAttackArmy(selectedArmyId, targetArmyId, acknowledgeAttack)
+        : session.orderAttackProvince(
+          selectedArmyId, provinceId, ground[0], ground[1], acknowledgeAttack,
         );
-      })();
     if (!result.ok) {
       const { title, body } = describeOrderFailure(result.reason ?? 'Invalid target.');
       pushNotification('warning', title, body);
+    } else {
+      armyWaypointQueues.delete(selectedArmyId);
+      lastArmyOrderMode.set(selectedArmyId, 'attack');
     }
     targetingMode = null;
     syncArmyMarkers(session, renderer);
@@ -2305,6 +2439,9 @@ function handleArmyCommand(command: ArmyPanelCommand): void {
     return;
   }
   if (command === 'stop') {
+    armyWaypointQueues.delete(selectedArmyId);
+    armyWaypointIssuing.delete(selectedArmyId);
+    lastArmyOrderMode.delete(selectedArmyId);
     session.orderStop(selectedArmyId);
     awaitingMoveTarget = false;
     targetingMode = null;
@@ -2339,21 +2476,37 @@ function refreshSelectedArmy(
   const combat = view.status === 'moving' ? 'moving'
     : inCloseCombat ? 'engaged'
     : view.status === 'retreating' ? 'retreating' : 'idle';
-  const groups = comp?.groups.map((g) => ({
-    typeId: g.typeId, label: gameUnitLabel(g.typeId), count: g.count, health: g.health,
+  const displayedGroups = comp?.transport?.cargo ?? comp?.groups;
+  const groups = displayedGroups?.map((g) => ({
+    typeId: g.typeId,
+    label: comp?.transport ? `${gameUnitLabel(g.typeId)} cargo` : gameUnitLabel(g.typeId),
+    count: 'shipCount' in g ? g.shipCount : g.count,
+    health: g.health,
   }));
+  const scaledManifestationProfile = (profile: { soft: number; light: number; heavy: number } | undefined) =>
+    profile ? {
+      soft: profile.soft * (comp?.unitCount ?? 0),
+      light: profile.light * (comp?.unitCount ?? 0),
+      heavy: profile.heavy * (comp?.unitCount ?? 0),
+    } : undefined;
+  const baseActivity = armyActivityLabel(view.status, awaitingMoveTarget, view.own);
   const activity = !session.fresh ? 'Reconnecting ? state may be stale'
-    : session.pendingForArmy(view.id) ? 'Order pending confirmation' : armyActivityLabel(view.status, awaitingMoveTarget, view.own);
+    : session.pendingForArmy(view.id) ? 'Order pending confirmation'
+      : comp?.transport ? `${baseActivity} · Transport Level ${comp.transport.level}` : baseActivity;
   const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
-    ? 0 : Math.max(0, Date.now() - view.motion.sampledAtEpochMs);
+    ? 0 : Math.max(0, session.serverNow() - view.motion.sampledAtEpochMs);
   const motionDurationMs = view.motion?.durationMs ?? 0;
   const battle = inCloseCombat ? summarizeBattleFronts(view.battleFronts) : null;
   const navalElapsedMs = view.navalPhase
-    ? Math.max(0, Date.now() - view.navalPhase.sampledAtEpochMs) : 0;
+    ? Math.max(0, session.serverNow() - view.navalPhase.sampledAtEpochMs) : 0;
   const navalRemainingMs = view.navalPhase
     ? Math.max(0, view.navalPhase.remainingMs - navalElapsedMs) : 0;
   const movementRemainingMs = view.motion
     ? Math.max(0, motionDurationMs - motionElapsedMs) : 0;
+  const arrivalElapsedMs = view.arrival
+    ? Math.max(0, session.serverNow() - view.arrival.sampledAtEpochMs) : 0;
+  const arrivalRemainingMs = view.arrival
+    ? Math.max(0, view.arrival.remainingMs - arrivalElapsedMs) : undefined;
   const movementProgress = view.motion && motionDurationMs > 0
     ? Math.min(1, (view.motion.progress ?? 0)
       + motionElapsedMs / (motionDurationMs / Math.max(0.0001, 1 - (view.motion.progress ?? 0))))
@@ -2370,8 +2523,10 @@ function refreshSelectedArmy(
     : view.status === 'disembarking' ? 'disembarking'
     : view.status === 'moving' ? 'moving'
     : view.status === 'extracting' ? 'extracting' : 'holding';
-  const activityRemainingSeconds = view.navalPhase ? navalRemainingMs / 1_000
-    : battle?.estimatedRealSeconds ?? (view.motion ? movementRemainingMs / 1_000 : undefined);
+  const activityRemainingSeconds = battle?.estimatedRealSeconds
+    ?? (arrivalRemainingMs !== undefined ? arrivalRemainingMs / 1_000
+      : view.navalPhase ? navalRemainingMs / 1_000
+        : view.motion ? movementRemainingMs / 1_000 : undefined);
   const activityProgress = view.navalPhase
     ? Math.min(1, Math.max(0, 1 - navalRemainingMs / Math.max(1, view.navalPhase.durationMs)))
     : battle ? combatProgress : movementProgress;
@@ -2380,14 +2535,15 @@ function refreshSelectedArmy(
       ? battle.estimatedRealSeconds / Math.max(0.0001, 1 - (combatProgress ?? 0))
       : view.motion && movementRemainingMs > 0
         ? movementRemainingMs / 1_000 / Math.max(0.0001, 1 - (movementProgress ?? 0)) : undefined;
+  const anchoredAtSea = view.status === 'atSea' && !view.moveOrder;
   const moveDisabledReason = !session.fresh
     ? 'Waiting for an authoritative update from the game server.'
     : inCloseCombat
       ? 'This formation is currently locked in close combat.'
       : view.status === 'retreating'
         ? 'This formation is withdrawing and cannot receive a new move order.'
-        : NAVAL_TRANSIT_STATUSES.has(view.status)
-          ? 'This formation is in transit and cannot receive a land move order.'
+        : NAVAL_TRANSIT_STATUSES.has(view.status) && !anchoredAtSea
+          ? 'This formation is in transit and cannot receive a new move order yet.'
           : 'Movement is unavailable in the current state.';
   uiStore.patch({
     selectedArmy: {
@@ -2399,8 +2555,8 @@ function refreshSelectedArmy(
       unitCount: comp?.unitCount ?? 0,
       strength: comp ? Math.min(1, comp.unitCount / 12) : 0,
       health: comp?.health ?? 0,
-      organization: comp?.organization,
-      entrenchment: comp?.entrenchment,
+      hp: comp?.hp,
+      maxHp: comp?.maxHp,
       stance: comp?.stance,
       inSupply: comp?.inSupply,
       selected: true,
@@ -2408,15 +2564,19 @@ function refreshSelectedArmy(
       moveOrder: view.moveOrder,
       groups,
       speed: comp?.speed,
-      attack: aggregateTroopStat(groups, 'attack', gameUnit),
-      defense: aggregateTroopStat(groups, 'defense', gameUnit),
+      domain: comp?.domain,
+      transportLevel: comp?.transport?.level,
+      attack: scaledManifestationProfile(comp?.combatProfile?.attack)
+        ?? aggregateTroopStat(groups, 'attack', gameUnit),
+      defense: scaledManifestationProfile(comp?.combatProfile?.defense)
+        ?? aggregateTroopStat(groups, 'defense', gameUnit),
       activity,
       activityKind,
       activityRemainingSeconds,
       activityDurationSeconds,
       activityProgress,
       activitySampledAtEpochMs: Date.now(),
-      arrivalSeconds: view.motion ? Math.max(0, (motionDurationMs - motionElapsedMs) / 1_000) : undefined,
+      arrivalSeconds: arrivalRemainingMs !== undefined ? arrivalRemainingMs / 1_000 : undefined,
       movementProgress,
       own: view.own,
       canExtract: session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
@@ -2426,7 +2586,7 @@ function refreshSelectedArmy(
       // card never reflects it.
       targetingMode: view.own && targetingMode !== 'strike' ? targetingMode : null,
       canMove: session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
-        && !NAVAL_TRANSIT_STATUSES.has(view.status),
+        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || anchoredAtSea),
       moveDisabledReason,
       canAttack: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),
@@ -2436,7 +2596,6 @@ function refreshSelectedArmy(
       canStop: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status)
         && (Boolean(view.moveOrder) || view.status === 'extracting' || targetingMode !== null),
-      shortage: view.shortage,
       supply: view.supply,
       legalRetreatExits: view.legalRetreatExits,
       battleFronts: view.battleFronts,
@@ -2550,20 +2709,22 @@ function syncCombatMarkers(session: RemoteGameSession): void {
   combatEffects.syncBattles([...seen.values()]);
 }
 
-/** Per-front cooldowns for the continuous fight FX below. */
-const lastBattleGunfireAt = new Map<string, number>();
-const lastBattleArmorAt = new Map<string, number>();
-const lastBattleArtilleryAt = new Map<string, number>();
-const lastBattleSmokeAt = new Map<string, number>();
-/** Per-province cooldown for the "city under siege" fire/smoke overlay. */
-const lastCityFireAt = new Map<number, number>();
-
 /**
  * Keep a live front visually active without mirroring every simulated round.
  * Infantry gets frequent sampled tracers; armor/artillery only emit their
  * heavier layered cues when that unit type actually exists in the visible
  * front. All effects stay inside CombatEffectPool's hard instance cap.
  */
+const stationaryHullHeadings=new Map<string,number>();
+const landBombardmentTargets=new Map<string,{target:string;at:number}>();
+const lastArmyLandModels = new Map<string,{records:Float32Array;at:number}>();
+const landCombatVisuals = new Map<string, {
+  recordOffset: number; armyId: string; kind: number; x: number; z: number; heading: number; phase: number; hullHeading:number; firing:boolean; targetArmyId?:string;
+}>();
+const scheduledLandShots = new Map<string, number>();
+const landTravel = new Map<string, number>();
+const previousLandAim = new Map<string, number>();
+
 function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRenderer): void {
   // The renderer already suspends GPU frames for hidden tabs; also stop creating
   // cosmetic battle records so background play costs essentially nothing here.
@@ -2571,15 +2732,15 @@ function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRendere
   const density = effectDensityForDistance(lastCombatCameraDistance);
   if (density <= 0) return;
   const now = Date.now();
+  const worldWidth = renderer.manifest?.world.width ?? 0;
   const clusters = groupEngagedByFront(
     Object.values(session.state.armies)
       .filter((a) => a.status === 'engaged')
       .map((a) => ({
         id: a.id, x: a.x, z: a.z, ownerCountryId: a.ownerCountryId,
         frontIds: (a.battleFronts ?? []).map((f) => f.id),
-      })),
+      })), worldWidth,
   );
-  const worldWidth = renderer.manifest?.world.width ?? 0;
   const closeBattle = lastCombatCameraDistance <= 1_400
     && worldWidth > 0
     && [...clusters.values()].some((cluster) => wrappedDistance(
@@ -2587,83 +2748,35 @@ function spawnOngoingBattleFx(session: RemoteGameSession, renderer: WorldRendere
     ) <= 700);
   if (closeBattle) void audio.playEffectCue('close-battle');
 
-  const activeFronts = new Set<string>();
-  const activeProvinces = new Set<number>();
-  for (const [frontId, cluster] of clusters) {
-    activeFronts.add(frontId);
-    // Distance alone is not enough: a close battle can still be behind or
-    // beside the camera. Do no cosmetic spawning unless it can enter the view.
-    if (!renderer.isWorldPointVisible(cluster.x, cluster.z, 220)) continue;
-    const jitter = (spread: number): number => (Math.random() - 0.5) * spread;
-    const members = cluster.memberIds.flatMap((id) => {
-      const army = session.state.armies[id];
-      return army ? [army] : [];
-    });
-    const armorShooter = members.find((army) => army.composition?.groups.some((group) =>
-      group.count > 0 && (group.typeId.replace(/-l[2-8]$/, '') === 'light-tank' || group.typeId.replace(/-l[2-8]$/, '') === 'medium-tank')));
-    const artilleryShooter = members.find((army) => army.composition?.groups.some((group) =>
-      group.count > 0 && group.typeId.replace(/-l[2-8]$/, '') === 'artillery'));
-    const targetFor = (shooter: (typeof members)[number]): { x: number; z: number } => {
-      const enemy = members.find((army) => army.ownerCountryId !== shooter.ownerCountryId);
-      if (enemy) return { x: enemy.x, z: enemy.z };
-      // Fog may hide the opposing stack while this side still reports the real
-      // front. Fire into a short point around the authoritative front centroid
-      // rather than suppressing the cue completely.
-      const fallbackDir = Math.random() * Math.PI * 2;
-      return {
-        x: cluster.x + Math.cos(fallbackDir) * 34,
-        z: cluster.z + Math.sin(fallbackDir) * 34,
-      };
-    };
-
-    if (now - (lastBattleGunfireAt.get(frontId) ?? 0) >= 420 && Math.random() <= density) {
-      lastBattleGunfireAt.set(frontId, now);
-      combatEffects.spawnVolley('infantry', cluster.x, cluster.z, Math.random() * Math.PI * 2, { now });
-    }
-    if (armorShooter
-      && now - (lastBattleArmorAt.get(frontId) ?? 0) >= 10_000
-      && Math.random() <= density) {
-      lastBattleArmorAt.set(frontId, now);
-      const target = targetFor(armorShooter);
-      combatEffects.spawnTankShot(armorShooter.x, armorShooter.z, target.x, target.z, { now });
-    }
-    if (artilleryShooter
-      && now - (lastBattleArtilleryAt.get(frontId) ?? 0) >= 12_000
-      && Math.random() <= density) {
-      lastBattleArtilleryAt.set(frontId, now);
-      const target = targetFor(artilleryShooter);
-      combatEffects.spawnArtilleryShot(artilleryShooter.x, artilleryShooter.z, target.x, target.z, { now });
-    }
-    if (now - (lastBattleSmokeAt.get(frontId) ?? 0) >= 1_100 && Math.random() <= 0.45 + density * 0.55) {
-      lastBattleSmokeAt.set(frontId, now);
-      combatEffects.spawn(EFFECT_KIND.smoke, cluster.x + jitter(26), cluster.z + jitter(26),
-        { now, scale: 0.9 + Math.random() * 0.4, lifetimeMs: 2_400 });
-    }
-
-    const provinceId = renderer.provinceIdAtWorld(cluster.x, cluster.z);
-    if (provinceId < 0) continue;
-    const buildings = session.state.provinceBuildings[provinceId];
-    const buildingCount = buildings
-      ? buildings.barracks + buildings.tankPlant + buildings.ordnance + buildings.missileSite
-      : 0;
-    if (buildingCount <= 0) continue;
-    activeProvinces.add(provinceId);
-    if (now - (lastCityFireAt.get(provinceId) ?? 0) < 6_000) continue;
-    lastCityFireAt.set(provinceId, now);
-    for (let i = 0; i < 2; i += 1) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 30 + Math.random() * 90;
-      const bx = cluster.x + Math.cos(angle) * radius;
-      const bz = cluster.z + Math.sin(angle) * radius;
-      combatEffects.spawn(EFFECT_KIND.smoke, bx, bz, { now, scale: 1.1, lifetimeMs: 3_200 });
-      combatEffects.spawn(EFFECT_KIND.explosion, bx, bz, { now, scale: 0.55, lifetimeMs: 480 });
-    }
+  const nowSeconds=renderer.unitAnimationTime;
+  type Visual=typeof landCombatVisuals extends Map<string,infer V> ? V : never;
+  const targetVisuals=new Map<string,Visual[]>();
+  for(const visual of landCombatVisuals.values()){
+    const group=targetVisuals.get(visual.armyId)??[];group.push(visual);targetVisuals.set(visual.armyId,group);
   }
-  for (const id of [...lastBattleGunfireAt.keys()]) if (!activeFronts.has(id)) lastBattleGunfireAt.delete(id);
-  for (const id of [...lastBattleArmorAt.keys()]) if (!activeFronts.has(id)) lastBattleArmorAt.delete(id);
-  for (const id of [...lastBattleArtilleryAt.keys()]) if (!activeFronts.has(id)) lastBattleArtilleryAt.delete(id);
-  for (const id of [...lastBattleSmokeAt.keys()]) if (!activeFronts.has(id)) lastBattleSmokeAt.delete(id);
-  for (const id of [...lastCityFireAt.keys()]) if (!activeProvinces.has(id)) lastCityFireAt.delete(id);
+  for(const [key,visual] of landCombatVisuals){
+    if(!visual.firing || !visual.targetArmyId || !renderer.isWorldPointVisible(visual.x,visual.z,30))continue;
+    const candidates=targetVisuals.get(visual.targetArmyId);
+    const target=candidates?.find(candidate=>candidate.kind===visual.kind)??candidates?.[0];
+    const socket=renderer.landWeaponSocket(visual.kind);
+    if(!target||!socket)continue;
+    const shot=nextLandShot(nowSeconds,visual.phase,visual.kind);
+    if(shot.at-nowSeconds>.45 || scheduledLandShots.get(key)===shot.cycle)continue;
+    scheduledLandShots.set(key,shot.cycle);
+    const muzzle=landMuzzlePosition(visual.x,visual.z,visual.heading,socket.point,socket.scale,visual.kind===0?[0,0,0]:socket.pivot,visual.hullHeading);
+    let targetX=target.x;
+    if(worldWidth)targetX-=Math.round((targetX-muzzle.x)/worldWidth)*worldWidth;
+    // Hit the facing edge of a vehicle instead of burying every burst under its hull.
+    const dx=muzzle.x-targetX,dz=muzzle.z-target.z,range=Math.hypot(dx,dz);
+    const radius=target.kind===2?2.6:target.kind===1?1.8:target.kind===3?1.2:.25;
+    const offset=Math.min(radius,range*.25)/Math.max(.001,range);
+    combatEffects.spawnWeaponShot(visual.kind,muzzle.x,muzzle.z,targetX+dx*offset,target.z+dz*offset,{
+      now:now+(shot.at-nowSeconds)*1000,height:muzzle.height,
+    });
+  }
+  for(const key of scheduledLandShots.keys())if(!landCombatVisuals.get(key)?.firing)scheduledLandShots.delete(key);
+  for(const [key,entry] of landBombardmentTargets)if(now-entry.at>10000)landBombardmentTargets.delete(key);
+
 }
 
 function drainSessionEvents(session: RemoteGameSession): void {
@@ -2820,28 +2933,25 @@ function drainSessionEvents(session: RemoteGameSession): void {
       const atkSpot = battleSpotFor(ev.attacker, ev.attacker);
       const defSpot = battleSpotFor(ev.defender, ev.defender) ?? battleSpotFor(ev.attacker, ev.defender);
       const spot = ev.x !== undefined && ev.z !== undefined ? { x: ev.x, z: ev.z } : defSpot ?? atkSpot;
-      const dir = atkSpot && defSpot
-        ? Math.atan2(defSpot.z - atkSpot.z, defSpot.x - atkSpot.x)
-        : Number.NaN;
       if (spot) {
         if (ev.kind === 'engaged') {
-          combatEffects.spawnVolley('generic', spot.x, spot.z, Number.isFinite(dir) ? dir : 0);
           if (mine) combatEffects.spawn(EFFECT_KIND.targetFlash, spot.x, spot.z, { scale: 1.1 });
-        } else if (ev.kind === 'combatPulse') {
-          combatEffects.spawnVolley('infantry', spot.x, spot.z, Number.isFinite(dir) ? dir : 0);
+
         } else if (ev.kind === 'bombardment') {
-          const impactAt = defSpot ?? spot;
-          if (atkSpot) {
-            combatEffects.spawnArtilleryShot(atkSpot.x, atkSpot.z, impactAt.x, impactAt.z);
-          } else {
-            // Projection can hide the firing stack; keep the authoritative
-            // impact readable without inventing a fake launch position.
-            combatEffects.spawn(EFFECT_KIND.explosion, impactAt.x, impactAt.z, { scale: 1.3 });
-            combatEffects.spawn(EFFECT_KIND.smoke, impactAt.x, impactAt.z, { scale: 1.2, lifetimeMs: 2_400 });
+          if(ev.armyId && ev.targetArmyId)landBombardmentTargets.set(ev.armyId,{target:ev.targetArmyId,at:Date.now()});
+          const visibleShooter=ev.armyId && [...landCombatVisuals.values()].some(model=>model.armyId===ev.armyId);
+          if(!visibleShooter){
+            // A visible impact from an unseen attacker does not reveal a launch point.
+            combatEffects.spawn(EFFECT_KIND.explosion,spot.x,spot.z,{height:.4,worldSize:3,lifetimeMs:650});
+            combatEffects.spawn(EFFECT_KIND.smoke,spot.x,spot.z,{height:.5,worldSize:2.5,lifetimeMs:2400});
           }
         } else if (ev.kind === 'destroyed') {
-          combatEffects.spawn(EFFECT_KIND.explosion, spot.x, spot.z, { scale: 1.5 });
-          combatEffects.spawn(EFFECT_KIND.smoke, spot.x, spot.z, { scale: 1.6, lifetimeMs: 2_800 });
+          const last=lastArmyLandModels.get(ev.armyId ?? '');
+          if(last) for(let offset=0;offset<last.records.length;offset+=16) {
+            if(last.records[offset+3]===0)continue;
+            combatEffects.spawn(EFFECT_KIND.explosion,last.records[offset],last.records[offset+1],{height:1,worldSize:2.3,lifetimeMs:700});
+            combatEffects.spawn(EFFECT_KIND.smoke,last.records[offset],last.records[offset+1],{height:1,worldSize:2,lifetimeMs:4000});
+          }
         }
       }
     }
@@ -2861,6 +2971,8 @@ function drainSessionEvents(session: RemoteGameSession): void {
         mine ? 'A battered stack is pulling back to friendly ground.'
           : 'An enemy stack has broken off and is falling back.');
     } else if (ev.kind === 'destroyed') {
+      const last=lastArmyLandModels.get(ev.armyId ?? '');
+      if(last){activeRenderer?.showArmyDestruction(last.records);lastArmyLandModels.delete(ev.armyId ?? '');}
       pushNotification('combat', mine ? 'Stack destroyed' : 'Enemy stack destroyed',
         mine ? 'One of your armies has been wiped out.' : 'You have annihilated an enemy army.');
     } else if (ev.kind === 'bombardment') {

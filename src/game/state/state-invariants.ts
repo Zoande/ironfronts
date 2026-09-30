@@ -2,6 +2,9 @@ import type { SimContext } from '../sim-context';
 import { armyAtNode } from '../movement/position';
 import { wrappedDistance } from '../geometry';
 import { resolveProvince } from '../resource-bootstrap';
+import { edgeDistanceAtPoint, edgeIdBetween, edgePosition, edgePositionFrom } from '../movement/graph';
+import { transportType } from '../naval/transport';
+import { unitType } from '../units/unit-catalog';
 
 /** Validate references after rebuilding immutable world indexes. */
 export function validateWorldState(ctx: SimContext): void {
@@ -9,10 +12,19 @@ export function validateWorldState(ctx: SimContext): void {
   const nodeExists = (id: number): boolean => Number.isInteger(id) && id >= 0 && id < graph.nodeCount;
   const provinceIds = new Set(world.provinces.map((province) => province.id));
   const countryExists = (id: number): boolean => id === 0 || Boolean(state.countries[id]);
-  const onEdge = (army: typeof state.armies[string], from: number, to: number): boolean => Math.abs(
-    wrappedDistance(graph.nodeX[from], graph.nodeZ[from], army.x, army.z, world.width)
-    + wrappedDistance(army.x, army.z, graph.nodeX[to], graph.nodeZ[to], world.width)
-    - wrappedDistance(graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to], world.width)) < 0.1;
+  const onEdge = (army: typeof state.armies[string], from: number, to: number): boolean => {
+    const edgeId = edgeIdBetween(graph, from, to);
+    if (edgeId < 0) return false;
+    const distance = edgeDistanceAtPoint(graph, edgeId, from, army.x, army.z);
+    const point = edgePositionFrom(graph, edgeId, from, distance);
+    return wrappedDistance(point.x, point.z, army.x, army.z, world.width) < 0.1;
+  };
+  const onSeaEdge = (army: typeof state.armies[string], from: number, to: number): boolean => {
+    const total = wrappedDistance(graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to], world.width);
+    const travelled = wrappedDistance(graph.nodeX[from], graph.nodeZ[from], army.x, army.z, world.width);
+    const remaining = wrappedDistance(army.x, army.z, graph.nodeX[to], graph.nodeZ[to], world.width);
+    return Math.abs(travelled + remaining - total) < 0.1;
+  };
   for (const [provinceId, owner] of Object.entries(state.provinceOwners)) {
     if (!provinceIds.has(Number(provinceId)) || !countryExists(owner)) throw new Error('Invalid province ownership.');
   }
@@ -21,15 +33,33 @@ export function validateWorldState(ctx: SimContext): void {
     const naval = army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
     if (naval) {
       const crossing = army.navalCrossing;
-      if (!crossing || !nodeExists(crossing.fromNodeId) || !nodeExists(crossing.toNodeId)
-        || !graph.seaAdjacency[crossing.fromNodeId]?.includes(crossing.toNodeId)
+      const transport = army.transport;
+      const openWaterLeg = crossing?.fromNodeId === crossing?.toNodeId
+        && (army.status === 'atSea' || Boolean(army.order?.seaDestination));
+      if (!crossing || !transport || !nodeExists(crossing.fromNodeId) || !nodeExists(crossing.toNodeId)
+        || (!openWaterLeg && !graph.seaAdjacency[crossing.fromNodeId]?.includes(crossing.toNodeId))
+        || (openWaterLeg && !graph.seaAdjacency[crossing.fromNodeId]?.length)
         || (army.status === 'embarking' && army.graphNodeId !== crossing.fromNodeId)
         || (army.status === 'atSea' && (army.graphNodeId !== crossing.fromNodeId
-          || !onEdge(army, crossing.fromNodeId, crossing.toNodeId)))
+          || (!openWaterLeg && !onSeaEdge(army, crossing.fromNodeId, crossing.toNodeId))))
         || (army.status === 'disembarking' && army.graphNodeId !== crossing.toNodeId)) {
         throw new Error('Invalid naval crossing.');
       }
-    } else if (army.navalCrossing) {
+      const shipMaxHp = transportType(transport.level).maxHp;
+      const landByType = new Map(army.units.map((group) => [group.typeId, group]));
+      if (transport.cargo.length !== landByType.size || new Set(transport.cargo.map((group) => group.cargoTypeId)).size !== transport.cargo.length) {
+        throw new Error('Invalid transport cargo.');
+      }
+      for (const cargo of transport.cargo) {
+        const land = landByType.get(cargo.cargoTypeId);
+        const expectedLandHp = cargo.shipHp.reduce(
+          (sum, hp) => sum + hp / shipMaxHp * unitType(cargo.cargoTypeId).maxHp, 0,
+        );
+        if (!land || cargo.shipHp.length !== land.count || !cargo.shipHp.length
+          || cargo.shipHp.some((hp) => !(hp > 0) || hp > shipMaxHp + 1e-6)
+          || Math.abs(land.hp - expectedLandHp) > 1e-5) throw new Error('Invalid transport cargo.');
+      }
+    } else if (army.navalCrossing || army.transport) {
       throw new Error('Naval crossing has invalid status.');
     }
     if (!naval && !armyAtNode(ctx, army) && !army.edge) {
@@ -40,17 +70,54 @@ export function validateWorldState(ctx: SimContext): void {
         + wrappedDistance(army.x, army.z, graph.nodeX[to], graph.nodeZ[to], world.width)
         - wrappedDistance(graph.nodeX[from], graph.nodeZ[from], graph.nodeX[to], graph.nodeZ[to], world.width)) < 0.1);
       if (to === undefined) throw new Error('Army is outside its movement edge.');
-      army.edge = { from, to };
+      const edgeId = edgeIdBetween(graph, from, to);
+      army.edge = { from, to, edgeId,
+        distanceAlongEdge: edgeDistanceAtPoint(graph, edgeId, from, army.x, army.z) };
     }
-    if (army.edge && (!nodeExists(army.edge.from) || army.edge.from !== army.graphNodeId
-      || !graph.adjacency[army.edge.from]?.includes(army.edge.to) || !onEdge(army, army.edge.from, army.edge.to))) {
-      throw new Error('Invalid occupied movement edge.');
+    if (army.edge) {
+      const edgeId = army.edge.edgeId ?? edgeIdBetween(graph, army.edge.from, army.edge.to);
+      if (!nodeExists(army.edge.from) || army.edge.from !== army.graphNodeId
+        || edgeId < 0 || !graph.adjacency[army.edge.from]?.includes(army.edge.to)
+        || !onEdge(army, army.edge.from, army.edge.to)) throw new Error('Invalid occupied movement edge.');
+      army.edge.edgeId = edgeId;
+      army.edge.distanceAlongEdge ??= edgeDistanceAtPoint(
+        graph, edgeId, army.edge.from, army.x, army.z,
+      );
+      if (army.edge.distanceAlongEdge < 0
+        || army.edge.distanceAlongEdge > graph.edges[edgeId].length + 1e-6) {
+        throw new Error('Invalid occupied movement edge progress.');
+      }
+      // edge position is authoritative; world coordinates are its derived cache
+      const derived = edgePositionFrom(graph, edgeId, army.edge.from, army.edge.distanceAlongEdge);
+      army.x = derived.x; army.z = derived.z;
     }
     for (const order of [army.order, army.suspendedOrder]) if (order) {
       if (order.edgeProgress < 0 || order.path.some((id) => !nodeExists(id))) throw new Error('Invalid order node.');
+      if (order.roadDestination) {
+        const destination=order.roadDestination;
+        const road=graph.edges[destination.edgeId];
+        const last=order.path[order.path.length-1];
+        const finalEdge=order.path.length===1 && army.edge
+          ? army.edge.edgeId : edgeIdBetween(graph,order.path.length>1?order.path[order.path.length-2]:army.graphNodeId,last);
+        if (!road || destination.to!==last || finalEdge!==road.id
+          || !((destination.from===road.from && destination.to===road.to)
+            || (destination.from===road.to && destination.to===road.from))
+          || destination.distanceAlongEdge<0 || destination.distanceAlongEdge>road.length) {
+          throw new Error('Invalid exact road destination.');
+        }
+        // Repair cached destination coordinates from older interrupted/replanned orders.
+        const point=edgePositionFrom(graph,road.id,destination.from,destination.distanceAlongEdge);
+        Object.assign(order,{destX:point.x,destZ:point.z});
+      }
+      if (order.seaDestination && (!nodeExists(order.seaDestination.anchorNodeId)
+        || !graph.seaAdjacency[order.seaDestination.anchorNodeId]?.length
+        || world.provinceAt(order.seaDestination.x, order.seaDestination.z) >= 0)) {
+        throw new Error('Invalid sea destination.');
+      }
       let previous = army.graphNodeId;
-      for (const next of order.path) {
-        const physical = army.edge && previous === army.graphNodeId
+      for (let index = 0; index < order.path.length; index += 1) {
+        const next = order.path[index];
+        const physical = army.edge && index === 0
           ? (next === army.edge.from || next === army.edge.to)
           : graph.adjacency[previous]?.includes(next) || graph.seaAdjacency[previous]?.includes(next);
         if (!physical) throw new Error('Order leaves the movement graph.');
@@ -107,6 +174,19 @@ export function validateWorldState(ctx: SimContext): void {
     if (state.battleFronts[front.id] !== front || !nodeExists(front.anchorNodeId)
       || !state.battles[front.battleId]?.frontIds.includes(front.id) || front.sideA.countryId === front.sideB.countryId) {
       throw new Error('Invalid front anchor or battle.');
+    }
+    if ((front.edgeId === undefined) !== (front.distanceAlongEdge === undefined)) {
+      throw new Error('Incomplete front road position.');
+    }
+    if (front.edgeId !== undefined && front.distanceAlongEdge !== undefined) {
+      const edge = graph.edges[front.edgeId];
+      if (!edge || front.distanceAlongEdge < 0 || front.distanceAlongEdge > edge.length + 1e-6) {
+        throw new Error('Invalid front road position.');
+      }
+      const point = edgePosition(graph, front.edgeId, front.distanceAlongEdge);
+      if (wrappedDistance(point.x, point.z, front.x, front.z, world.width) > 0.1) {
+        throw new Error('Front is outside its road position.');
+      }
     }
     const membership = new Set<string>();
     for (const side of [front.sideA, front.sideB]) {

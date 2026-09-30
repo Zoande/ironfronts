@@ -14,18 +14,23 @@ function secret(name: string, fallback: string): string {
 
 const debugControlsEnabled = process.env.IRONFRONTS_DEBUG_CONTROLS_ENABLED === 'true';
 const diagnosticsPath = process.env.DIAGNOSTICS_PATH?.trim();
+const europe = process.env.MAP_KIND === 'europe';
 
 export const config = {
-  port: numberEnv('GAME_PORT', 3002),
+  port: numberEnv('GAME_PORT', europe ? 3003 : 3002),
+  gameId: europe ? 'europe-at-war-1' : 'world-at-war-2',
+  gameVersion: europe ? 'europe-at-war@1' : 'world-at-war@4',
+  gameName: europe ? 'Europe at War' : 'World at War',
+  scenarioId: europe ? 'OP-EUROPE-01' : 'OP-1939-01',
   clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173',
   /** Browser-visible URL of the map package. This belongs to the client/CDN,
    * not the game server; each future game version can declare another URL. */
   worldPublicUrl: (process.env.WORLD_PUBLIC_URL
-    ?? `${process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173'}/world`).replace(/\/$/, ''),
-  worldDirectory: path.resolve(process.cwd(), process.env.WORLD_DIRECTORY ?? 'public/world'),
+    ?? `${process.env.CLIENT_ORIGIN ?? 'http://127.0.0.1:5173'}/${europe ? 'europe' : 'world'}`).replace(/\/$/, ''),
+  worldDirectory: path.resolve(process.cwd(), process.env.WORLD_DIRECTORY ?? `public/${europe ? 'europe' : 'world'}`),
   gameDataPath: path.resolve(
     process.cwd(),
-    process.env.GAME_DATA_PATH ?? path.join(process.env.DATA_DIRECTORY ?? 'data', 'game.json'),
+    process.env.GAME_DATA_PATH ?? path.join(process.env.DATA_DIRECTORY ?? 'data', europe ? 'game-europe.json' : 'game.json'),
   ),
   /** JSONL diagnostics are opt-in. Unset or blank means no diagnostic file. */
   diagnosticsPath: diagnosticsPath ? path.resolve(process.cwd(), diagnosticsPath) : undefined,

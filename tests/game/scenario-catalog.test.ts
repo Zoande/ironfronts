@@ -10,8 +10,8 @@ import {
 const spainId = CATALOG_COUNTRY_BY_NAME.get('spain')!.id;
 
 describe('scenario catalogue', () => {
-  it('offers only World at War', () => {
-    expect(SCENARIOS.map((scenario) => scenario.id)).toEqual(['OP-1939-01']);
+  it('offers the World and Europe campaigns', () => {
+    expect(SCENARIOS.map((scenario) => scenario.id)).toEqual(['OP-EUROPE-01', 'OP-1939-01']);
     expect(() => scenarioById('OP-1941-22')).toThrow(/Unknown scenario/);
     expect(() => scenarioById('SANDBOX')).toThrow(/Unknown scenario/);
   });

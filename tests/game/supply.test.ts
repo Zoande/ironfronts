@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { fixture, army } from '../helpers/simulation';
-import { setRelation } from '../../src/game/game-state';
+import { emptyStockpile, setRelation } from '../../src/game/game-state';
 import { stepCombat } from '../../src/game/combat';
-import { regenOrganization } from '../../src/game/combat/organization';
-import { stepEntrenchment } from '../../src/game/combat/entrenchment';
-import { armySupplyPlan, stepSupply, SUPPLY_RANGE } from '../../src/game/combat/supply';
+import { armySupplyPlan, stepSupply, supplyEffectiveness, SUPPLY_RANGE } from '../../src/game/combat/supply';
+import { mergeStacks } from '../../src/game/units/army';
+import { applyCommand } from '../../src/game/commands';
 
 describe('stepSupply', () => {
   it('an army standing on its own territory is in supply', () => {
@@ -44,60 +44,96 @@ describe('stepSupply', () => {
 });
 
 describe('supply effects', () => {
-  it('allocates army capacity by each unit upkeep ratio', () => {
+  it('uses one capacity and one upkeep rate for the whole army', () => {
     const plan = armySupplyPlan(army('a', 1, 100, 100, 0, 'engineer', 1));
     expect(plan.capacity).toBe(100);
-    expect(plan.allocation.funds).toBeCloseTo(56);
-    expect(plan.allocation.food).toBeCloseTo(40);
-    expect(plan.allocation.metal).toBeCloseTo(4);
+    expect(plan.upkeepPerHour).toBeCloseTo(1.25);
   });
 
-  it('activates only the resource-specific shortage when its army store empties', () => {
+  it('consumes the single reserve while disconnected', () => {
     const ctx = fixture();
     const cutOff = army('cutOff', 1, 100 + SUPPLY_RANGE * 3, 100 + SUPPLY_RANGE * 3, 0, 'engineer');
     ctx.state.armies = { cutOff };
     stepSupply(ctx, 1_000);
     expect(cutOff.inSupply).toBe(false);
-    expect(cutOff.supplyStores?.metal).toBe(0);
-    expect(cutOff.shortageSeverity).toMatchObject({ metal: 100, funds: 100, food: 100, oil: 0 });
+    expect(cutOff.supply).toBe(0);
+    expect(supplyEffectiveness(cutOff)).toBe(0.4);
   });
 
-  it('an out-of-supply army regains organization more slowly than a supplied one', () => {
+  it('reduces refill by 20% for each empty resource with negative flow', () => {
     const ctx = fixture();
-    ctx.state.armies = {
-      supplied: { ...army('supplied', 1), status: 'idle', organization: 50, inSupply: true },
-      cutOff: { ...army('cutOff', 1), status: 'idle', organization: 50, inSupply: false },
-    };
-    regenOrganization(ctx, 2);
-    expect(ctx.state.armies.cutOff.organization!).toBeGreaterThan(50);
-    expect(ctx.state.armies.cutOff.organization!).toBeLessThan(ctx.state.armies.supplied.organization!);
+    const supplied = army('supplied', 1, 100, 100, 0, 'engineer', 1);
+    supplied.supply = 0;
+    ctx.state.armies = { supplied };
+    const country = ctx.state.countries[1];
+    country.stockpile = { ...emptyStockpile(), funds: 1, food: 1, metal: 1, oil: 1 };
+    country.netIncome = { ...emptyStockpile(), funds: -1, food: -1, metal: -1, oil: -1 };
+    stepSupply(ctx, 0.25);
+    expect(supplied.supply).toBeCloseTo(25);
+    supplied.supply = 0;
+    country.stockpile.funds = 0;
+    stepSupply(ctx, 0.25);
+    expect(supplied.supply).toBeCloseTo(20);
+    supplied.supply = 0;
+    country.stockpile.food = 0;
+    country.stockpile.metal = 0;
+    country.stockpile.oil = 0;
+    stepSupply(ctx, 0.25);
+    expect(supplied.supply).toBeCloseTo(5);
+    supplied.supply = 0;
+    country.netIncome.funds = 0;
+    stepSupply(ctx, 0.25);
+    expect(supplied.supply).toBeCloseTo(10);
   });
 
-  it('an out-of-supply army digs in more slowly than a supplied one', () => {
+  it('uses shared penalties at supply thresholds', () => {
+    const stack = army('a', 1, 100, 100, 0, 'infantry', 1);
+    for (const [current, expected] of [[100, 1], [74, 0.9], [49, 0.75], [24, 0.6], [0, 0.4]]) {
+      stack.supply = current;
+      expect(supplyEffectiveness(stack)).toBe(expected);
+    }
+  });
+
+  it('combines reserves when armies merge', () => {
+    const target = army('target', 1, 100, 100, 0, 'infantry', 1);
+    const source = army('source', 1, 100, 100, 0, 'engineer', 1);
+    target.supply = 40;
+    source.supply = 25;
+    mergeStacks(target, source);
+    expect(target.supplyCapacity).toBe(200);
+    expect(target.supply).toBe(65);
+    expect(source.supply).toBe(0);
+  });
+
+  it('divides the reserve proportionally when an army splits', () => {
     const ctx = fixture();
-    ctx.state.armies = {
-      supplied: { ...army('supplied', 1), status: 'idle', entrenchment: 0, inSupply: true },
-      cutOff: { ...army('cutOff', 1), status: 'idle', entrenchment: 0, inSupply: false },
-    };
-    stepEntrenchment(ctx, 5);
-    expect(ctx.state.armies.cutOff.entrenchment!).toBeGreaterThan(0);
-    expect(ctx.state.armies.cutOff.entrenchment!).toBeLessThan(ctx.state.armies.supplied.entrenchment!);
+    const parent = army('parent', 1, 100, 100, 0, 'infantry', 2);
+    parent.supply = 80;
+    ctx.state.armies = { parent };
+    const result = applyCommand(ctx, { type: 'splitArmy', countryId: 1, armyId: 'parent',
+      groups: [{ typeId: 'infantry', count: 1 }], x: 300, z: 100 });
+    expect(result.ok).toBe(true);
+    const child = ctx.state.armies[result.armyId!];
+    expect(parent.supply).toBe(40);
+    expect(child.supply).toBe(40);
+    expect(parent.supplyCapacity).toBe(100);
+    expect(child.supplyCapacity).toBe(100);
   });
 
   it('an out-of-supply defender loses a fight it would otherwise have won', () => {
-    const setup = (defenderInSupply: boolean) => {
+    const setup = (defenderSupply: number) => {
       const ctx = fixture();
       ctx.state.armies = {
-        // Numerically equal forces; supply state alone should decide it.
-        garrison: { ...army('garrison', 1, 100, 100, 0, 'infantry', 50), inSupply: defenderInSupply },
+        // Numerically equal forces; supply level alone should decide it.
+        garrison: { ...army('garrison', 1, 100, 100, 0, 'infantry', 50), supply: defenderSupply, supplyCapacity: 5_000 },
         attacker: army('attacker', 2, 100, 100, 0, 'infantry', 50),
       };
       ctx.state.provinceOwners = { 10: 1, 11: 0, 12: 0, 13: 0 };
       setRelation(ctx.state, 1, 2, 'war');
       return ctx;
     };
-    const supplied = setup(true);
-    const cutOff = setup(false);
+    const supplied = setup(5_000);
+    const cutOff = setup(0);
     for (let hour = 0; hour < 5; hour += 1) {
       supplied.state.simulationTick += 1; stepCombat(supplied, 1);
       cutOff.state.simulationTick += 1; stepCombat(cutOff, 1);

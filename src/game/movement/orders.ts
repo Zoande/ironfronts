@@ -2,11 +2,32 @@ import type { SimContext } from '../sim-context';
 import type { ArmyStack, MoveOrder } from '../units/army';
 import { ensureArmyRuntimeState } from '../units/army';
 import { occupiedEdge, routeFromArmy } from './position';
-import { nearestNode, type LandGraph } from './graph';
+import { nearestNode, nearestRoadPosition, type LandGraph, type RoadPosition } from './graph';
 import { relationOf, setRelation } from '../game-state';
 import { movementEdgeAllowed, warsRequiredForPath } from './policy';
 import { combinedGraph, isNavalStatus } from './naval';
 import { armyParticipatesInFront } from '../combat/membership';
+import { movementEdgeTravelCost } from './speed';
+import { wrappedDistance, wrapX } from '../geometry';
+import { routeToRoadPosition } from './road-route';
+
+/** A final open-water leg must stay in water; the sea graph supplies its approach. */
+function clearSeaLeg(session: SimContext, from: number, x: number, z: number): boolean {
+  let dx = x - session.graph.nodeX[from];
+  const width = session.world.width;
+  if (dx > width / 2) dx -= width;
+  else if (dx < -width / 2) dx += width;
+  const dz = z - session.graph.nodeZ[from];
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 12));
+  for (let i = 1; i <= steps; i += 1) {
+    const t = i / steps;
+    // Port nodes can sit a few units inland on the coast.
+    if (t * Math.hypot(dx, dz) < 18) continue;
+    if (session.world.provinceAt(wrapX(session.graph.nodeX[from] + dx * t, width),
+      session.graph.nodeZ[from] + dz * t) >= 0) return false;
+  }
+  return true;
+}
 
 export interface MoveOrderResult {
   readonly ok: boolean;
@@ -17,16 +38,23 @@ export interface MoveOrderResult {
 
 export interface ExactMoveGoal {
   readonly graph: LandGraph;
-  readonly nodeId: number;
+  readonly nodeId?: number;
+  readonly roadPosition?: RoadPosition;
 }
 
 export function installOrder(
   army: ArmyStack, path: readonly number[], destX: number, destZ: number,
   intent: 'move' | 'attack', target?: MoveOrder['target'],
+  roadDestination?: MoveOrder['roadDestination'],
+  seaDestination?: MoveOrder['seaDestination'],
 ): void {
-  army.order = { path: path.slice(1), destX, destZ, intent, target, edgeProgress: 0 };
+  if (army.status === 'atSea' && army.navalCrossing
+    && army.navalCrossing.fromNodeId === army.navalCrossing.toNodeId) {
+    army.navalCrossing.returningToAnchor = true;
+  }
+  army.order = { path: path.slice(1), destX, destZ, intent, target, roadDestination, seaDestination, edgeProgress: 0 };
   army.suspendedOrder = null;
-  army.status = 'moving';
+  if (army.status !== 'atSea') army.status = 'moving';
   army.extractingNodeId = null;
   army.extractionAssignment = null;
 }
@@ -49,78 +77,156 @@ export function issueMoveOrder(
   if (army.status === 'engaged' && army.battleFrontIds!.length === 0) army.status = 'idle';
   if (army.status === 'engaged') return { ok: false, reason: 'Army is in close combat.' };
   if (army.status === 'retreating') return { ok: false, reason: 'Army is retreating.' };
-  if (isNavalStatus(army.status)) return { ok: false, reason: 'Army is mid sea crossing.' };
+  if (isNavalStatus(army.status) && !(army.status === 'atSea'
+    && army.navalCrossing?.fromNodeId === army.navalCrossing?.toNodeId && !army.order)) {
+    return { ok: false, reason: 'Army is mid sea crossing.' };
+  }
 
-  let graph: LandGraph = exactGoal?.graph ?? session.graph;
-  let goal = exactGoal?.nodeId ?? nearestNode(
-    graph, destX, destZ, 600, graph.component[army.graphNodeId] ?? -1,
-  );
-  if (target?.kind === 'army' && goal === army.graphNodeId) {
+  const merged = combinedGraph(session.graph);
+  type Candidate = { graph: LandGraph; goal?: number; road?: RoadPosition; sea?: boolean };
+  const nodeTarget = target?.kind === 'army';
+  const candidates: Candidate[] = exactGoal
+    ? [{ graph: exactGoal.graph, goal: exactGoal.nodeId, road: exactGoal.roadPosition }]
+    : nodeTarget ? [
+      {
+        graph: session.graph,
+        goal: nearestNode(
+          session.graph, destX, destZ, 600,
+          session.graph.component[army.graphNodeId] ?? -1,
+        ),
+      },
+      {
+        graph: merged,
+        goal: nearestNode(
+          merged, destX, destZ, 600, merged.component[army.graphNodeId] ?? -1,
+        ),
+      },
+    ] : (() => {
+      if (session.world.provinceAt(destX, destZ) < 0) {
+        const seaNodes: Array<{ node: number; distance: number }> = [];
+        for (let node = 0; node < merged.nodeCount; node += 1) {
+          if (!merged.seaAdjacency[node]?.length
+            || merged.component[node] !== merged.component[army.graphNodeId]) continue;
+          const distance = wrappedDistance(merged.nodeX[node], merged.nodeZ[node], destX, destZ, merged.width);
+          seaNodes.push({ node, distance });
+        }
+        seaNodes.sort((a, b) => a.distance - b.distance);
+        const seaCandidates: Candidate[] = [];
+        for (const { node } of seaNodes) {
+          if (clearSeaLeg(session, node, destX, destZ)) {
+            seaCandidates.push({ graph: merged, goal: node, sea: true });
+            if (seaCandidates.length === 12) break;
+          }
+        }
+        return seaCandidates;
+      }
+      const landRoad = nearestRoadPosition(session.graph, destX, destZ, 600) ?? undefined;
+      const combinedRoad = nearestRoadPosition(merged, destX, destZ, 600) ?? undefined;
+      const roadCandidates: Candidate[] = [
+        { graph: session.graph, road: landRoad },
+        { graph: merged, road: combinedRoad },
+      ];
+      // A pure ferry fixture (or a migrated node-only graph) has no land road
+      // geometry to snap to. Its coastal endpoint remains a valid exact graph
+      // destination; generated worlds continue to require a road position.
+      if (!landRoad && !combinedRoad && !(session.graph.edges?.length > 0)) {
+        roadCandidates.push({ graph: merged, goal: nearestNode(
+          merged, destX, destZ, 600, merged.component[army.graphNodeId] ?? -1,
+        ) });
+      }
+      return roadCandidates;
+    })();
+  const adjustedGoal = (goal: number): number => {
+    if (target?.kind !== 'army' || goal !== army.graphNodeId) return goal;
     const opponent = session.state.armies[target.armyId];
-    if (opponent) goal = opponent.edge?.to ?? opponent.order?.path[0] ?? goal;
-  }
-  let unrestricted = goal >= 0
-    ? routeFromArmy(session, army, goal, undefined, graph) : null;
-  if (!unrestricted && !exactGoal) {
-    const merged = combinedGraph(session.graph);
-    const mergedGoal = nearestNode(
-      merged, destX, destZ, 600, merged.component[army.graphNodeId] ?? -1,
-    );
-    const mergedRoute = mergedGoal >= 0
-      ? routeFromArmy(session, army, mergedGoal, undefined, merged) : null;
-    if (mergedRoute) {
-      graph = merged;
-      goal = mergedGoal;
-      unrestricted = mergedRoute;
+    return opponent ? (opponent.edge?.to ?? opponent.order?.path[0] ?? goal) : goal;
+  };
+  type Planned = { graph: LandGraph; goal: number; path: number[]; destX: number; destZ: number;
+    roadDestination?: MoveOrder['roadDestination']; seaDestination?: MoveOrder['seaDestination'] };
+  const plan = (
+    allowed: ReturnType<typeof movementEdgeAllowed> | undefined,
+    prospectiveWars: ReadonlySet<number>,
+  ): Planned | null => {
+    for (const candidate of candidates) {
+      const cost = movementEdgeTravelCost(session, army, candidate.graph, prospectiveWars);
+      if (candidate.road) {
+        const route = routeToRoadPosition(session, army, candidate.graph, candidate.road, allowed, prospectiveWars);
+        if (route) return { graph: candidate.graph, goal: route.path[route.path.length - 1], ...route,
+          destX: candidate.road.x, destZ: candidate.road.z };
+        continue;
+      }
+      const goal = adjustedGoal(candidate.goal ?? -1);
+      if (goal < 0) continue;
+      const path = routeFromArmy(session, army, goal, allowed, candidate.graph, cost);
+      if (path) return { graph: candidate.graph, goal, path,
+        destX: candidate.sea ? destX : candidate.graph.nodeX[goal],
+        destZ: candidate.sea ? destZ : candidate.graph.nodeZ[goal],
+        ...(candidate.sea ? { seaDestination: { x: destX, z: destZ, anchorNodeId: goal } } : {}) };
     }
-  }
-  if (goal < 0 || !unrestricted) {
+    return null;
+  };
+
+  const forced = new Set(forcedWarCountryIds.filter((countryId) => (
+    countryId > 0 && countryId !== army.ownerCountryId
+      && relationOf(session.state, army.ownerCountryId, countryId) !== 'war'
+      && relationOf(session.state, army.ownerCountryId, countryId) !== 'allied'
+  )));
+  // Existing wars/allies (plus a mandatory target war) get absolute routing
+  // priority. A neutral shortcut is considered only when neither a land route
+  // nor a naval route works without opening an additional war.
+  const preferred = plan(
+    movementEdgeAllowed(session, army.ownerCountryId, false, forced), forced,
+  );
+  const everyPotentialEnemy = new Set(Object.keys(session.state.countries)
+    .map(Number).filter((countryId) => countryId !== army.ownerCountryId
+      && relationOf(session.state, army.ownerCountryId, countryId) !== 'allied'));
+  const fallback = preferred ?? plan(undefined, everyPotentialEnemy);
+  if (!fallback) {
     if (exactGoal) return { ok: false, reason: 'No legal route to that location.' };
-    const anyGoal = nearestNode(combinedGraph(session.graph), destX, destZ, 600, -1);
-    return anyGoal < 0
+    if (session.world.provinceAt(destX, destZ) < 0) return {
+      ok: false, reason: 'No usable sea route reaches that water.' };
+    const anyGoal = nearestRoadPosition(merged, destX, destZ, 600);
+    return !anyGoal
       ? { ok: false, reason: 'That destination is off the road network; pick a spot on land.' }
       : { ok: false, reason: 'That destination is on a separate landmass with no usable naval crossing.' };
   }
 
-  const alreadyThere = unrestricted.length < 2;
+  const anchoredOffshore = army.status === 'atSea'
+    && army.navalCrossing?.fromNodeId === army.navalCrossing?.toNodeId;
+  const alreadyThere = fallback.path.length < 2 && !fallback.seaDestination && !anchoredOffshore;
   if (alreadyThere && intent === 'move') return { ok: false, reason: 'Already there.' };
-  const currentlyLegal = routeFromArmy(
-    session, army, goal, movementEdgeAllowed(session, army.ownerCountryId), graph,
-  );
-  const required = new Set(currentlyLegal
-    ? [] : warsRequiredForPath(session, army.ownerCountryId, unrestricted));
-  for (const countryId of forcedWarCountryIds) {
-    if (countryId > 0 && countryId !== army.ownerCountryId
-      && relationOf(session.state, army.ownerCountryId, countryId) !== 'war'
-      && relationOf(session.state, army.ownerCountryId, countryId) !== 'allied') {
-      required.add(countryId);
-    }
+  const required = new Set(forced);
+  if (!preferred) {
+    for (const countryId of warsRequiredForPath(
+      session, army.ownerCountryId, fallback.path,
+    )) required.add(countryId);
   }
   const confirmed = new Set(confirmedWarCountryIds);
   const missing = [...required].sort((a, b) => a - b).filter((id) => !confirmed.has(id));
   if (missing.length) {
     return { ok: false, reason: 'War declaration required.', requiredWarCountryIds: missing };
   }
-  const legal = currentlyLegal ?? routeFromArmy(
-    session, army, goal,
-    movementEdgeAllowed(session, army.ownerCountryId, false, required), graph,
+  const legal = plan(
+    movementEdgeAllowed(session, army.ownerCountryId, false, required), required,
   );
-  if (!legal || (!alreadyThere && legal.length < 2)) {
+  if (!legal || (!alreadyThere && legal.path.length < 2 && !legal.seaDestination && !anchoredOffshore)) {
     return { ok: false, reason: 'No legal route to that location.' };
   }
   for (const countryId of required) setRelation(session.state, army.ownerCountryId, countryId, 'war');
   const edge = occupiedEdge(session, army);
-  if (edge) army.edge = edge;
+  army.edge = edge;
   if (alreadyThere && target?.kind !== 'army') {
     army.order = null;
     if (army.status === 'moving') army.status = 'idle';
     return { ok: true, nodes: 0 };
   }
   installOrder(
-    army, legal, graph.nodeX[goal], graph.nodeZ[goal], intent,
+    army, legal.path, legal.destX, legal.destZ, intent,
     target ?? { kind: 'position', x: destX, z: destZ },
+    legal.roadDestination,
+    legal.seaDestination,
   );
-  return { ok: true, nodes: legal.length - 1 };
+  return { ok: true, nodes: legal.path.length - 1 };
 }
 
 export function issueStop(session: SimContext, armyId: string): boolean {

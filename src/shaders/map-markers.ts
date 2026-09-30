@@ -81,7 +81,7 @@ fn mapMarkerVertex(
   var output: MarkerOutput;
   output.uv = corner;
   output.kind = kind;
-  output.alpha = select(rangeFade, depositRangeFade, kind < 2.5) * (1.0 - horizontalWorldFog(worldPos.x));
+  output.alpha = select(rangeFade, depositRangeFade, kind < 2.5) * (1.0 - mapFog(worldPos.xz));
   if (clip.w <= 0.0001) {
     output.position = vec4f(0.0, 0.0, -10.0, 1.0);
     output.alpha = 0.0;

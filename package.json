@@ -8,17 +8,23 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5173",
-    "dev:all": "node scripts/dev-all.mjs",
+    "dev": "node --env-file=.env scripts/dev-all.mjs",
+    "client:dev": "vite --host 127.0.0.1 --port 5173",
+    "dev:all": "node --env-file=.env scripts/dev-all.mjs",
     "reset:data": "node scripts/reset-data.mjs",
     "auth:dev": "tsx watch apps/auth-server/src/main.ts",
     "pregame:dev": "npm run build:world",
     "game:dev": "tsx watch apps/game-server/src/main.ts",
+    "game:serve": "tsx watch apps/game-server/src/main.ts",
+    "pregame:europe:dev": "node scripts/build-europe.mjs",
+    "game:europe:dev": "node scripts/run-europe-game.mjs",
+    "game:europe:serve": "node scripts/run-europe-game.mjs",
     "build:world": "node scripts/build-world.mjs",
+    "build:europe": "node scripts/build-europe.mjs",
     "build:campaign-map": "node scripts/generate-campaign-map.mjs",
     "build:infantry-model": "node scripts/build-infantry-model.mjs",
     "build:tank-model": "node scripts/build-tank-model.mjs",
-    "build": "npm run build:world && npm run build --workspaces --if-present && tsc --noEmit && vite build",
+    "build": "npm run build:world && npm run build:europe && npm run build --workspaces --if-present && tsc --noEmit && vite build",
     "check": "npm run check --workspaces --if-present && tsc --noEmit && npm run lint:scripts && npm run check:dead-code && npm run test:architecture && vitest run",
     "check:dead-code": "node scripts/dead-code-check.mjs",
     "lint:scripts": "eslint \"scripts/**/*.mjs\"",
@@ -29,7 +35,9 @@
     "visual-check": "node scripts/visual-check.mjs",
     "performance-check": "node scripts/performance-check.mjs",
     "import:music": "node scripts/import-music.mjs",
-    "dev:fast": "vite --host 127.0.0.1 --port 5173"
+    "dev:fast": "vite --host 127.0.0.1 --port 5173",
+    "build:land-models": "node scripts/build-land-models.mjs",
+    "check:land-visuals": "node scripts/qa/land-armies-check.mjs"
   },
   "dependencies": {
     "@fontsource/bitter": "^5.3.0",

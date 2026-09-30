@@ -26,6 +26,7 @@ export async function loadWorld(): Promise<LoadedWorld> {
   const details = JSON.parse(
     await readFile(path.join(WORLD_DIR, 'province-details.json'), 'utf8'),
   ).provinces;
+  const roadNetwork = JSON.parse(await readFile(path.join(WORLD_DIR, 'road-network.json'), 'utf8'));
 
   const surface = new Uint8Array(await bin('surface.rgba8'));
   const height = new Float32Array(await bin('height.f32'));
@@ -51,6 +52,7 @@ export async function loadWorld(): Promise<LoadedWorld> {
     surface,
     surfaceField: manifest.fields.surface,
     connections: new Float32Array(await bin('connections.f32')),
+    roadNetwork: { ...roadNetwork, centerlines: new Float32Array(await bin('road-centerlines.f32')) },
     resourceNodes,
   });
 

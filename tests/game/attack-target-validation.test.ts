@@ -141,17 +141,16 @@ describe('attack target validation', () => {
     const order = c.state.armies.p.order!;
     expect(order.path[order.path.length - 1]).toBe(nearestNode(graph(), 500, 100));
     expect(c.world.provinceAt(order.destX, order.destZ)).toBe(20);
-    expect(order.target).toMatchObject({ kind: 'province', provinceId: 20, x: 500, z: 100 });
+    expect(order.target).toMatchObject({ kind: 'province', provinceId: 20, x: 320, z: 100 });
+    expect(order.destX).toBeCloseTo(320);
+    expect(order.roadDestination).toBeDefined();
   });
 
   it('keeps the exact in-province goal when the route requires a naval link', () => {
-    const navalGraph: LandGraph = {
-      nodeX: Float64Array.from([100, 480, 500]), nodeZ: Float64Array.from([100, 100, 100]),
-      adjacency: [[1], [0], []], edgeCost: [[380], [380], []],
-      seaAdjacency: [[], [2], [1]], seaEdgeCost: [[], [20], [20]],
-      component: Int32Array.from([0, 0, 1]), componentSize: [2, 1], nodeCount: 3,
-      width: 10_000, height: 5_000,
-    };
+    const navalGraph = buildLandGraph(new Float32Array([
+      100, 100, 480, 100, 1, 0, 0, 0,
+      480, 100, 500, 100, 0, 0, 0, 0,
+    ]), 10_000, 5_000);
     const c = ctx(
       [army('p', 1, 100, 100, 0)], { 20: 2 },
       (x) => x === 500 ? 20 : 10, navalGraph,
@@ -166,7 +165,7 @@ describe('attack target validation', () => {
     expect(c.world.provinceAt(order.destX, order.destZ)).toBe(20);
   });
 
-  it('rejects a province with no road node and a disconnected attack route explicitly', () => {
+  it('accepts an exact road point without a node and accepts a dotted road', () => {
     const noNode = ctx(
       [army('p', 1, 100, 100, 0)], { 20: 2 },
       (x) => Math.abs(x - 350) < 1 ? 20 : 10,
@@ -174,18 +173,19 @@ describe('attack target validation', () => {
     expect(issueAttack(noNode, {
       type: 'attackArmy', countryId: 1, armyId: 'p',
       target: { kind: 'province', provinceId: 20, x: 350, z: 100 }, confirmedWarCountryIds: [2],
-    })).toMatchObject({ ok: false, reason: 'Target is not reachable.' });
+    })).toMatchObject({ ok: true });
+    expect(noNode.state.armies.p.order?.destX).toBeCloseTo(350);
 
     const disconnected = buildLandGraph(new Float32Array([
       100, 100, 500, 100, 1, 1, 0, 0,
     ]), 10_000, 5_000);
-    const unavailable = ctx(
+    const dotted = ctx(
       [army('p', 1, 100, 100, 0)], { 20: 2 }, (x) => x < 400 ? 10 : 20, disconnected,
     );
-    expect(issueAttack(unavailable, {
+    expect(issueAttack(dotted, {
       type: 'attackArmy', countryId: 1, armyId: 'p',
       target: { kind: 'province', provinceId: 20 }, confirmedWarCountryIds: [2],
-    })).toMatchObject({ ok: false, reason: 'Attack route unavailable.' });
+    })).toMatchObject({ ok: true });
   });
 
   it('reports a missing army target as no valid hostile force', () => {

@@ -1,19 +1,43 @@
-import { occupiedEdge } from '../movement/position';
+import { armyApproachNode, canonicalEdgeDistance, occupiedEdge } from '../movement/position';
+import { edgePolyline } from '../movement/graph';
 import { wrappedDistance } from '../geometry';
 import type { BattleFrontSideState, BattleFrontState } from '../game-state';
 import type { SimContext } from '../sim-context';
 import type { ArmyStack } from '../units/army';
 import { issueRetreatOrder, retreatPaths, type RetreatPath } from '../units/movement';
 import {
-  sideArmies, sideHp, sideBaseline, sideOrganizationFraction, sideRetreatThresholdMultiplier, removeArmyFromAllFronts,
+  sideArmies, sideHp, sideBaseline, sideHpRetreatThreshold, removeArmyFromAllFronts,
 } from './fronts';
-import { ORGANIZATION_RETREAT_THRESHOLD } from './constants';
 
 function legalFirstNodes(session: SimContext, army: ArmyStack, front: BattleFrontState): number[] {
   const edge = occupiedEdge(session, army);
-  if (edge) return [edge.from];
-  if (front.kind === 'road' && army.lastGraphNodeId !== null && army.lastGraphNodeId !== undefined) {
-    return [army.lastGraphNodeId];
+  if (edge) {
+    const road = session.graph.edges[edge.edgeId];
+    const ownDistance = canonicalEdgeDistance(session.graph, edge);
+    const blocked = new Set<number>();
+    for (const frontId of army.battleFrontIds ?? []) {
+      const active = session.state.battleFronts[frontId];
+      if (!active) continue;
+      const hostileSide = active.sideA.countryId === army.ownerCountryId ? active.sideB : active.sideA;
+      for (const hostile of sideArmies(session, hostileSide)) {
+        const hostileEdge = occupiedEdge(session, hostile);
+        if (hostileEdge?.edgeId === edge.edgeId) {
+          const hostileDistance = canonicalEdgeDistance(session.graph, hostileEdge);
+          if (hostileDistance < ownDistance - 1e-6) blocked.add(road.from);
+          else if (hostileDistance > ownDistance + 1e-6) blocked.add(road.to);
+          else if (hostileSide.directionNodeId === road.from || hostileSide.directionNodeId === road.to) {
+            blocked.add(hostileSide.directionNodeId);
+          }
+        } else if (hostileSide.directionNodeId === road.from || hostileSide.directionNodeId === road.to) {
+          blocked.add(hostileSide.directionNodeId);
+        }
+      }
+    }
+    const exits = [road.from, road.to].filter((node) => !blocked.has(node));
+    return blocked.size > 0 ? exits : [armyApproachNode(session, army)];
+  }
+  if (front.kind === 'road' && armyApproachNode(session, army) !== army.graphNodeId) {
+    return [armyApproachNode(session, army)];
   }
   // A stationary defender that never moved has no lastGraphNodeId and a road
   // front has no province context either, so neither can name "the way it
@@ -69,8 +93,22 @@ export function issueManualRetreat(
   const edge = occupiedEdge(session, army);
   const aimedNodes = edge ? [edge.from, edge.to] : session.graph.adjacency[army.graphNodeId];
   for (const nodeId of aimedNodes) {
-    const edgeX = wrappedX(session.graph.nodeX[nodeId] - army.x);
-    const edgeZ = session.graph.nodeZ[nodeId] - army.z;
+    let edgeX = wrappedX(session.graph.nodeX[nodeId] - army.x);
+    let edgeZ = session.graph.nodeZ[nodeId] - army.z;
+    if (edge) {
+      const road = session.graph.edges[edge.edgeId];
+      const canonical = canonicalEdgeDistance(session.graph, edge);
+      const from = nodeId === road.from ? road.to : road.from;
+      const start = nodeId === road.from ? road.length - canonical : canonical;
+      const points = edgePolyline(session.graph, edge.edgeId, from, start, Math.min(road.length, start + 50));
+      const sample = points.find((point) => wrappedDistance(
+        army.x, army.z, point.x, point.z, session.world.width,
+      ) > 1e-6);
+      if (sample) {
+        edgeX = wrappedX(sample.x - army.x);
+        edgeZ = sample.z - army.z;
+      }
+    }
     const score = (edgeX * dx + edgeZ * dz) / (Math.hypot(edgeX, edgeZ) * Math.hypot(dx, dz) || 1);
     if (score > aimedScore) { aimedScore = score; aimedFirstNode = nodeId; }
   }
@@ -93,21 +131,18 @@ export function issueManualRetreat(
 export function autoRetreat(session: SimContext, front: BattleFrontState, side: BattleFrontSideState): boolean {
   const armies = sideArmies(session, side);
   if (armies.length === 0) return false;
-  // Near-annihilation still forces a retreat outright; a broken-but-largely-
-  // intact force is also pulled back once its organization collapses, so a
-  // battle can be lost without the loser being wiped out first.
-  const nearlyDestroyed = sideHp(session, side) < sideBaseline(side) * 0.1;
-  const threshold = ORGANIZATION_RETREAT_THRESHOLD * sideRetreatThresholdMultiplier(session, side);
-  const brokenOrganization = sideOrganizationFraction(session, side) < threshold;
-  if (!nearlyDestroyed && !brokenOrganization) return false;
-  const routes = armies.map((army) => retreatPaths(
-    session, army, legalFirstNodes(session, army, front),
-  )[0]);
-  if (routes.some((route) => !route)) return false;
-  for (let i = 0; i < armies.length; i += 1) {
-    removeArmyFromAllFronts(session, armies[i].id);
-    issueRetreatOrder(session, armies[i], routes[i]);
+  // Withdrawal depends on remaining HP and stance. Individual stacks without
+  // a legal exit remain engaged.
+  const belowRetreatThreshold = sideHp(session, side) < sideBaseline(side) * sideHpRetreatThreshold(session, side);
+  if (!belowRetreatThreshold) return false;
+  let retreated = false;
+  for (const army of armies) {
+    const route = retreatPaths(session, army, legalFirstNodes(session, army, front))[0];
+    if (!route) continue;
+    removeArmyFromAllFronts(session, army.id);
+    issueRetreatOrder(session, army, route);
+    retreated = true;
   }
-  return true;
+  return retreated;
 }
 

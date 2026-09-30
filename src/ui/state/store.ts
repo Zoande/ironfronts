@@ -166,7 +166,7 @@ export type NavId =
   | 'diplomacy' | 'economy' | 'intelligence' | 'events' | 'trade';
 
 export type SidePanelId = 'diplomacy' | 'research' | 'trade';
-export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored';
+export type TechnologyBranch = 'infantry' | 'resources' | 'resourceBuildings' | 'training' | 'hybrid' | 'armored' | 'navy';
 /** Tabs include future presentation-only services that have no server branch yet. */
 export type TechnologyCategory = Exclude<TechnologyBranch, 'resourceBuildings'> | 'navy' | 'airforce';
 
@@ -287,11 +287,9 @@ export interface ArmyStackView {
   readonly strength: number;
   /** 0..1 */
   readonly health: number;
-  /** 0..1. Organization/readiness — separate from health; low organization
-   *  can force a retreat well before the stack is destroyed. */
-  readonly organization?: number;
   /** 0..1. Grows while the stack holds ground; reduces incoming damage. */
-  readonly entrenchment?: number;
+  readonly hp?: number;
+  readonly maxHp?: number;
   /** Combat posture; see game/units/army.ts ArmyStance. Own armies only. */
   readonly stance?: 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
   /** Within reach of the owner's own territory. */
@@ -310,6 +308,8 @@ export interface ArmyStackView {
   readonly groups?: readonly ArmyUnitGroupView[];
   /** World units per game-hour (slowest unit). */
   readonly speed?: number;
+  readonly domain?: 'land' | 'naval';
+  readonly transportLevel?: number;
   /** Aggregate armor-specific firepower across every surviving troop. */
   readonly attack?: { readonly soft: number; readonly light: number; readonly heavy: number };
   readonly defense?: { readonly soft: number; readonly light: number; readonly heavy: number };
@@ -343,15 +343,14 @@ export interface ArmyStackView {
   readonly canRetreat?: boolean;
   readonly canSplit?: boolean;
   readonly canStop?: boolean;
-  readonly shortage?: {
-    severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
-    modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
-  };
   readonly supply?: {
     readonly capacity: number;
-    readonly stores: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    readonly current: number;
     readonly connected: boolean;
-    readonly allocation: Readonly<Record<'funds' | 'food' | 'metal' | 'oil', number>>;
+    readonly refillMultiplier: number;
+    readonly shortfalls: ReadonlyArray<'funds' | 'food' | 'metal' | 'oil'>;
+    readonly effectiveness: number;
+    readonly depletionPerHour: number;
   };
   readonly legalRetreatExits?: ReadonlyArray<{
     firstNodeId: number; destinationProvinceId: number; x: number; z: number;
@@ -365,11 +364,11 @@ export interface ArmyStackView {
     friendlyCasualties: number; enemyCasualties: number;
     estimatedGameHours: number | null; estimatedRealSeconds: number | null;
     friendlyModifiers: {
-      frontageUsed: number; frontageLimit: number; coordination: number; organization: number;
+      frontageUsed: number; frontageLimit: number; coordination: number;
       stanceOutput: number; supply: number; protection: number; terrain: number; devastation: number;
     };
     enemyModifiers: {
-      frontageUsed: number; frontageLimit: number; coordination: number; organization: number;
+      frontageUsed: number; frontageLimit: number; coordination: number;
       stanceOutput: number; supply: number; protection: number; terrain: number; devastation: number;
     };
   }>;
@@ -449,11 +448,11 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
     resourceOverlay: false,
     debugEnabled: false,
     technology: {
-      levels: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1 },
+      levels: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1 },
       slots: [null, null],
-      quotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']
+      quotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy']
         .map((id) => [id, { hours: 6, cost: {}, affordable: true }])) as TechnologyView['quotes'],
-      levelQuotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']
+      levelQuotes: Object.fromEntries(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy']
         .map((id) => [id, Array.from({ length: 8 }, (_, index) => ({ level: index + 1, hours: 6, cost: {}, affordable: true }))])) as unknown as TechnologyView['levelQuotes'],
     },
     ...overrides,

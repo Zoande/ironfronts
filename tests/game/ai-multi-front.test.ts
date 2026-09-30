@@ -16,7 +16,7 @@ function graph(): LandGraph {
     seaAdjacency: X.map(() => []), seaEdgeCost: X.map(() => []),
     component: new Int32Array(X.length), componentSize: [X.length], nodeCount: X.length,
     width: 10_000, height: 5_000,
-  };
+  } as unknown as LandGraph;
 }
 
 function world(): WorldData {

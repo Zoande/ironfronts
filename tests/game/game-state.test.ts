@@ -27,7 +27,7 @@ function minimalState(): GameState {
       'army-1': {
         id: 'army-1', ownerCountryId: 24, name: '1st Army', x: 100, z: 200,
         graphNodeId: 5, status: 'idle', order: null, extractingNodeId: null,
-        navalCrossing: null, organization: 100, entrenchment: 0, stance: 'attack-defend', inSupply: true,
+        navalCrossing: null, stance: 'attack-defend', inSupply: true,
         units: [{ typeId: 'infantry', count: 4, hp: 400, experience: 0 }],
       },
     },
@@ -54,6 +54,16 @@ describe('game-state serialization', () => {
     expect(restored.diplomacyMessages).toEqual({});
     expect(restored.diplomacyProposals).toEqual({});
     expect(restored.nextDiplomacyId).toBe(1);
+  });
+
+  it('converts legacy resource stores into one supply reserve', () => {
+    const legacy = minimalState();
+    const restored = deserializeGameState(JSON.stringify({ ...legacy, armies: {
+      'army-1': { ...legacy.armies['army-1'], supplyCapacity: 400,
+        supplyStores: { funds: 40, food: 30, metal: 20, oil: 10 } },
+    } }));
+    expect(restored.armies['army-1'].supply).toBe(100);
+    expect(restored.armies['army-1']).not.toHaveProperty('supplyStores');
   });
 
   it('cloneGameState is a deep, independent copy', () => {

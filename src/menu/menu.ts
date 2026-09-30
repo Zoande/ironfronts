@@ -8,17 +8,19 @@ import { assignedCountry as resolveAssignedCountry, selectableCountries } from '
 import { resolveFlagUrl } from '../ui/flags';
 import { mountCommander } from './commander';
 import { mountCampaignMap, type CampaignMapController } from './campaign-map';
+import { safeLocalStorage } from '../app/dom';
 
 export interface MenuHandlers {
   /**
    * Called once the player commits to entering the world, with the typed
    * scenario + country selection. Nothing downstream re-reads the DOM.
    */
-  lobby: GameLobby;
+  lobbies: readonly GameLobby[];
+  accountId: string;
   username: string;
   /** Persisted commander progression from the auth server's session response. */
   profile?: CommanderProfile;
-  onLaunch: (countryId: number) => void | Promise<void>;
+  onLaunch: (gameId: string, countryId: number) => void | Promise<void>;
   onLogout: () => void;
   audio?: AudioManager;
   /**
@@ -44,27 +46,31 @@ export function mountMenu(handlers: MenuHandlers): void {
   const musicVolume = document.getElementById('ifm-music-volume') as HTMLInputElement | null;
   const newCampaign = requiredId<HTMLButtonElement>('ifm-new-campaign');
   const continueButton = requiredId<HTMLButtonElement>('ifm-continue');
-  const assignedCountry = resolveAssignedCountry(handlers.lobby);
+  const otherButton = requiredId<HTMLButtonElement>('ifm-continue-other');
+  let currentLobby = handlers.lobbies[0];
+  const assignedLobbies = handlers.lobbies.filter((lobby) => resolveAssignedCountry(lobby));
+  const lastGameKey = `ironfronts:last-entered-game:${handlers.accountId}`;
+  let lastGameId: string | null = null;
+  try { lastGameId = safeLocalStorage()?.getItem(lastGameKey) ?? null; } catch { /* Storage can be unavailable. */ }
+  const assignedLobby = assignedLobbies.find((lobby) => lobby.gameId === lastGameId) ?? assignedLobbies[0] ?? null;
+  const assignedCountry = assignedLobby ? resolveAssignedCountry(assignedLobby) : null;
   mountCommander({
     username: handlers.username,
     profile: handlers.profile,
     onLogout: handlers.onLogout,
   });
-  const hasCampaign = assignedCountry !== null;
-  newCampaign.disabled = hasCampaign;
-  newCampaign.classList.toggle('is-disabled', hasCampaign);
-  newCampaign.title = hasCampaign ? 'A campaign is already in progress. Use Continue to resume it.' : '';
-  if (hasCampaign) {
-    const sub = newCampaign.querySelector('small');
-    if (sub) sub.textContent = 'Campaign already in progress.';
-  }
+  newCampaign.disabled = handlers.lobbies.length > 0 && assignedLobbies.length === handlers.lobbies.length;
+  newCampaign.classList.toggle('is-disabled', newCampaign.disabled);
+  if (newCampaign.disabled) newCampaign.title = 'All available campaigns have been joined';
   continueButton.disabled = assignedCountry === null;
+  continueButton.title = assignedCountry ? `Continue ${assignedLobby?.name} as ${assignedCountry.name}` : 'No country assignment yet';
+  continueButton.setAttribute('aria-label', continueButton.title);
   continueButton.classList.toggle('is-disabled', assignedCountry === null);
   continueButton.classList.toggle('is-assigned', assignedCountry !== null);
   requiredId<HTMLElement>('ifm-continue-detail').textContent = assignedCountry
-    ? `${assignedCountry.name}. Resume where you left off.` : 'No field assignment.';
+    ? `${assignedLobby?.name}: ${assignedCountry.name}. Resume where you left off.` : 'No field assignment.';
   if (assignedCountry) {
-    continueButton.addEventListener('click', () => void deploy(assignedCountry.id));
+    continueButton.addEventListener('click', () => { currentLobby = assignedLobby!; void deploy(assignedCountry.id); });
     const flagUrl = resolveFlagUrl(assignedCountry.name);
     if (flagUrl) {
       const icon = continueButton.querySelector<HTMLElement>('.ifm__icon');
@@ -74,6 +80,20 @@ export function mountMenu(handlers: MenuHandlers): void {
       else continueButton.classList.remove('is-assigned');
     } else {
       continueButton.classList.remove('is-assigned');
+    }
+  }
+  const otherLobby = assignedLobbies.find((lobby) => lobby !== assignedLobby);
+  const otherCountry = otherLobby ? resolveAssignedCountry(otherLobby) : null;
+  otherButton.hidden = !otherLobby || !otherCountry;
+  if (otherLobby && otherCountry) {
+    requiredId<HTMLElement>('ifm-continue-other-detail').textContent = `${otherLobby.name}: ${otherCountry.name}`;
+    otherButton.setAttribute('aria-label', `Continue ${otherLobby.name} as ${otherCountry.name}`);
+    otherButton.addEventListener('click', () => { currentLobby = otherLobby; void deploy(otherCountry.id); });
+    const flagUrl = resolveFlagUrl(otherCountry.name);
+    if (flagUrl) {
+      const icon = otherButton.querySelector<HTMLElement>('.ifm__icon');
+      icon?.style.setProperty('--flag', `url("${flagUrl}")`);
+      otherButton.classList.add('is-assigned');
     }
   }
 
@@ -148,10 +168,8 @@ export function mountMenu(handlers: MenuHandlers): void {
     });
   }
 
-  async function openDossier(card: HTMLButtonElement): Promise<void> {
+  async function openDossier(name: string): Promise<void> {
     if (busy) return;
-    const name = card.dataset.open;
-    if (!name) return;
     const page = document.getElementById(`ifm-${name}`);
     if (!page?.querySelector<HTMLElement>('.ifm__file')) return;
 
@@ -216,8 +234,36 @@ export function mountMenu(handlers: MenuHandlers): void {
   }
 
   root.querySelectorAll<HTMLButtonElement>('[data-open]').forEach((card) => {
-    card.addEventListener('click', () => void openDossier(card));
+    card.addEventListener('click', () => { if (card.dataset.open) void openDossier(card.dataset.open); });
   });
+  const chooseTheater = async (gameId: string): Promise<void> => {
+    const lobby = handlers.lobbies.find((item) => item.gameId === gameId);
+    if (!lobby) return;
+    currentLobby = lobby;
+    selectedCountryId = null;
+    mapController?.dispose();
+    mapController = null;
+    nationListBuilt = false;
+    countryListEl?.replaceChildren();
+    const europe = gameId === 'europe-at-war-1';
+    requiredId<HTMLElement>('ifm-campaign-title').textContent = lobby.name;
+    requiredId<HTMLElement>('ifm-campaign-file').textContent = europe ? 'IF-02' : 'IF-01';
+    requiredId<HTMLElement>('ifm-campaign-code').textContent = europe ? 'OP-EUROPE-01' : 'OP-1939-01';
+    requiredId<HTMLElement>('ifm-campaign-stamp').textContent = lobby.name;
+    requiredId<HTMLElement>('ifm-map-theater').textContent = europe ? 'Europe' : 'Global';
+    requiredId<HTMLElement>('ifm-briefing-theater').textContent = europe ? 'Europe' : 'Global';
+    requiredId<HTMLElement>('ifm-briefing-objective').textContent = europe
+      ? 'Take command of a nation in the European theater.'
+      : 'Coordinate a global mobilization and hold every theater at once.';
+    requiredId<HTMLElement>('ifm-campaign-description').textContent = europe
+      ? 'The European front opens in September 1939. Choose a nation and direct its armies, economy and diplomacy across the continent.'
+      : 'Every theater opens at once. Poland is overrun within weeks; the Low Countries, the Mediterranean and the Pacific follow as the belligerents commit. You take a single nation through the whole war — there is no separate front to sit out.';
+    if (beginOperation) beginOperation.textContent = lobby.assignedCountryId === null ? 'Begin Operation →' : 'Resume Operation →';
+    await closeDossier();
+    await openDossier('campaign');
+  };
+  requiredId<HTMLButtonElement>('ifm-choose-world').addEventListener('click', () => void chooseTheater('world-at-war-2'));
+  requiredId<HTMLButtonElement>('ifm-choose-europe').addEventListener('click', () => void chooseTheater('europe-at-war-1'));
   root.querySelectorAll<HTMLButtonElement>('[data-back]').forEach((button) => {
     button.addEventListener('click', () => void closeDossier());
   });
@@ -246,7 +292,7 @@ export function mountMenu(handlers: MenuHandlers): void {
   function updateConfirmEnabled(): void {
     const country = selectedCountryId === null
       ? null
-      : selectableCountries(handlers.lobby).find((c) => c.id === selectedCountryId) ?? null;
+      : selectableCountries(currentLobby).find((c) => c.id === selectedCountryId) ?? null;
     if (confirmNation) {
       confirmNation.disabled = country === null;
       confirmNation.textContent = country ? `Join as ${country.name}` : 'Join Campaign';
@@ -278,10 +324,10 @@ export function mountMenu(handlers: MenuHandlers): void {
 
   function buildNationList(): void {
     if (!countryListEl || nationListBuilt) return;
-    const selectableIds = new Set(selectableCountries(handlers.lobby).map((c) => c.id));
+    const selectableIds = new Set(selectableCountries(currentLobby).map((c) => c.id));
     // A one-city speck clutters the list without ever being a viable command —
     // it still exists on the map, just not as a list entry.
-    const rows = [...handlers.lobby.countries]
+    const rows = [...currentLobby.countries]
       .filter((country) => country.startingCities > 1)
       .sort((a, b) => {
         const sa = selectableIds.has(a.id) ? 0 : 1;
@@ -327,7 +373,7 @@ export function mountMenu(handlers: MenuHandlers): void {
             : `${country.startingCities} cities`;
       button.append(swatch, name, meta);
       button.addEventListener('click', () => {
-        const picked = handlers.lobby.countries.find((c) => c.id === country.id);
+        const picked = currentLobby.countries.find((c) => c.id === country.id);
         if (picked) selectCountry(picked);
       });
       li.append(button);
@@ -367,7 +413,7 @@ export function mountMenu(handlers: MenuHandlers): void {
     buildNationList();
     if (countryMap && !mapController) {
       if (countryHint) countryHint.textContent = 'Loading campaign map…';
-      mapController = mountCampaignMap(countryMap, handlers.lobby, selectCountry, (status) => {
+      mapController = mountCampaignMap(countryMap, currentLobby, selectCountry, (status) => {
         if (countryHint) countryHint.textContent = status.message;
       });
       void mapController.ready
@@ -390,7 +436,10 @@ export function mountMenu(handlers: MenuHandlers): void {
     beginOperation?.focus();
   }
 
-  beginOperation?.addEventListener('click', () => openNationPicker());
+  beginOperation?.addEventListener('click', () => {
+    if (currentLobby.assignedCountryId !== null) void deploy(currentLobby.assignedCountryId);
+    else openNationPicker();
+  });
   nationCancel?.addEventListener('click', () => closeNationPicker());
   confirmNation?.addEventListener('click', () => {
     if (selectedCountryId === null) return;
@@ -437,7 +486,8 @@ export function mountMenu(handlers: MenuHandlers): void {
     try {
       root.hidden = true;
       if (brand) brand.hidden = false;
-      await handlers.onLaunch(countryId);
+      await handlers.onLaunch(currentLobby.gameId, countryId);
+      try { safeLocalStorage()?.setItem(lastGameKey, currentLobby.gameId); } catch { /* Storage can be unavailable. */ }
     } catch (error) {
       // The launch was abandoned (e.g. "Return to Command"). Bring the menu
       // back on its primary screen with interaction fully restored.

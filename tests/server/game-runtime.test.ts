@@ -33,6 +33,20 @@ function tinyWorld(): WorldData {
 }
 
 describe('single authoritative game runtime', () => {
+  it('passes swept contact times through the live runtime before charging combat damage', () => {
+    const runtime=new GameRuntime(tinyWorld());
+    const state=runtime.session.state;
+    state.armies={};Object.assign(state,{fogOfWar:false,economyEnabled:false});
+    runtime.cheatSpawnUnit(0,1,'infantry');runtime.cheatSpawnUnit(1,2,'infantry');
+    const [mover,defender]=Object.values(state.armies);
+    state.relations['1:2']='war';
+    defender.x=mover.x+45;defender.graphNodeId=mover.graphNodeId;
+    defender.edge={edgeId:0,from:mover.graphNodeId,to:1,distanceAlongEdge:45};
+    expect(runtime.command(1,{type:'moveArmy',armyId:mover.id,x:150,z:100}).ok).toBe(true);
+    runtime.tick(0.25);
+    expect(mover.status).toBe('engaged');
+    expect(defender.units[0].hp).toBeCloseTo(100-(0.25-19/(70*1.35*0.9))*75,5);
+  });
   it('selects five-city countries, initializes them equally, and assigns seats atomically', () => {
     const runtime = new GameRuntime(tinyWorld());
     // The lobby map includes the ineligible minor in grey; join remains gated.
@@ -74,10 +88,12 @@ describe('single authoritative game runtime', () => {
     const runtime = new GameRuntime(tinyWorld());
     const army = Object.values(runtime.session.state.armies).find((candidate) => candidate.ownerCountryId === 1)!;
     const targetNode = runtime.session.graph.adjacency[army.graphNodeId][0];
+    const finalNode = runtime.session.graph.adjacency[targetNode]
+      .find((node) => node !== army.graphNodeId) ?? targetNode;
     army.order = {
-      path: [targetNode],
-      destX: runtime.session.graph.nodeX[targetNode],
-      destZ: runtime.session.graph.nodeZ[targetNode],
+      path: [targetNode, finalNode],
+      destX: runtime.session.graph.nodeX[finalNode],
+      destZ: runtime.session.graph.nodeZ[finalNode],
       intent: 'move',
       edgeProgress: 0,
     };
@@ -85,11 +101,15 @@ describe('single authoritative game runtime', () => {
     army.order.edgeProgress = 10;
     const normal = runtime.projection(1, 1).armies[army.id].motion!;
     const fast = runtime.projection(1, 2).armies[army.id].motion!;
+    const normalArrival = runtime.projection(1, 1).armies[army.id].arrival!;
+    const fastArrival = runtime.projection(1, 2).armies[army.id].arrival!;
     expect(normal.targetX).toBe(runtime.session.graph.nodeX[targetNode]);
     expect(normal.targetZ).toBe(runtime.session.graph.nodeZ[targetNode]);
     expect(normal.durationMs).toBeGreaterThan(0);
     expect(normal.progress).toBeGreaterThan(0);
     expect(fast.durationMs).toBeCloseTo(normal.durationMs / 2);
+    expect(normalArrival.remainingMs).toBeGreaterThan(normal.durationMs);
+    expect(fastArrival.remainingMs).toBeCloseTo(normalArrival.remainingMs / 2);
   });
 
   it('projects authoritative embark timing at the active simulation speed', () => {

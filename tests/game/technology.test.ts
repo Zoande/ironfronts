@@ -62,7 +62,7 @@ describe('technology progression', () => {
     const ctx = fixture();
     const country = ctx.state.countries[1];
     Object.assign(country.stockpile, { funds: 100_000, food: 100_000, metal: 100_000, oil: 100_000 });
-    country.technologies = { infantry: 1, resources: 2, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1 };
+    country.technologies = { infantry: 1, resources: 2, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1 };
     expect(startResearch(country, 'resources')).toMatchObject({
       ok: false, reason: 'Requires Resource Infrastructure Level 2.',
     });
@@ -72,7 +72,7 @@ describe('technology progression', () => {
   it('trains only the highest level supported by both technology and barracks', () => {
     const ctx = fixture();
     Object.assign(ctx.state.countries[1].stockpile, { funds: 1_000_000, manpower: 1_000_000, food: 1_000_000, metal: 1_000_000, oil: 1_000_000 });
-    ctx.state.countries[1].technologies = { infantry: 4, resources: 1, resourceBuildings: 1, training: 4, hybrid: 1, armored: 1 };
+    ctx.state.countries[1].technologies = { infantry: 4, resources: 1, resourceBuildings: 1, training: 4, hybrid: 1, armored: 1, navy: 1 };
     ctx.state.provinceBuildings[10].barracks = 3;
     expect(producibleUnits(ctx, 10, 1)).toContain('infantry-l3');
     expect(producibleUnits(ctx, 10, 1)).not.toContain('infantry');

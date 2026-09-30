@@ -174,7 +174,7 @@ fn lineVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) 
   var output: LineOutput;
   output.position = clip + vec4f(pixelOffset * clip.w, 0.0, 0.0);
   output.outerColor = color;
-  output.fogVisibility = 1.0 - horizontalWorldFog(select(world0.x, world1.x, endpoint == 1u));
+  output.fogVisibility = 1.0 - mapFog(select(world0.xz, world1.xz, endpoint == 1u));
   output.innerColor = innerColor;
   output.lineSide = side;
   output.countryCasing = countryCasing;

@@ -10,7 +10,9 @@ import type { SimContext } from '../../src/game/sim-context';
 import type { WorldData, WorldProvince } from '../../src/game/world-data';
 import { issueManualRetreat, legalRetreatPaths, stepCombat } from '../../src/game/combat';
 import type { ArmyStack } from '../../src/game/units/army';
-import { retreatPaths } from '../../src/game/movement/retreat';
+import { issueRetreatOrder, retreatPaths } from '../../src/game/movement/retreat';
+import { validateWorldState } from '../../src/game/state/state-invariants';
+import { stepMovement } from '../../src/game/units/movement';
 
 function prov(id: number, x: number, z: number): WorldProvince {
   return { id, center: [x, z], terrainId: 0, population: 100, coastal: false, urban: false };
@@ -147,13 +149,13 @@ describe('retreat', () => {
     expect(routes[0].destinationProvinceId).toBe(20);
   });
 
-  it('does not duplicate the leading node when turning back mid-edge (partial return)', () => {
+  it('keeps the edge origin as the first target when turning back mid-edge', () => {
     // Node 0 is the battle site; the army is mid-transit toward node 1 (the
     // enemy-ward edge) when it breaks, so it must turn back through node 0
-    // toward the safe rear province at node 2. `retreatPaths` used to prepend
-    // `army.graphNodeId` even though the partial-return route already starts
-    // there (edge.from === graphNodeId), producing a path like [0, 0, ...]
-    // whose second hop then failed the server's mid-edge order validation.
+    // toward the safe rear province at node 2. RetreatPath uses the same
+    // inclusive-current-node convention as ordinary routing, so node 0 must
+    // appear twice: installOrder removes the first and leaves the second as
+    // the physical turn-back target.
     const threeNodeGraph = buildLandGraph(new Float32Array([
       100, 100, 300, 100, 1, 0, 0, 0,
       100, 100, 900, 100, 1, 0, 0, 0,
@@ -192,8 +194,19 @@ describe('retreat', () => {
     const routes = retreatPaths(c, c.state.armies.weak, [0]);
     expect(routes).toHaveLength(1);
     expect(routes[0].path[0]).toBe(0);
-    expect(routes[0].path[1]).not.toBe(0);
+    expect(routes[0].path[1]).toBe(0);
     expect(routes[0].path[routes[0].path.length - 1]).toBe(2);
+    expect(routes[0].length).toBeGreaterThan(0);
+    expect(routes[0].length).toBeLessThan(Infinity);
+    issueRetreatOrder(c, c.state.armies.weak, routes[0]);
+    expect(c.state.armies.weak.order?.path[0]).toBe(0);
+    c.state.nextFrontId ??= 1;
+    c.state.nextDiplomacyId ??= 1;
+    c.state.diplomacyMessages ??= {};
+    c.state.diplomacyProposals ??= {};
+    expect(() => validateWorldState(c)).not.toThrow();
+    stepMovement(c, 1 / 3600);
+    expect(c.state.armies.weak.x).toBeLessThan(150);
   });
 
   it('fights to the end when there is nowhere to retreat', () => {

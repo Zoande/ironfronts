@@ -118,6 +118,46 @@ export function buildInfrastructure({
   const hiddenShowcase = hiddenRoads.find((road) => road.reason === 'water') ?? hiddenRoads[0];
   const midpoint = (road) => road.points[Math.floor(road.points.length * 0.5)];
 
+  // Gameplay consumes the exact adapted centerlines used to build the visual
+  // ribbon above, never the ribbon triangles themselves. Float32-normalising
+  // before measuring makes each stored length match the serialized geometry.
+  const sourceNodeIds = [...new Set(assembled.routes.flatMap((route) => [route.start, route.end]))]
+    .sort((a, b) => a - b);
+  const canonicalNodeBySource = new Map(sourceNodeIds.map((sourceId, id) => [sourceId, id]));
+  const pointValues = [];
+  const canonicalEdges = assembled.routes.map((route) => {
+    const pointOffset = pointValues.length / 2;
+    let length = 0;
+    let previous;
+    for (const raw of route.points) {
+      const point = { x: Math.fround(wrap(raw.x, worldWidth)), z: Math.fround(raw.z) };
+      if (previous) length += Math.hypot(unwrapNear(point.x, previous.x, worldWidth) - previous.x, point.z - previous.z);
+      pointValues.push(point.x, point.z);
+      previous = point;
+    }
+    return {
+      id: route.id,
+      from: canonicalNodeBySource.get(route.start),
+      to: canonicalNodeBySource.get(route.end),
+      length,
+      pointOffset,
+      pointCount: route.points.length,
+      dotted: Boolean(route.suppressed),
+    };
+  });
+  const endpointBySource = new Map();
+  for (const route of assembled.routes) {
+    endpointBySource.set(route.start, route.points[0]);
+    endpointBySource.set(route.end, route.points.at(-1));
+  }
+  const canonicalNodes = sourceNodeIds.map((sourceId, id) => {
+    // Every adapted route sharing an endpoint produces the same endpoint.
+    // Taking that value (rather than the pre-adaptation source center) keeps
+    // graph nodes byte-identical to the already-rendered road endpoints.
+    const point = endpointBySource.get(sourceId);
+    return { id, sourceNodeId: sourceId, x: Math.fround(wrap(point.x, worldWidth)), z: Math.fround(point.z) };
+  });
+
   console.log(`Hidden physical roads: ${hiddenRoads.length} (${Object.entries(hiddenByReason).map(([reason, count]) => `${reason}=${count}`).join(', ') || 'none'})`);
   return {
     ...meshes,
@@ -125,6 +165,8 @@ export function buildInfrastructure({
     roadField: roadRaster.field,
     roadClearance: roadRaster.clearance,
     cityPlans,
+    roadNetwork: { version: 1, nodes: canonicalNodes, edges: canonicalEdges },
+    roadCenterlines: Float32Array.from(pointValues),
     roadReport: {
       version: 'direct-roads-v1',
       logicalRoads: assembled.routes.length,

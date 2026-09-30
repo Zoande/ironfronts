@@ -4,6 +4,8 @@ import { INITIAL_GAME_EPOCH_MS } from '../time';
 import { UNIT_TYPE_BY_ID } from '../units/unit-catalog';
 import { qualifyingPhaseFromBuildings } from '../phase';
 import { initialTechnologyLevels } from '../technology';
+import { createTransportManifestation, transportType } from '../naval/transport';
+import { SUPPLY_CAPACITY_PER_UNIT, type ArmyStack } from '../units/army';
 
 const number = z.number().finite();
 const positive = number.nonnegative();
@@ -16,6 +18,8 @@ const signedStockpile = z.object({ funds: number, manpower: number, food: number
 const unit = z.string().refine((value) => UNIT_TYPE_BY_ID.has(value), 'Unknown unit type');
 const building = z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']);
 const order = z.object({ path: z.array(id), destX: number, destZ: number, intent: z.enum(['move', 'attack']), edgeProgress: positive,
+  roadDestination: z.object({ edgeId: id, from: id, to: id, distanceAlongEdge: positive }).optional(),
+  seaDestination: point.extend({ anchorNodeId: id }).optional(),
   target: z.discriminatedUnion('kind', [point.extend({ kind: z.literal('position') }),
     z.object({ kind: z.literal('province'), provinceId: id, x: number.optional(), z: number.optional() }),
     z.object({ kind: z.literal('army'), armyId: z.string(), lastKnownX: number, lastKnownZ: number })]).optional() });
@@ -23,8 +27,8 @@ const side = z.object({ countryId: id, directionNodeId: id, role: z.enum(['attac
 const queue = z.object({ id: z.string(), ownerCountryId: id, progressWork: positive.optional(), totalWork: number.positive().optional(), progressHours: positive.optional(), totalHours: number.positive().optional(), targetTier: id.optional() });
 const shortage = z.object({ severity: positive.max(100), notifiedThreshold: z.union([z.literal(0), z.literal(25), z.literal(50), z.literal(75)]) });
 const potential = z.object({ food: positive.max(1), stone: positive.max(1), metal: positive.max(1), oil: positive.max(1) });
-const technologyBranch = z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']);
-const technologyLevelsSchema = z.object({ infantry: id.min(1).max(8), resources: id.min(1).max(8), resourceBuildings: id.min(1).max(8).optional(), training: id.min(1).max(8), hybrid: id.min(1).max(8), armored: id.min(1).max(8) });
+const technologyBranch = z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy']);
+const technologyLevelsSchema = z.object({ infantry: id.min(1).max(8), resources: id.min(1).max(8), resourceBuildings: id.min(1).max(8).optional(), training: id.min(1).max(8), hybrid: id.min(1).max(8), armored: id.min(1).max(8), navy: id.min(1).max(8).optional() });
 const research = z.object({ branch: technologyBranch, targetLevel: id.min(2).max(8), progressHours: positive, totalHours: number.positive() });
 const resourceBuildings = z.object({ fields: id.max(8), quarry: id.max(8), mine: id.max(8), oilPump: id.max(8) });
 const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: z.string(), mode: z.enum(['campaign', 'sandbox']),
@@ -49,17 +53,21 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
   provinceOwners: record(id), provinceBuildings: record(z.object({ barracks: id.max(8), tankPlant: id.max(8), ordnance: id.max(8), missileSite: id.max(8).default(0) })),
   productionQueues: record(z.array(queue.extend({ unitTypeId: unit }))), constructionQueues: record(z.array(queue.extend({ buildingId: building }))), rallyPoints: record(point),
   armies: record(point.extend({ id: z.string(), ownerCountryId: id, name: z.string(), graphNodeId: id,
-    edge: z.object({ from: id, to: id }).nullable().optional(),
-    units: z.array(z.object({ typeId: unit, count: id, hp: positive, experience: positive })), status: z.enum(['idle', 'moving', 'engaged', 'retreating', 'extracting', 'embarking', 'atSea', 'disembarking']), order: order.nullable(), extractingNodeId: id.nullable(), extractionAssignment: z.object({ provinceId: id, resource: z.enum(['food', 'stone', 'metal', 'oil']) }).nullable().optional(), shortageSeverity: z.object({ funds: positive.max(100), food: positive.max(100), metal: positive.max(100), oil: positive.max(100) }).optional(),
+    edge: z.object({ from: id, to: id, edgeId: id.optional(), distanceAlongEdge: positive.optional() }).nullable().optional(),
+    units: z.array(z.object({ typeId: unit, count: id, hp: positive, experience: positive })), status: z.enum(['idle', 'moving', 'engaged', 'retreating', 'extracting', 'embarking', 'atSea', 'disembarking']), order: order.nullable(), extractingNodeId: id.nullable(), extractionAssignment: z.object({ provinceId: id, resource: z.enum(['food', 'stone', 'metal', 'oil']) }).nullable().optional(),
     lastGraphNodeId: id.nullable().optional(), suspendedOrder: order.nullable().optional(), battleFrontIds: z.array(z.string()).optional(),
     retreat: z.object({ destinationProvinceId: id, protectedUntilNodeId: id, protected: z.boolean() }).nullable().optional(),
     artillery: z.object({ targetArmyId: z.string().nullable(), manualTarget: z.boolean() }).optional(),
-    navalCrossing: z.object({ fromNodeId: id, toNodeId: id, hoursRemaining: positive }).nullable().default(null),
-    organization: positive.optional(), entrenchment: positive.optional(),
+    navalCrossing: z.object({ fromNodeId: id, toNodeId: id, hoursRemaining: positive,
+      returningToAnchor: z.boolean().optional() }).nullable().default(null),
+    transport: z.object({ kind: z.literal('transport'), level: id.min(1).max(8), cargo: z.array(z.object({
+      cargoTypeId: unit, shipHp: z.array(number.positive()),
+    })) }).nullable().optional(),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']).optional(),
-    inSupply: z.boolean().optional(), supplyStores: z.object({ funds: positive, food: positive, metal: positive, oil: positive }).partial().optional(), supplyCapacity: positive.optional() })),
+    inSupply: z.boolean().optional(), supply: positive.optional(), supplyCapacity: positive.optional(),
+    supplyStores: z.object({ funds: positive, food: positive, metal: positive, oil: positive }).partial().optional() })),
   battles: record(z.object({ id: z.string(), frontIds: z.array(z.string()) })),
-  battleFronts: record(point.extend({ id: z.string(), battleId: z.string(), anchorNodeId: id, kind: z.enum(['road', 'province']), provinceId: id.nullable(), sideA: side, sideB: side })),
+  battleFronts: record(point.extend({ id: z.string(), battleId: z.string(), anchorNodeId: id, kind: z.enum(['road', 'province']), provinceId: id.nullable(), edgeId: id.optional(), distanceAlongEdge: positive.optional(), sideA: side, sideB: side })),
   resourceNodes: record(point.extend({ id, kind: z.enum(['stone', 'metal', 'oil']), remaining: positive, initialAmount: positive, controllerCountryId: id,
     provinceId: z.number().int(), accessNodeId: z.number().int(), extractorArmyId: z.string().nullable(), status: z.enum(['idle', 'secured', 'extracting', 'exhausted']), provenance: z.enum(['generatedNatural', 'scenarioGuarantee']) })),
   provinceEconomies: record(z.object({ resourcePotential: potential, baseProduction: stockpile, resourceBuildings,
@@ -103,6 +111,7 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
     country.phase ??= qualifyingPhaseFromBuildings(parsed as unknown as GameState, country.id);
     country.technologies ??= initialTechnologyLevels();
     country.technologies.resourceBuildings ??= country.technologies.resources;
+    country.technologies.navy ??= 1;
     if (country.researchSlots || country.research) {
       country.researchSlots ??= [country.research!, null];
       while (country.researchSlots.length < 2) country.researchSlots.push(null);
@@ -111,15 +120,46 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
   }
   for (const buildings of Object.values(parsed.provinceBuildings)) buildings.missileSite ??= 0;
   for (const army of Object.values(parsed.armies)) {
+    if (army.supply === undefined && army.supplyStores) {
+      const capacity = army.units.reduce((sum, group) => sum + group.count * SUPPLY_CAPACITY_PER_UNIT, 0);
+      army.supply = Math.min(capacity, Object.values(army.supplyStores).reduce((sum, value) => sum + value, 0));
+    }
+    delete army.supplyStores;
     army.navalCrossing ??= null;
-    army.organization ??= 100;
-    army.entrenchment ??= 0;
+    const naval = army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
+    if (naval && !army.transport) {
+      army.transport = createTransportManifestation(
+        army as unknown as ArmyStack,
+        parsed.countries[army.ownerCountryId]?.technologies?.navy ?? 1,
+      );
+    } else army.transport ??= null;
     army.stance ??= 'attack-defend';
     army.inSupply ??= true;
     const types = new Set<string>();
     for (const group of army.units) {
       if (!group.count || !group.hp || group.hp > group.count * UNIT_TYPE_BY_ID.get(group.typeId)!.maxHp + 1e-6 || types.has(group.typeId)) throw new Error('Invalid army composition.');
       types.add(group.typeId);
+    }
+    if (army.transport) {
+      const stats = transportType(army.transport.level);
+      const cargoTypes = new Set<string>();
+      const landByType = new Map(army.units.map((group) => [group.typeId, group]));
+      for (const cargo of army.transport.cargo) {
+        const land = landByType.get(cargo.cargoTypeId);
+        const expectedLandHp = cargo.shipHp.reduce(
+          (sum, hp) => sum + hp / stats.maxHp * UNIT_TYPE_BY_ID.get(cargo.cargoTypeId)!.maxHp, 0,
+        );
+        if (cargoTypes.has(cargo.cargoTypeId) || !cargo.shipHp.length
+          || cargo.shipHp.some((hp) => hp <= 0 || hp > stats.maxHp + 1e-6)
+          || !land || land.count !== cargo.shipHp.length || Math.abs(land.hp - expectedLandHp) > 1e-5) {
+          throw new Error('Invalid transport manifestation.');
+        }
+        cargoTypes.add(cargo.cargoTypeId);
+      }
+      if (!naval || cargoTypes.size !== army.units.length
+        || army.units.some((group) => !cargoTypes.has(group.typeId))) {
+        throw new Error('Invalid transport manifestation.');
+      }
     }
     if (!parsed.countries[army.ownerCountryId] || army.units.length === 0) throw new Error('Invalid army owner or empty army.');
   }

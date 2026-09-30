@@ -4,11 +4,12 @@ import {
   type GameCommand, type GameState, type WorldData,
 } from '@ironfronts/game-core';
 import {
-  GAME_ID, GAME_VERSION, PROTOCOL_VERSION,
+  PROTOCOL_VERSION,
   type CommandPayload, type GameLobby, type PlayerProjection, type PresentationCatalogs,
 } from '@ironfronts/protocol';
 import { projectFor } from './projection';
 import { SIMULATION_INTERVAL_MS, SIMULATION_TICK_HOURS } from './timing';
+import { config } from './config';
 
 export class GameRuntime {
   readonly session: GameSession;
@@ -23,7 +24,7 @@ export class GameRuntime {
     this.session = snapshot
       ? GameSession.restore(snapshot.state, world)
       : GameSession.create({
-        scenarioId: 'OP-1939-01', theater: 'global', startDate: '1 Sep 1939',
+        scenarioId: config.scenarioId, theater: 'global', startDate: '1 Sep 1939',
         playerCountryId: 0, sandbox: false,
       }, world);
     if (snapshot) {
@@ -48,9 +49,9 @@ export class GameRuntime {
     }
     const aliveCountryIds = new Set(Object.values(this.session.state.provinceOwners));
     return {
-      gameId: GAME_ID,
-      name: 'World at War',
-      gameVersion: GAME_VERSION,
+      gameId: config.gameId,
+      name: config.gameName,
+      gameVersion: config.gameVersion,
       protocolVersion: PROTOCOL_VERSION,
       assignedCountryId: accountId ? this.seatsByAccount.get(accountId) ?? null : null,
       // The lobby map shows every territorial country. `join` still enforces
@@ -168,10 +169,10 @@ export class GameRuntime {
       x: this.session.graph.nodeX[nodeId], z: this.session.graph.nodeZ[nodeId], graphNodeId: nodeId,
       edge: null, units: [{ typeId: unitTypeId, count: 1, hp: unitType(unitTypeId).maxHp, experience: 0 }],
       status: 'idle', order: null, extractingNodeId: null, extractionAssignment: null,
-      shortageSeverity: { funds: 0, food: 0, metal: 0, oil: 0 }, lastGraphNodeId: null,
+      lastGraphNodeId: null,
       suspendedOrder: null, battleFrontIds: [], retreat: null,
-      artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null,
-      organization: 100, entrenchment: 0, stance: 'attack-defend', inSupply: true,
+      artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null, transport: null,
+      stance: 'attack-defend', inSupply: true,
     };
     this.session.refreshDerivedState();
     return { ok: true, message: `${definition.name} spawned for country ${countryId} in province ${provinceId}.` };

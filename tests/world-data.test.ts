@@ -18,7 +18,7 @@ interface Manifest {
     ranges: Array<{ firstInstance: number; instanceCount: number }>;
   };
   counts: Record<string, number>;
-  sidecars: { provinceDetails: { url: string; version: number } };
+  sidecars: { provinceDetails: { url: string; version: number }; roadNetwork: { url: string; version: number } };
   politics: {
     owners: { url: string; count: number; stride: number };
     adjacency: { url: string; count: number; stride: number };
@@ -54,10 +54,10 @@ function viewU32(bytes: Buffer): Uint32Array {
   return new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 }
 
-describe('generated v12 world package', () => {
+describe('generated v13 world package', () => {
   it('preserves the canonical world and exposes simplified roads plus supplied waterways', async () => {
     const data = await manifest();
-    expect(data.version).toBe(12);
+    expect(data.version).toBe(13);
     expect(data.world).toEqual(expect.objectContaining({ width: 13_562, height: 7_000, wrapX: true }));
     expect(data.provinces).toHaveLength(3_303);
     expect(new Set(data.provinces.map((province) => province.id)).size).toBe(3_303);
@@ -66,6 +66,8 @@ describe('generated v12 world package', () => {
     expect(data.fields.terrainNormal).toEqual(expect.objectContaining({ width: 2048, format: 'rg8snorm' }));
     expect(data.fields.terrainAlbedo).toEqual(expect.objectContaining({ width: 2048, format: 'rgba8unorm-srgb' }));
     expect(data.fields.terrainAlbedo.mipLevelCount).toBeGreaterThan(1);
+    expect(data.sidecars.roadNetwork).toEqual({ url: 'road-network.json', version: 1 });
+    expect(data.buffers.roadCenterlines).toEqual(expect.objectContaining({ url: 'road-centerlines.f32', stride: 2 }));
     const [normalBytes, albedoBytes, navigationBytes] = await Promise.all([
       readFile(`public/world/${data.fields.terrainNormal.url}`),
       readFile(`public/world/${data.fields.terrainAlbedo.url}`),
@@ -113,6 +115,36 @@ describe('generated v12 world package', () => {
     }
   });
 
+  it('packages stable canonical road edges whose lengths match their rendered centerlines', async () => {
+    const data = await manifest();
+    const network = JSON.parse(await readFile('public/world/road-network.json', 'utf8')) as {
+      version: number;
+      nodes: Array<{ id: number; x: number; z: number }>;
+      edges: Array<{ id: number; from: number; to: number; length: number; pointOffset: number; pointCount: number; dotted: boolean }>;
+    };
+    const points = viewF32(await readFile('public/world/road-centerlines.f32'));
+    expect(network.version).toBe(1);
+    expect(network.edges).toHaveLength(data.counts.logicalRoads);
+    expect(network.edges.filter((edge) => edge.dotted)).toHaveLength(data.counts.hiddenRoads);
+    for (const [edgeIndex, edge] of network.edges.entries()) {
+      expect(edge.id).toBe(edgeIndex);
+      let measured = 0;
+      for (let i = 1; i < edge.pointCount; i += 1) {
+        const a = (edge.pointOffset + i - 1) * 2, b = (edge.pointOffset + i) * 2;
+        let dx = points[b] - points[a];
+        if (dx > data.world.width / 2) dx -= data.world.width;
+        else if (dx < -data.world.width / 2) dx += data.world.width;
+        measured += Math.hypot(dx, points[b + 1] - points[a + 1]);
+      }
+      expect(edge.length).toBeCloseTo(measured, 9);
+      expect([points[edge.pointOffset * 2], points[edge.pointOffset * 2 + 1]])
+        .toEqual([network.nodes[edge.from].x, network.nodes[edge.from].z]);
+      const end = (edge.pointOffset + edge.pointCount - 1) * 2;
+      expect([points[end], points[end + 1]])
+        .toEqual([network.nodes[edge.to].x, network.nodes[edge.to].z]);
+    }
+  });
+
   it('reconstructs the authoritative river graph and both static ocean-water canals', async () => {
     const data = await manifest();
     const [vertexBytes, indexBytes, networkBytes, maskBytes, provinceIdBytes, heightBytes, nodeBytes, reportBytes] = await Promise.all([
@@ -131,7 +163,7 @@ describe('generated v12 world package', () => {
     const riverNames = new Set(report.waterways.riverSystems);
     const sourceRiverPoints = source.nodes.filter((node) => node.kind === 'sea_point' && riverNames.has(node.location_name));
     const sourceCanalPoints = source.nodes.filter((node) => node.kind === 'sea_point' && ['Kiel Canal', 'Suez Channel'].includes(node.location_name));
-    expect(report.version).toBe('world-generation-v12');
+    expect(report.version).toBe('world-generation-v13');
     expect(report.waterways.animatedSurface).toBe(true);
     expect(report.waterways.animation).toBe('simple-flow-aligned-shimmer');
     expect(report.waterways.terrainTreatment).toBe('shallow lower-only channel with guarded inner terrain clip and independently draped surface vertices');

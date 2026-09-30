@@ -3,7 +3,6 @@ import { fixture, army } from '../helpers/simulation';
 import { setRelation } from '../../src/game/game-state';
 import { applyCommand } from '../../src/game/commands';
 import { stepCombat } from '../../src/game/combat';
-import { stepEntrenchment } from '../../src/game/combat/entrenchment';
 import { stanceModifiers, STANCES } from '../../src/game/combat/stance';
 
 describe('stanceModifiers', () => {
@@ -13,22 +12,18 @@ describe('stanceModifiers', () => {
     for (const modifiers of [implicit, explicit]) {
       expect(modifiers.attackOutput).toBe(1);
       expect(modifiers.damageTaken).toBe(1);
-      expect(modifiers.entrenchmentRate).toBe(1);
-      expect(modifiers.organizationDrain).toBe(1);
-      expect(modifiers.retreatThreshold).toBe(1);
+      expect(modifiers.hpRetreatThreshold).toBe(1);
     }
   });
 
   it('every stance is internally consistent with its own description', () => {
-    // Attack hits harder but never digs in.
+    // Attack hits harder.
     expect(stanceModifiers('attack').attackOutput).toBeGreaterThan(1);
-    expect(stanceModifiers('attack').entrenchmentRate).toBe(0);
-    // Defend is tougher and digs in faster than balanced.
+    // Defend is tougher than balanced.
     expect(stanceModifiers('defend').damageTaken).toBeLessThan(1);
-    expect(stanceModifiers('defend').entrenchmentRate).toBeGreaterThan(1);
-    // Retreat breaks off far sooner than balanced; defend holds on longer.
-    expect(stanceModifiers('retreat').retreatThreshold).toBeGreaterThan(1);
-    expect(stanceModifiers('defend').retreatThreshold).toBeLessThan(1);
+    expect(stanceModifiers('defend-retreat').damageTaken).toBeLessThan(1);
+    expect(stanceModifiers('retreat').hpRetreatThreshold).toBeGreaterThan(1);
+    expect(stanceModifiers('defend').hpRetreatThreshold).toBeLessThan(1);
   });
 
   it('STANCES lists exactly the five stances the icon set supports', () => {
@@ -49,20 +44,6 @@ describe('setStance command', () => {
     const denied = applyCommand(ctx, { type: 'setStance', countryId: 2, armyId: 'a', stance: 'attack' });
     expect(denied.ok).toBe(false);
     expect(ctx.state.armies.a.stance).toBe('defend'); // unchanged
-  });
-});
-
-describe('stance effects on entrenchment', () => {
-  it('an attack-postured army never digs in; a defend-postured one digs in faster than balanced', () => {
-    const ctx = fixture();
-    ctx.state.armies = {
-      attacker: { ...army('attacker', 1), status: 'idle', entrenchment: 0, stance: 'attack' },
-      balanced: { ...army('balanced', 1), status: 'idle', entrenchment: 0, stance: 'attack-defend' },
-      defender: { ...army('defender', 1), status: 'idle', entrenchment: 0, stance: 'defend' },
-    };
-    stepEntrenchment(ctx, 5);
-    expect(ctx.state.armies.attacker.entrenchment).toBe(0);
-    expect(ctx.state.armies.defender.entrenchment!).toBeGreaterThan(ctx.state.armies.balanced.entrenchment!);
   });
 });
 

@@ -50,6 +50,13 @@ export interface StopArmyCommand {
   readonly armyId: string;
 }
 
+export interface RenameArmyCommand {
+  readonly type: 'renameArmy';
+  readonly countryId: number;
+  readonly armyId: string;
+  readonly name: string;
+}
+
 export interface SetStanceCommand {
   readonly type: 'setStance';
   readonly countryId: number;
@@ -149,7 +156,7 @@ export interface RespondResourceTradeCommand {
 
 export type GameCommand =
   | MoveArmyCommand | AttackCommand | RetreatArmyCommand | SplitArmyCommand
-  | StopArmyCommand | SetStanceCommand | ExtractCommand | ProduceCommand | BuildCommand | ResearchCommand | RallyCommand
+  | StopArmyCommand | RenameArmyCommand | SetStanceCommand | ExtractCommand | ProduceCommand | BuildCommand | ResearchCommand | RallyCommand
   | SendDiplomaticMessageCommand | ProposeDiplomacyCommand | RespondDiplomacyCommand
   | DeclareWarCommand | EndAllianceCommand | StrikeCommand
   | MarketTradeCommand | ProposeResourceTradeCommand | RespondResourceTradeCommand;

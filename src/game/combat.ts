@@ -5,14 +5,13 @@ import { stackUnitCount, type ArmyStack } from './units/army';
 import { addDamage, applyPendingDamage, calculateDamage, type GroupRef, type PendingDamage } from './combat/damage';
 import { initializeState, detectEngagements, sideArmies, removeArmyFromAllFronts, cleanupFronts } from './combat/fronts';
 import {
-  COMBAT_FRONTAGE, DEVASTATED_DEFENDER_STRENGTH_MULTIPLIER, OUT_OF_SUPPLY_COMBAT_MULTIPLIER,
+  COMBAT_FRONTAGE, DEVASTATED_DEFENDER_STRENGTH_MULTIPLIER,
 } from './combat/constants';
 import { autoRetreat } from './combat/retreat';
 import { stepArtillery } from './combat/artillery';
-import { drainOrganizationFromCombat, organizationEffectiveness } from './combat/organization';
 import { terrainDefenseMultiplier } from './combat/terrain';
-import { entrenchmentDamageMultiplier } from './combat/entrenchment';
 import { stanceModifiers } from './combat/stance';
+import { supplyEffectiveness } from './combat/supply';
 import type { CombatEvent } from './combat/events';
 export type { CombatEvent } from './combat/events';
 export { COMBAT_FRONTAGE } from './combat/constants';
@@ -28,10 +27,9 @@ export interface CombatRateModifiers {
   readonly frontageUsed: number;
   readonly frontageLimit: number;
   readonly coordination: number;
-  readonly organization: number;
   readonly stanceOutput: number;
   readonly supply: number;
-  /** Combined entrenchment, defensive-stance, and supply multiplier on damage received. */
+  /** Defensive-stance and supply multiplier on damage received. */
   readonly protection: number;
   readonly terrain: number;
   readonly devastation: number;
@@ -64,16 +62,14 @@ function rateModifiers(
   role: BattleRole,
 ): CombatRateModifiers {
   const frontageUsed = Math.min(COMBAT_FRONTAGE, armies.reduce((sum, army) => sum + stackUnitCount(army), 0));
-  const supply = (army: ArmyStack): number => army.inSupply === false ? OUT_OF_SUPPLY_COMBAT_MULTIPLIER : 1;
+  const supply = supplyEffectiveness;
   return {
     frontageUsed,
     frontageLimit: COMBAT_FRONTAGE,
     coordination: 1 / Math.sqrt(Math.max(1, frontageUsed)),
-    organization: weightedAverage(armies, (army) => organizationEffectiveness(army.organization ?? 100)),
     stanceOutput: weightedAverage(armies, (army) => stanceModifiers(army.stance).attackOutput),
     supply: weightedAverage(armies, supply),
-    protection: weightedAverage(armies, (army) => entrenchmentDamageMultiplier(army.entrenchment ?? 0)
-      * stanceModifiers(army.stance).damageTaken / supply(army)),
+    protection: weightedAverage(armies, (army) => stanceModifiers(army.stance).damageTaken / supply(army)),
     terrain: role === 'defense' ? terrainDefenseMultiplier(session.world, front.x, front.z) : 1,
     devastation: role === 'defense' && isDevastated(session, front.provinceId)
       ? DEVASTATED_DEFENDER_STRENGTH_MULTIPLIER : 1,
@@ -128,22 +124,26 @@ export function destroyArmy(session: SimContext, armyId: string): void {
 }
 
 /** One fixed authoritative combat pass. All fronts use one pre-damage snapshot. */
-export function stepCombat(session: SimContext, dtHours: number): CombatEvent[] {
+export function stepCombat(session: SimContext, dtHours: number, contactTimes?: ReadonlyMap<string, number>): CombatEvent[] {
   initializeState(session);
   const events: CombatEvent[] = [];
-  detectEngagements(session, events);
+  const joinedAt = detectEngagements(session, events, contactTimes);
   const pending = new Map<string, PendingDamage>();
   const activeFronts = Object.values(session.state.battleFronts);
   for (const front of activeFronts) {
-    const damage = calculateFrontDamageRates(session, front, dtHours);
-    // Terrain protects whichever side is defending at this front by cutting
-    // the damage that lands on it — the mirror image of devastation, which
-    // instead cuts a devastated defender's own output.
-    addDamage(pending, damage.sideAToB);
-    addDamage(pending, damage.sideBToA);
+    const times = joinedAt.get(front.id)!;
+    const boundaries = [...new Set([0, dtHours, ...[...times.values()].map((at) => Math.min(dtHours, at))])].sort((a,b) => a-b);
+    for (let i=1; i<boundaries.length; i++) {
+      const start = boundaries[i-1], hours = boundaries[i]-start;
+      const active = { ...front,
+        sideA:{...front.sideA,armyIds:front.sideA.armyIds.filter((id) => (times.get(id) ?? 0) <= start)},
+        sideB:{...front.sideB,armyIds:front.sideB.armyIds.filter((id) => (times.get(id) ?? 0) <= start)} };
+      const damage = calculateFrontDamageRates(session, active, hours);
+      addDamage(pending, damage.sideAToB);
+      addDamage(pending, damage.sideBToA);
+    }
   }
   applyPendingDamage(pending);
-  drainOrganizationFromCombat(session, pending, dtHours);
   if (session.state.simulationTick % 10 === 0) {
     for (const front of activeFronts) {
       events.push({

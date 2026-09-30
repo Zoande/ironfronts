@@ -4,15 +4,9 @@ import type { BattleRole } from '../game-state';
 import type { ArmyStack, UnitGroup } from '../units/army';
 import { unitType } from '../units/unit-catalog';
 import type { ArmorClass, DamageProfile } from '../units/unit-types';
-import { COMBAT_FRONTAGE, MIN_COMBAT_EFFECTIVENESS, OUT_OF_SUPPLY_COMBAT_MULTIPLIER } from './constants';
-import { organizationEffectiveness } from './organization';
-import { entrenchmentDamageMultiplier } from './entrenchment';
+import { COMBAT_FRONTAGE, MIN_COMBAT_EFFECTIVENESS } from './constants';
 import { stanceModifiers } from './stance';
-import { unitStatMultiplier } from '../economy/shortages';
-
-function supplyFactor(inSupply: boolean | undefined): number {
-  return inSupply === false ? OUT_OF_SUPPLY_COMBAT_MULTIPLIER : 1;
-}
+import { supplyEffectiveness } from './supply';
 
 export interface GroupRef {
   readonly army: ArmyStack;
@@ -55,7 +49,7 @@ export function calculateDamage(
   const candidates: Array<{
     profile: DamageProfile;
     health: number;
-    orgFactor: number;
+    outputFactor: number;
     typeId: string;
     armyId: string;
     ordinal: number;
@@ -74,16 +68,13 @@ export function calculateDamage(
     for (const group of army.units) {
       const pool = pooledByType.get(group.typeId)!;
       const health = pool.maxHp > 0 ? Math.max(MIN_COMBAT_EFFECTIVENESS, Math.min(1, pool.hp / pool.maxHp)) : 0;
-      const type = unitType(group.typeId);
-      const orgFactor = organizationEffectiveness(army.organization ?? 100)
-        * stanceModifiers(army.stance).attackOutput * supplyFactor(army.inSupply)
-        * unitStatMultiplier(type, 'combatOutput', army.shortageSeverity);
+      const outputFactor = stanceModifiers(army.stance).attackOutput * supplyEffectiveness(army);
       const profile = profileFor(role, group);
-      const score = health * orgFactor * (
+      const score = health * outputFactor * (
         profile.soft * ratio.soft + profile.light * ratio.light + profile.heavy * ratio.heavy
       );
       for (let ordinal = 0; ordinal < Math.min(group.count, COMBAT_FRONTAGE); ordinal += 1) {
-        candidates.push({ profile, health, orgFactor, typeId: group.typeId, armyId: army.id, ordinal, score });
+        candidates.push({ profile, health, outputFactor, typeId: group.typeId, armyId: army.id, ordinal, score });
       }
     }
   }
@@ -93,9 +84,9 @@ export function calculateDamage(
   const selected = candidates.slice(0, COMBAT_FRONTAGE);
   const fire: Record<ArmorClass, number> = { soft: 0, light: 0, heavy: 0 };
   for (const unit of selected) {
-    fire.soft += unit.profile.soft * unit.health * unit.orgFactor;
-    fire.light += unit.profile.light * unit.health * unit.orgFactor;
-    fire.heavy += unit.profile.heavy * unit.health * unit.orgFactor;
+    fire.soft += unit.profile.soft * unit.health * unit.outputFactor;
+    fire.light += unit.profile.light * unit.health * unit.outputFactor;
+    fire.heavy += unit.profile.heavy * unit.health * unit.outputFactor;
   }
 
   // A ten-unit frontage adds firepower sublinearly; equal large forces take longer.
@@ -105,11 +96,11 @@ export function calculateDamage(
     const classDamage = fire[armor] * coordination * ratio[armor] * Math.max(0, dtHours);
     if (classDamage <= 0 || hp[armor] <= 0) continue;
     for (const army of defenders) {
-      const entrenchFactor = entrenchmentDamageMultiplier(army.entrenchment ?? 0) * stanceModifiers(army.stance).damageTaken
-        / supplyFactor(army.inSupply); // out of supply: weaker offense *and* takes more damage defending
+      const protectionFactor = stanceModifiers(army.stance).damageTaken
+        / supplyEffectiveness(army); // low supply weakens defense as well as output
       for (const group of army.units) {
         if (unitType(group.typeId).armorClass !== armor) continue;
-        result.push({ ref: { army, group }, amount: classDamage * group.hp / hp[armor] * entrenchFactor });
+        result.push({ ref: { army, group }, amount: classDamage * group.hp / hp[armor] * protectionFactor });
       }
     }
   }

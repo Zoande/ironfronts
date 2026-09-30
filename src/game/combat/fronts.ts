@@ -5,11 +5,14 @@ import type { SimContext } from '../sim-context';
 import type { ArmyStack } from '../units/army';
 import { ensureArmyRuntimeState, stackHp, stackMaxHp } from '../units/army';
 import { wrappedDistance } from '../geometry';
-import { COMBAT_SNAP } from './constants';
-import { provinceAtNode } from './location';
-import type { CombatEvent } from './events';
 import { stanceModifiers } from './stance';
+import { COMBAT_SNAP } from './constants';
+import { provinceAtPoint } from './location';
+import type { CombatEvent } from './events';
 import { armyParticipatesInFront } from './membership';
+import { edgePosition, nearestNode } from '../movement/graph';
+import { armyApproachNode, canonicalEdgeDistance, occupiedEdge } from '../movement/position';
+import { armiesInContact, canEnterCloseCombat, CONTACT_EPSILON, contactPairKey } from './contact';
 
 export function initializeState(session: SimContext): void {
   session.state.simulationTick ??= 0;
@@ -35,25 +38,11 @@ export function sideBaseline(side: BattleFrontSideState): number {
   return Object.values(side.entryMaxHpByArmy).reduce((sum, hp) => sum + hp, 0);
 }
 
-/** Average organization (0..1 of max) across a side's armies — armies with no
- *  runtime state yet (should not happen post-initializeState) default to full. */
-export function sideOrganizationFraction(session: SimContext, side: BattleFrontSideState): number {
+export function sideHpRetreatThreshold(session: SimContext, side: BattleFrontSideState): number {
   const armies = sideArmies(session, side);
-  if (armies.length === 0) return 1;
-  return armies.reduce((sum, army) => sum + (army.organization ?? 100), 0) / (armies.length * 100);
-}
-
-/** Average stance retreat-threshold multiplier across a side's armies — a
- *  mixed-stance force averages out rather than one holdout dragging the
- *  whole side either way. */
-export function sideRetreatThresholdMultiplier(session: SimContext, side: BattleFrontSideState): number {
-  const armies = sideArmies(session, side);
-  if (armies.length === 0) return 1;
-  return armies.reduce((sum, army) => sum + stanceModifiers(army.stance).retreatThreshold, 0) / armies.length;
-}
-
-function directionOf(army: ArmyStack): number {
-  return army.lastGraphNodeId ?? army.graphNodeId;
+  if (armies.length === 0) return 0.1;
+  const average = armies.reduce((sum, army) => sum + stanceModifiers(army.stance).hpRetreatThreshold, 0) / armies.length;
+  return 0.1 * average;
 }
 
 function roleOf(army: ArmyStack, provinceId: number | null): BattleRole {
@@ -63,7 +52,8 @@ function roleOf(army: ArmyStack, provinceId: number | null): BattleRole {
 }
 
 function makeSide(
-  army: ArmyStack, role: BattleRole, directionNodeId = directionOf(army),
+  session: SimContext, army: ArmyStack, role: BattleRole,
+  directionNodeId = armyApproachNode(session, army),
 ): BattleFrontSideState {
   return {
     countryId: army.ownerCountryId,
@@ -72,6 +62,60 @@ function makeSide(
     armyIds: [army.id],
     entryMaxHpByArmy: { [army.id]: stackMaxHp(army) },
   };
+}
+
+interface ContactLocation {
+  readonly x: number;
+  readonly z: number;
+  readonly anchorNodeId: number;
+  readonly edgeId?: number;
+  readonly distanceAlongEdge?: number;
+}
+
+function coordinateOnEdge(session: SimContext, army: ArmyStack, edgeId: number): number | null {
+  const occupied = occupiedEdge(session, army);
+  if (occupied?.edgeId === edgeId) return canonicalEdgeDistance(session.graph, occupied);
+  const edge = session.graph.edges[edgeId];
+  if (!edge) return null;
+  if (army.graphNodeId === edge.from && wrappedDistance(
+    army.x, army.z, session.graph.nodeX[edge.from], session.graph.nodeZ[edge.from], session.world.width,
+  ) <= 0.01) return 0;
+  if (army.graphNodeId === edge.to && wrappedDistance(
+    army.x, army.z, session.graph.nodeX[edge.to], session.graph.nodeZ[edge.to], session.world.width,
+  ) <= 0.01) return edge.length;
+  return null;
+}
+
+function contactLocation(session: SimContext, a: ArmyStack, b: ArmyStack): ContactLocation {
+  const candidates = new Set<number>();
+  const aEdge = occupiedEdge(session, a);
+  const bEdge = occupiedEdge(session, b);
+  if (aEdge) candidates.add(aEdge.edgeId);
+  if (bEdge) candidates.add(bEdge.edgeId);
+  for (const edgeId of candidates) {
+    const aDistance = coordinateOnEdge(session, a, edgeId);
+    const bDistance = coordinateOnEdge(session, b, edgeId);
+    if (aDistance === null || bDistance === null) continue;
+    const distanceAlongEdge = (aDistance + bDistance) / 2;
+    const point = edgePosition(session.graph, edgeId, distanceAlongEdge);
+    const edge = session.graph.edges[edgeId];
+    return {
+      ...point, edgeId, distanceAlongEdge,
+      anchorNodeId: distanceAlongEdge <= edge.length / 2 ? edge.from : edge.to,
+    };
+  }
+  const dx = ((b.x - a.x + session.world.width * 1.5) % session.world.width) - session.world.width / 2;
+  const x = (a.x + dx / 2 + session.world.width) % session.world.width;
+  const z = (a.z + b.z) / 2;
+  return { x, z, anchorNodeId: nearestNode(session.graph, x, z) };
+}
+
+function sameContact(session: SimContext, front: BattleFrontState, contact: ContactLocation): boolean {
+  if (front.edgeId !== undefined && contact.edgeId !== undefined) {
+    return front.edgeId === contact.edgeId
+      && Math.abs((front.distanceAlongEdge ?? 0) - (contact.distanceAlongEdge ?? 0)) <= COMBAT_SNAP;
+  }
+  return wrappedDistance(front.x, front.z, contact.x, contact.z, session.world.width) <= COMBAT_SNAP;
 }
 
 function joinArmy(army: ArmyStack, frontId: string): void {
@@ -87,14 +131,14 @@ function joinArmy(army: ArmyStack, frontId: string): void {
 }
 
 function matchingFront(
-  session: SimContext, a: ArmyStack, b: ArmyStack, anchorNodeId: number,
+  session: SimContext, a: ArmyStack, b: ArmyStack, contact: ContactLocation,
 ): BattleFrontState | undefined {
   return Object.values(session.state.battleFronts).find((front) => {
-    if (front.anchorNodeId !== anchorNodeId) return false;
+    if (!sameContact(session, front, contact)) return false;
     const directionFor = (army: ArmyStack): number => {
       const side = front.sideA.countryId === army.ownerCountryId ? front.sideA : front.sideB;
       return front.kind === 'province' && side.role === 'defense'
-        ? front.anchorNodeId : directionOf(army);
+        ? front.anchorNodeId : armyApproachNode(session, army);
     };
     const aDirection = directionFor(a);
     const bDirection = directionFor(b);
@@ -113,16 +157,9 @@ function matchingFront(
 function findOrCreateFront(
   session: SimContext, a: ArmyStack, b: ArmyStack, events: CombatEvent[],
 ): BattleFrontState {
-  const anchorNodeId = a.graphNodeId === b.graphNodeId
-    ? a.graphNodeId
-    : (wrappedDistance(
-      a.x, a.z, session.graph.nodeX[a.graphNodeId], session.graph.nodeZ[a.graphNodeId],
-      session.world.width,
-    ) <= wrappedDistance(
-      b.x, b.z, session.graph.nodeX[b.graphNodeId], session.graph.nodeZ[b.graphNodeId],
-      session.world.width,
-    ) ? a.graphNodeId : b.graphNodeId);
-  const existing = matchingFront(session, a, b, anchorNodeId);
+  const contact = contactLocation(session, a, b);
+  const { anchorNodeId } = contact;
+  const existing = matchingFront(session, a, b, contact);
   if (existing) {
     for (const army of [a, b]) {
       const side = existing.sideA.countryId === army.ownerCountryId ? existing.sideA : existing.sideB;
@@ -140,7 +177,7 @@ function findOrCreateFront(
     return existing;
   }
 
-  const provinceId = provinceAtNode(session, anchorNodeId);
+  const provinceId = provinceAtPoint(session, contact.x, contact.z);
   const provinceOwner = provinceId === null ? 0 : session.state.provinceOwners[provinceId] ?? 0;
   const aRole = provinceOwner === a.ownerCountryId ? 'defense'
     : provinceOwner === b.ownerCountryId ? 'attack' : roleOf(a, provinceId);
@@ -148,7 +185,10 @@ function findOrCreateFront(
     : provinceOwner === a.ownerCountryId ? 'attack' : roleOf(b, provinceId);
   const bothMoving = aRole === 'attack' && bRole === 'attack';
   const existingBattle = Object.values(session.state.battles).find((battle) =>
-    battle.frontIds.some((id) => session.state.battleFronts[id]?.anchorNodeId === anchorNodeId));
+    battle.frontIds.some((id) => {
+      const front = session.state.battleFronts[id];
+      return Boolean(front && sameContact(session, front, contact));
+    }));
   const serial = existingBattle ? Number(existingBattle.id.replace('battle-', '')) : session.state.nextBattleId++;
   const battleId = existingBattle?.id ?? `battle-${serial}`;
   session.state.nextFrontId ??= 1;
@@ -160,15 +200,17 @@ function findOrCreateFront(
     anchorNodeId,
     kind: provinceId === null ? 'road' : 'province',
     provinceId,
-    x: ((a.x + (((b.x - a.x + session.world.width * 1.5) % session.world.width) - session.world.width / 2) / 2) + session.world.width) % session.world.width,
-    z: (a.z + b.z) / 2,
+    x: contact.x,
+    z: contact.z,
+    edgeId: contact.edgeId,
+    distanceAlongEdge: contact.distanceAlongEdge,
     sideA: makeSide(
-      a, bothMoving ? 'attack' : aRole,
-      aRole === 'defense' && provinceId !== null ? anchorNodeId : directionOf(a),
+      session, a, bothMoving ? 'attack' : aRole,
+      aRole === 'defense' && provinceId !== null ? anchorNodeId : armyApproachNode(session, a),
     ),
     sideB: makeSide(
-      b, bothMoving ? 'attack' : bRole,
-      bRole === 'defense' && provinceId !== null ? anchorNodeId : directionOf(b),
+      session, b, bothMoving ? 'attack' : bRole,
+      bRole === 'defense' && provinceId !== null ? anchorNodeId : armyApproachNode(session, b),
     ),
   };
   if (existingBattle) existingBattle.frontIds.push(frontId);
@@ -183,23 +225,30 @@ function findOrCreateFront(
   return front;
 }
 
-export function detectEngagements(session: SimContext, events: CombatEvent[]): void {
+export function detectEngagements(session: SimContext, events: CombatEvent[], contactTimes?: ReadonlyMap<string, number>): Map<string, Map<string, number>> {
+  const joinedAt = new Map<string, Map<string, number>>();
+  for (const front of Object.values(session.state.battleFronts)) {
+    joinedAt.set(front.id, new Map([...front.sideA.armyIds, ...front.sideB.armyIds].map((id) => [id,0])));
+  }
   const armies = Object.values(session.state.armies);
   const index = new SpatialIndex(armies, session.world.width);
   const order = new Map(armies.map((army,index) => [army.id,index]));
-  const navalTransit = (army: ArmyStack): boolean =>
-    army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
   for (let i = 0; i < armies.length; i += 1) {
     const a = armies[i];
-    if (a.retreat?.protected || navalTransit(a)) continue;
-    for (const b of index.query(a.x,a.z,COMBAT_SNAP)) {
+    if (!canEnterCloseCombat(a)) continue;
+    for (const b of index.query(a.x,a.z,COMBAT_SNAP + CONTACT_EPSILON)) {
       if (order.get(b.id)! <= i) continue;
-      if (b.retreat?.protected || navalTransit(b) || a.ownerCountryId === b.ownerCountryId) continue;
+      if (!canEnterCloseCombat(b) || a.ownerCountryId === b.ownerCountryId) continue;
       if (relationOf(session.state, a.ownerCountryId, b.ownerCountryId) !== 'war') continue;
-      if (wrappedDistance(a.x, a.z, b.x, b.z, session.world.width) > COMBAT_SNAP) continue;
-      findOrCreateFront(session, a, b, events);
+      if (!armiesInContact(a, b, session.world.width)) continue;
+      const front = findOrCreateFront(session, a, b, events);
+      const times = joinedAt.get(front.id) ?? new Map<string,number>();
+      const at = contactTimes?.get(contactPairKey(a.id,b.id)) ?? 0;
+      for (const army of [a,b]) times.set(army.id, Math.min(times.get(army.id) ?? Infinity, at));
+      joinedAt.set(front.id, times);
     }
   }
+  return joinedAt;
 }
 
 function removeArmyFromFront(session: SimContext, front: BattleFrontState, armyId: string): void {

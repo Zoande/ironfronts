@@ -53,7 +53,7 @@ fn countryLabelVertex(
     ${COUNTRY_LABEL_FADE_START_ALTITUDE.toFixed(1)},
     uniforms.camera.y
   );
-  output.fogVisibility = (1.0 - horizontalWorldFog(worldXZ.x)) * altitudeVisibility;
+  output.fogVisibility = (1.0 - mapFog(worldXZ)) * altitudeVisibility;
   output.ownerId = u32(round(glyph.c.w));
   return output;
 }

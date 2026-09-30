@@ -6,11 +6,21 @@ export { projectArmyView, visibleResourceNodes } from '../../../src/game/player-
 export { computeArmyVisibility } from '../../../src/game/visibility';
 export { legalRetreatPaths } from '../../../src/game/combat';
 export type { CombatEvent } from '../../../src/game/combat';
-export { nearestNode } from '../../../src/game/movement/graph';
+export { nearestNode, edgeIdBetween, edgePolyline } from '../../../src/game/movement/graph';
 export { findPath } from '../../../src/game/movement/pathfind';
 export { UNIT_TYPES, BASE_UNIT_IDS, baseUnitId, unitType } from '../../../src/game/units/unit-catalog';
 export { stackExtractionRate } from '../../../src/game/units/army';
-export { currentMovementLeg } from '../../../src/game/units/movement';
+export {
+  TRANSPORT_TYPES, transportType, countryTransportLevel, createTransportManifestation,
+  beginTransportManifestation, endTransportManifestation, activeTransportStats,
+  transportShipCount, transportHp, transportMaxHp, transportHealthFraction,
+  damageTransportCargo, damageTransport, syncCargoFromTransport, combatDomain,
+} from '../../../src/game/naval/transport';
+export type {
+  CombatDomain, NavalUnitKind, NavalTargetClass, NavalUnitStats,
+  TransportCargoGroup, TransportManifestation,
+} from '../../../src/game/naval/transport';
+export { currentMovementLeg, remainingOrderTravelHours } from '../../../src/game/units/movement';
 export { BUILDINGS } from '../../../src/game/construction';
 export { buildOptions } from '../../../src/game/construction';
 export { producibleUnits, unitProductionWorkRate, UNIT_PRODUCTION_RATE_BY_LEVEL } from '../../../src/game/production';
@@ -34,7 +44,6 @@ export {
   buildEngineerAssignmentIndex, engineerAssignmentKey, physicalResourceOutput, provinceResourceOutputBreakdown,
 } from '../../../src/game/economy/resource-production';
 export { runEconomySimulation } from '../../../src/game/economy/simulator';
-export { unitStatMultiplier, stackOrganizationCap, armyShortageSummary } from '../../../src/game/economy/shortages';
 export { RESOURCE_TIER_GATES, maximumResourceTier } from '../../../src/game/economy/resources';
 export type { GameCommand, CommandResult } from '../../../src/game/commands';
 export type { WorldData } from '../../../src/game/world-data';

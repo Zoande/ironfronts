@@ -1,49 +1,60 @@
 /**
- * Supply: an army far from its own country's territory fights, holds, and
- * moves worse. Deliberately a straight-line-distance approximation rather
- * than a road-network calculation — cheap enough to recompute for every
- * army on a slow cadence (see SUPPLY_RECOMPUTE_INTERVAL in game-session.ts)
- * without a full graph search, at the cost of not modelling supply lines
- * being cut by an encirclement along the roads themselves. Good enough to
- * make deep unsupported offensives costly, which is the actual ask.
+ * Supply: connected armies refill one reserve; disconnected armies consume it.
+ * Low reserves apply the same tiered penalty to combat and field operations.
  */
 import type { SimContext } from '../sim-context';
-import type { UpkeepResource } from '../game-state';
+import type { CountryState, UpkeepResource } from '../game-state';
 import type { ArmyStack } from '../units/army';
-import { ensureArmyRuntimeState } from '../units/army';
+import { ensureArmyRuntimeState, stackUnitCount, SUPPLY_CAPACITY_PER_UNIT } from '../units/army';
 import { unitType } from '../units/unit-catalog';
 import { nearestNode } from '../movement/graph';
+import { UPKEEP_RESOURCES } from '../economy/shortages';
 
-/** World-space reach of a country's own territory before a stack is
- *  considered out of supply. Calibrated relative to MISSILE_RANGE (3200) —
- *  comfortably covers pushing one or two provinces past the border, not an
- *  unsupported drive across the map. */
-export const SUPPLY_CAPACITY_PER_UNIT = 100;
+/** Capacity per unit and local graph search radius for a supply route. */
+export { SUPPLY_CAPACITY_PER_UNIT } from '../units/army';
 /** Compatibility radius for callers that use it as a local-world probe limit. */
 export const SUPPLY_RANGE = 1800;
-const SUPPLY_RESOURCES: readonly UpkeepResource[] = ['funds', 'food', 'metal', 'oil'];
-
 export interface ArmySupplyPlan {
   readonly capacity: number;
-  readonly allocation: Record<UpkeepResource, number>;
-  readonly upkeep: Record<UpkeepResource, number>;
+  readonly upkeepPerHour: number;
 }
 
 export function armySupplyPlan(army: ArmyStack): ArmySupplyPlan {
-  const upkeep = { funds: 0, food: 0, metal: 0, oil: 0 };
+  let upkeepPerHour = 0;
   for (const group of army.units) {
     const unit = unitType(group.typeId);
-    upkeep.funds += group.count * (unit.upkeep.fundsPerHour ?? 0);
-    upkeep.food += group.count * (unit.upkeep.foodPerHour ?? 0);
-    upkeep.metal += group.count * (unit.upkeep.metalPerHour ?? 0);
-    upkeep.oil += group.count * (unit.upkeep.oilPerHour ?? 0);
+    upkeepPerHour += group.count * ((unit.upkeep.fundsPerHour ?? 0)
+      + (unit.upkeep.foodPerHour ?? 0) + (unit.upkeep.metalPerHour ?? 0)
+      + (unit.upkeep.oilPerHour ?? 0));
   }
   const capacity = army.units.reduce((total, group) => total + group.count * SUPPLY_CAPACITY_PER_UNIT, 0);
-  const totalUpkeep = Object.values(upkeep).reduce((sum, value) => sum + value, 0);
-  const allocation = Object.fromEntries(SUPPLY_RESOURCES.map((resource) => [
-    resource, totalUpkeep > 0 ? capacity * upkeep[resource] / totalUpkeep : 0,
-  ])) as Record<UpkeepResource, number>;
-  return { capacity, allocation, upkeep };
+  return { capacity, upkeepPerHour };
+}
+
+export function supplyFraction(army: ArmyStack): number {
+  const capacity = stackUnitCount(army) * SUPPLY_CAPACITY_PER_UNIT;
+  return capacity > 0 ? Math.max(0, Math.min(1, (army.supply ?? capacity) / capacity)) : 1;
+}
+
+/** One multiplier for every army activity affected by low supply. */
+export function supplyEffectiveness(army: ArmyStack): number {
+  const fraction = supplyFraction(army);
+  if (fraction >= 0.75) return 1;
+  if (fraction >= 0.5) return 0.9;
+  if (fraction >= 0.25) return 0.75;
+  if (fraction > 0) return 0.6;
+  return 0.4;
+}
+
+/** Only an empty reserve with a negative net flow slows replenishment. */
+export function supplyShortfalls(country: CountryState | undefined): UpkeepResource[] {
+  if (!country) return [];
+  return UPKEEP_RESOURCES.filter((resource) => country.stockpile[resource] <= 0
+    && (country.netIncome?.[resource] ?? country.income[resource] - (country.upkeep?.[resource] ?? 0)) < 0);
+}
+
+export function supplyRefillMultiplier(country: CountryState | undefined): number {
+  return 1 - supplyShortfalls(country).length * 0.2;
 }
 
 function connectedToSupply(ctx: SimContext, army: ArmyStack): boolean {
@@ -86,13 +97,9 @@ export function stepSupply(ctx: SimContext, dtHours = 0): void {
     army.supplyCapacity = plan.capacity;
     const connected = connectedToSupply(ctx, army);
     army.inSupply = connected;
-    for (const resource of SUPPLY_RESOURCES) {
-      const maximum = plan.allocation[resource];
-      const current = Number(army.supplyStores?.[resource] ?? maximum);
-      army.supplyStores![resource] = connected
-        ? maximum
-        : Math.max(0, current - plan.upkeep[resource] * dtHours);
-      army.shortageSeverity![resource] = maximum > 0 && army.supplyStores![resource] <= 0 ? 100 : 0;
-    }
+    const current = Math.max(0, Math.min(plan.capacity, army.supply ?? plan.capacity));
+    army.supply = connected
+      ? Math.min(plan.capacity, current + plan.capacity * Math.max(0, dtHours) * supplyRefillMultiplier(ctx.state.countries[army.ownerCountryId]))
+      : Math.max(0, current - plan.upkeepPerHour * Math.max(0, dtHours));
   }
 }

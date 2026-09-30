@@ -5,11 +5,15 @@ const css = readFileSync(new URL('../src/ui/styles/game-ui.css', import.meta.url
 const armyUi = readFileSync(new URL('../src/ui/army.ts', import.meta.url), 'utf8');
 
 describe('selected army panel containment', () => {
-  it('locks the overlay height and contains variable content inside its sections', () => {
+  it('locks the overlay height and scrolls variable combat content inside the report', () => {
     expect(css).toContain('height: 244px;');
     expect(css).toContain('max-height: calc(100vh - 36px);');
     expect(css).toMatch(/\.ifg-army-panel__body\s*\{[^}]*height: calc\(100% - 34px\);[^}]*overflow: hidden;/s);
-    expect(css).toMatch(/\.ifg-army-panel__activity\s*\{[^}]*overflow: hidden;/s);
+    // The report owns scrolling; the activity must grow so its lower combat
+    // statistics and bombardment details remain reachable inside that viewport.
+    expect(css).toMatch(/\.ifg-army-panel__report\s*\{[^}]*overflow-y: auto;/s);
+    expect(css).toMatch(/\.ifg-army-panel__activity\s*\{[^}]*height: auto;[^}]*overflow: visible;/s);
+    expect(css).toMatch(/\.ifg-army-panel__activity--combat\s*\{[^}]*overflow: visible;/s);
     expect(css).toMatch(/\.ifg-army-panel__units\s*\{[^}]*overflow: hidden;/s);
   });
 

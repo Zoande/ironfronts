@@ -51,7 +51,7 @@ describe('movement, diplomacy and combat invariants', () => {
   it('stops at enemy contact even with a large direct movement step', () => {
     const c=fixture();const a=c.state.armies.a=army('a',1,100,100,0,'armored-car');
     c.state.armies.b=army('b',2,160,100);c.state.relations['1:2']='war';
-    issueMoveOrder(c,'a',300,100);stepMovement(c,1.5/1800);stepCombat(c,FIXED_STEP_HOURS);
+    issueMoveOrder(c,'a',300,100);stepMovement(c,1);stepCombat(c,FIXED_STEP_HOURS);
     expect(a.x).toBeLessThan(160);expect(a.status).toBe('engaged');
   });
   it('clears a stale combat lock when its front no longer exists', () => {

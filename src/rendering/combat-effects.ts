@@ -30,8 +30,8 @@ export const EFFECT_KIND = {
 } as const;
 export type EffectKind = (typeof EFFECT_KIND)[keyof typeof EFFECT_KIND];
 
-/** Floats per packed instance: x, z, kind, age01, seed, scale, intensity, dir. */
-export const EFFECT_STRIDE = 8;
+/** Packed instance: x, z, kind, age, seed, scale, intensity, direction, height, travel, arc, worldSize. */
+export const EFFECT_STRIDE = 12;
 
 const DEFAULT_LIFETIME_MS: Record<number, number> = {
   [EFFECT_KIND.muzzleFlash]: 140,
@@ -56,6 +56,10 @@ interface Transient {
   scale: number;
   intensity: number;
   dir: number;
+  height: number;
+  travel: number;
+  arc: number;
+  worldSize: number;
 }
 
 interface BattleMarker {
@@ -75,6 +79,10 @@ export interface SpawnOptions {
   /** Attack / travel direction in radians; used by tracers and projectiles. */
   dir?: number;
   now?: number;
+  height?: number;
+  travel?: number;
+  arc?: number;
+  worldSize?: number;
 }
 
 export interface CollectResult {
@@ -117,6 +125,10 @@ export class CombatEffectPool {
       scale: options.scale ?? 1,
       intensity: options.intensity ?? 1,
       dir: options.dir ?? Number.NaN,
+      height: options.height ?? 6,
+      travel: options.travel ?? (kind === EFFECT_KIND.tracer ? 60 : 150),
+      arc: options.arc ?? 0,
+      worldSize: options.worldSize ?? 0,
     };
     if (this.ring.length < this.capacity) {
       this.ring.push(record);
@@ -124,6 +136,49 @@ export class CombatEffectPool {
       this.ring[this.ringHead] = record;
       this.ringHead = (this.ringHead + 1) % this.capacity;
     }
+  }
+
+  /** A shot from an animated muzzle to a real displayed opponent, in world units.
+   * Birth time comes from the same clock and firing phase as the skeletal clip. */
+  spawnWeaponShot(kind: number, x: number, z: number, targetX: number, targetZ: number, options: SpawnOptions): void {
+    const now = options.now ?? Date.now();
+    const distance = Math.hypot(targetX-x,targetZ-z);
+    if (!Number.isFinite(distance) || distance < .1) return;
+    const dir = Math.atan2(targetZ-z,targetX-x);
+    const small = kind < 2;
+    const artillery = kind === 3;
+    const flight = small ? Math.max(65,Math.min(160,distance*2)) : artillery ? 850 : 320;
+    const impactAt = now + flight;
+    this.spawn(EFFECT_KIND.muzzleFlash,x,z,{ ...options,now,dir,lifetimeMs: small ? 65 : 100,
+      worldSize: small ? .32 : 1.15 });
+    this.spawn(small ? EFFECT_KIND.tracer : EFFECT_KIND.projectile,x,z,{ ...options,now,dir,travel: distance,
+      arc: artillery ? Math.min(18,distance*.18) : 0,worldSize: small ? .22 : .16,lifetimeMs: flight });
+    if (kind === 1) {
+      // Short machine-gun burst; each round has its own muzzle and impact time.
+      for (const delay of [80,160]) {
+        this.spawn(EFFECT_KIND.muzzleFlash,x,z,{...options,now:now+delay,dir,worldSize:.3,lifetimeMs:45});
+        this.spawn(EFFECT_KIND.tracer,x,z,{...options,now:now+delay,dir,travel:distance,worldSize:.2,lifetimeMs:flight});
+        this.spawn(EFFECT_KIND.impact,targetX,targetZ,{now:impactAt+delay,dir,height:.25,worldSize:.35,lifetimeMs:120});
+      }
+    }
+    this.spawn(EFFECT_KIND.smoke,x,z,{ ...options,now: now+50,worldSize: small ? .38 : 1.1,
+      intensity: .5,lifetimeMs: 700 });
+    this.spawn(EFFECT_KIND.impact,targetX,targetZ,{ now: impactAt,dir,height: .2,
+      worldSize: small ? .3 : 1.1,lifetimeMs: 160 });
+    if (!small) {
+      // Lift the burst above the ground so vehicle hulls do not hide the entire impact.
+      this.spawn(EFFECT_KIND.explosion,targetX,targetZ,{ now: impactAt,height: 1.8,
+        worldSize: artillery ? 4.2 : 2.8,lifetimeMs: 650 });
+      for (let i=0;i<4;i++) {
+        this.spawn(EFFECT_KIND.debris,targetX,targetZ,{ now: impactAt,height: .25,
+          dir: this.random()*Math.PI*2,travel: 2+this.random()*4,arc: 2+this.random()*3,
+          worldSize: .09+this.random()*.12,lifetimeMs: 500+this.random()*400 });
+      }
+    }
+    this.spawn(EFFECT_KIND.dust,targetX,targetZ,{ now: impactAt+40,height: .15,
+      worldSize: small ? .75 : artillery ? 4 : 2.8,lifetimeMs: small ? 650 : 1700 });
+    if (!small) this.spawn(EFFECT_KIND.smoke,targetX,targetZ,{ now: impactAt+180,height: 1.6,
+      worldSize: artillery ? 2.6 : 1.7,lifetimeMs: 2400 });
   }
 
   /**
@@ -358,11 +413,13 @@ export class CombatEffectPool {
     const write = (
       kind: number, x: number, z: number, age01: number,
       seed: number, scale: number, intensity: number, dir: number,
+      height = 6, travel = 0, arc = 0, worldSize = 0,
     ): void => {
       const o = count * EFFECT_STRIDE;
       out[o] = x; out[o + 1] = z; out[o + 2] = kind; out[o + 3] = age01;
       out[o + 4] = seed; out[o + 5] = scale; out[o + 6] = intensity;
       out[o + 7] = Number.isFinite(dir) ? dir : -999;
+      out[o + 8] = height; out[o + 9] = travel; out[o + 10] = arc; out[o + 11] = worldSize;
       count += 1;
     };
 
@@ -383,7 +440,8 @@ export class CombatEffectPool {
       const dz = r.z - camera.z;
       if (dx * dx + dz * dz > maxSq) continue;
       if (isVisible && !isVisible(r.x, r.z)) continue;
-      write(r.kind, r.x, r.z, age / r.lifetime, r.seed, r.scale, r.intensity, r.dir);
+      write(r.kind, r.x, r.z, age / r.lifetime, r.seed, r.scale, r.intensity, r.dir,
+        r.height, r.travel, r.arc, r.worldSize);
     }
     return { floats: out, count };
   }

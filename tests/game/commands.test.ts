@@ -62,6 +62,14 @@ function ctx(): SimContext {
 }
 
 describe('applyCommand ownership gate', () => {
+  it('renames only the owning country’s army and rejects invalid names', () => {
+    const c = ctx();
+    expect(applyCommand(c, { type: 'renameArmy', countryId: 2, armyId: 'a1', name: 'Enemy' }).ok).toBe(false);
+    expect(c.state.armies.a1.name).toBe('1st');
+    expect(applyCommand(c, { type: 'renameArmy', countryId: 1, armyId: 'a1', name: '   ' }).ok).toBe(false);
+    expect(applyCommand(c, { type: 'renameArmy', countryId: 1, armyId: 'a1', name: '  Iron Guard  ' }).ok).toBe(true);
+    expect(c.state.armies.a1.name).toBe('Iron Guard');
+  });
   it('rejects a move for a country that does not own the army', () => {
     const c = ctx();
     const res = applyCommand(c, { type: 'moveArmy', countryId: 2, armyId: 'a1', x: 300, z: 100 });

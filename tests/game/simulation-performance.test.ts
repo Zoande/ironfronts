@@ -15,7 +15,7 @@ function grid(size: number): LandGraph {
   const edgeCost = adjacency.map((neighbors) => neighbors.map(() => 10));
   return { nodeCount:count,nodeX,nodeZ,adjacency,edgeCost,component:new Int32Array(count),
     componentSize:[count],width:size*10,height:size*10,
-    seaAdjacency:Array.from({length:count},()=>[]),seaEdgeCost:Array.from({length:count},()=>[]) };
+    seaAdjacency:Array.from({length:count},()=>[]),seaEdgeCost:Array.from({length:count},()=>[]) } as unknown as LandGraph;
 }
 
 describe('simulation hot paths', () => {

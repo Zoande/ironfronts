@@ -20,7 +20,7 @@ import type { CommandResult, GameCommand } from './commands/types';
 export type {
   AttackCommand, AttackTarget, BuildCommand, CommandResult, ExtractCommand,
   GameCommand, GameCommandType, MoveArmyCommand, ProduceCommand, RallyCommand,
-  RetreatArmyCommand, SplitArmyCommand, StopArmyCommand, SetStanceCommand, DeclareWarCommand,
+  RetreatArmyCommand, SplitArmyCommand, StopArmyCommand, RenameArmyCommand, SetStanceCommand, DeclareWarCommand,
   EndAllianceCommand, ProposeDiplomacyCommand, RespondDiplomacyCommand,
   SendDiplomaticMessageCommand, StrikeCommand, ResearchCommand,
   MarketTradeCommand, ProposeResourceTradeCommand, RespondResourceTradeCommand,
@@ -50,6 +50,12 @@ export function applyCommand(ctx: SimContext, command: GameCommand): CommandResu
     case 'stopArmy':
       return issueStop(ctx, command.armyId)
         ? { ok: true } : { ok: false, reason: 'Army cannot stop now.' };
+    case 'renameArmy': {
+      const name = command.name.trim();
+      if (!name || name.length > 24) return { ok: false, reason: 'Army names must be 1 to 24 characters.' };
+      ctx.state.armies[command.armyId]!.name = name;
+      return { ok: true };
+    }
     case 'setStance':
       ctx.state.armies[command.armyId]!.stance = command.stance;
       return { ok: true };

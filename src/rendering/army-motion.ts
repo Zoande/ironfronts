@@ -1,6 +1,8 @@
 export interface ProjectedMotionLeg {
   readonly targetX: number; readonly targetZ: number; readonly durationMs: number;
   readonly route?: ReadonlyArray<{ x: number; z: number }>;
+  /** Verified full own-army route, used only to reconstruct crossed edges. */
+  readonly verifiedRoute?: ReadonlyArray<{ x: number; z: number }>;
   readonly sampledAtEpochMs?: number; readonly generation?: number;
 }
 export interface ArmyMotionSample {
@@ -16,7 +18,7 @@ function between(a: {x:number;z:number}, b: {x:number;z:number}, t: number) {
   return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
 }
 function verifiedPathToSample(a: Snapshot, b: Snapshot, width: number): Array<{x:number;z:number}> | null {
-  const route = a.motion.route;
+  const route = a.motion.verifiedRoute ?? a.motion.route;
   if (!route?.length) return null;
   const points: Array<{x:number;z:number}> = [{ x:a.x, z:a.z }];
   for (const raw of route) {
@@ -43,8 +45,12 @@ function interpolatePath(points: ReadonlyArray<{x:number;z:number}>, fraction: n
   for (let index=0; index<lengths.length; index++) {
     if (distance<=lengths[index] || index===lengths.length-1) {
       const point=between(points[index],points[index+1],distance/Math.max(1e-9,lengths[index]));
+      // The GPU marker and CPU picker advance linearly to targetX/Z. Give
+      // them the time left on this segment, not on the entire polyline:
+      // otherwise each projection eases towards a corner and jumps forward.
+      const segmentRemaining = Math.max(0, lengths[index] - distance);
       return { ...point, targetX:points[index+1].x,targetZ:points[index+1].z,
-        remainingMs:Math.max(0,(1-fraction)*durationMs) };
+        remainingMs:total > 0 ? segmentRemaining / total * durationMs : 0 };
     }
     distance-=lengths[index];
   }
@@ -56,14 +62,21 @@ function interpolatePath(points: ReadonlyArray<{x:number;z:number}>, fraction: n
 export class ArmyMotionInterpolator {
   private readonly tracks = new Map<string, Snapshot[]>();
   sample(armyId: string, x: number, z: number, motion: ProjectedMotionLeg | undefined,
-    nowMs: number, worldWidth: number): ArmyMotionSample {
+    nowMs: number, worldWidth: number,
+    sampleClock?: { sampledAtEpochMs: number; generation?: number }): ArmyMotionSample {
     if (!motion || !Number.isFinite(motion.durationMs) || motion.durationMs <= 0) {
-      this.tracks.delete(armyId); return { x, z, targetX:x, targetZ:z, remainingMs:0 };
+      if (!sampleClock) {
+        this.tracks.delete(armyId); return { x, z, targetX:x, targetZ:z, remainingMs:0 };
+      }
+      // Stops and combat entry are terminal samples on the same delayed
+      // timeline. They must not discard the verified approach to contact.
+      motion = { targetX:x, targetZ:z, durationMs:0, ...sampleClock };
     }
     let history = this.tracks.get(armyId) ?? [];
     const last = history[history.length - 1];
     const changed = !last || last.x !== x || last.z !== z || last.motion.durationMs !== motion.durationMs
-      || last.motion.targetX !== motion.targetX || last.motion.targetZ !== motion.targetZ;
+      || last.motion.targetX !== motion.targetX || last.motion.targetZ !== motion.targetZ
+      || (motion.durationMs > 0 && motion.sampledAtEpochMs !== undefined && last.at !== motion.sampledAtEpochMs);
     if (last && last.motion.generation !== motion.generation) history = [];
     if (changed || !history.length) {
       history.push({ x, z, motion, at: motion.sampledAtEpochMs ?? nowMs });
@@ -103,9 +116,27 @@ export class ArmyMotionInterpolator {
       }
       return { ...point,targetX:target.x,targetZ:target.z,remainingMs:Math.max(0,remainingMs) };
     }
+    if (newest.motion.durationMs <= 0 || time < newest.at) {
+      return { x:newest.x, z:newest.z, targetX:newest.x, targetZ:newest.z, remainingMs:0 };
+    }
     const target = { x:unwrap(newest.motion.targetX,newest.x,worldWidth),z:newest.motion.targetZ };
     const age = Math.max(0,time-newest.at);
     const elapsed = Math.min(age,MAX_EXTRAPOLATION_MS,newest.motion.durationMs);
+    if (newest.motion.route?.length) {
+      const points: Array<{x:number;z:number}> = [{ x:newest.x, z:newest.z }];
+      for (const raw of newest.motion.route) {
+        const previous = points[points.length-1];
+        const next = { x:unwrap(raw.x,previous.x,worldWidth), z:raw.z };
+        if (Math.hypot(next.x-previous.x,next.z-previous.z)>1e-6) points.push(next);
+      }
+      if (points.length>1) {
+        const sample = interpolatePath(points, elapsed/newest.motion.durationMs, newest.motion.durationMs);
+        const remainingMs = Math.min(sample.remainingMs, Math.max(0, MAX_EXTRAPOLATION_MS - age));
+        const end = between(sample, { x:sample.targetX, z:sample.targetZ },
+          sample.remainingMs > 0 ? remainingMs/sample.remainingMs : 0);
+        return { ...sample, targetX:end.x, targetZ:end.z, remainingMs };
+      }
+    }
     const point = between(newest,target,elapsed/newest.motion.durationMs);
     const endTime = Math.min(MAX_EXTRAPOLATION_MS,newest.motion.durationMs);
     const boundedTarget = between(newest,target,endTime/newest.motion.durationMs);

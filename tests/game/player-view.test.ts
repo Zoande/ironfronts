@@ -11,6 +11,7 @@ import { GAME_STATE_VERSION, emptyStockpile, type GameState, type ResourceNodeSt
 import type { WorldData } from '../../src/game/world-data';
 import { makeGroup, type ArmyStack } from '../../src/game/units/army';
 import { projectArmyView, visibleResourceNodes } from '../../src/game/player-view';
+import { createTransportManifestation, transportType } from '../../src/game/naval/transport';
 
 function army(id: string, owner: number, x: number, z: number): ArmyStack {
   return {
@@ -59,6 +60,34 @@ describe('projectArmyView', () => {
     expect(v.composition).not.toBeNull();
     expect(v.composition!.unitCount).toBe(4);
     expect(v.name).toBe('p Detachment');
+    expect(v.supply?.capacity).toBe(400);
+    expect(v.supply?.current).toBe(400);
+  });
+
+  it('withholds country supply shortfalls from a visible foreign stack', () => {
+    const s = state(false, [army('e', 2, 0, 0)]);
+    s.countries[2].stockpile.food = 0;
+    s.countries[2].netIncome = { ...emptyStockpile(), food: -1 };
+    const v = projectArmyView(s, world, 1, 'e')!;
+    expect(v.composition).not.toBeNull();
+    expect(v.supply).toBeUndefined();
+  });
+
+  it('projects the transport manifestation instead of cargo combat and movement stats at sea', () => {
+    const transported = army('p', 1, 0, 0);
+    transported.units = [makeGroup('infantry', 2, 0.5), makeGroup('medium-tank', 1, 1)];
+    transported.status = 'atSea';
+    transported.transport = createTransportManifestation(transported, 4);
+    const v = projectArmyView(state(true, [transported]), world, 1, 'p')!;
+    const stats = transportType(4);
+
+    expect(v.composition).toMatchObject({
+      domain: 'naval', unitCount: 3, speed: stats.speed,
+      combatProfile: { attack: stats.attack, defense: stats.defense },
+      transport: { kind: 'transport', level: 4, shipCount: 3 },
+    });
+    expect(v.composition?.health).toBeCloseTo(2 / 3);
+    expect(v.artillery).toBeNull();
   });
 
   it('withholds composition and name for a contact-range foreign stack', () => {

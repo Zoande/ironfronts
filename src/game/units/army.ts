@@ -7,9 +7,19 @@
  */
 
 import type { UnitType } from './unit-types';
-import type { PhysicalResource, UpkeepResource } from '../game-state';
+import type { PhysicalResource } from '../game-state';
 import { unitType } from './unit-catalog';
-import { unitStatMultiplier } from '../economy/shortages';
+import type { TransportManifestation } from '../naval/transport';
+
+export const SUPPLY_CAPACITY_PER_UNIT = 100;
+/** Short labels leave room for the activity readout, flag, and orders in the army header. */
+export const AUTO_ARMY_NAME_LENGTH = 16;
+export function generatedArmyName(value: string): string {
+  const name = value.trim();
+  if (name.length <= AUTO_ARMY_NAME_LENGTH) return name;
+  const cut = name.slice(0, AUTO_ARMY_NAME_LENGTH + 1).lastIndexOf(' ');
+  return name.slice(0, cut >= 8 ? cut : AUTO_ARMY_NAME_LENGTH).trimEnd();
+}
 
 /**
  * Combat posture — see combat/stance.ts for what each one actually does.
@@ -46,6 +56,13 @@ export interface MoveOrder {
   /** World-space destination (the last node's position), for marker/HUD. */
   readonly destX: number;
   readonly destZ: number;
+  /** Optional exact stop point on the final road edge, oriented from `from`. */
+  readonly roadDestination?: {
+    readonly edgeId: number; readonly from: number; readonly to: number;
+    readonly distanceAlongEdge: number;
+  };
+  /** Final open-water position, reached from a connected sea-graph anchor. */
+  readonly seaDestination?: { readonly x: number; readonly z: number; readonly anchorNodeId: number };
   /** 'move' = cream route, 'attack' = red route. */
   readonly intent: 'move' | 'attack';
   /** Typed strategic target. Unit targets are re-pathed while detected. */
@@ -66,7 +83,8 @@ export interface ArmyStack {
   z: number;
   /** Land movement-graph node the stack is currently at / leaving. */
   graphNodeId: number;
-  edge?: { from: number; to: number } | null;
+  /** Authoritative road position. x/z are derived caches for world-space systems. */
+  edge?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null;
   units: UnitGroup[];
   status: ArmyStatus;
   order: MoveOrder | null;
@@ -74,8 +92,6 @@ export interface ArmyStack {
   extractingNodeId: number | null;
   /** V4 renewable production assignment. */
   extractionAssignment?: { provinceId: number; resource: PhysicalResource } | null;
-  /** Country pressure snapshot used by hot movement/combat/vision paths. */
-  shortageSeverity?: Record<UpkeepResource, number>;
   /** Node occupied before graphNodeId; defines the back edge for retreat. */
   lastGraphNodeId?: number | null;
   /** Order paused by close combat and resumed when every joined front clears. */
@@ -100,29 +116,18 @@ export interface ArmyStack {
     /** Counts down during 'embarking'/'disembarking'; unused during 'atSea'
      *  (that phase instead consumes the normal movement distance budget). */
     hoursRemaining: number;
+    /** A new order from an offshore stop first returns to its graph anchor. */
+    returningToAnchor?: boolean;
   } | null;
-  /**
-   * Organization/readiness, 0..100. Separate from HP: drains while engaged in
-   * combat, recovers passively while not. A stack can be forced to retreat by
-   * low organization well before its HP pool is exhausted (see
-   * combat/organization.ts) — this is what lets an offensive be repelled
-   * without annihilating the defender first.
-   */
-  organization?: number;
-  /**
-   * Entrenchment, 0..100. Grows while the stack is stationary and not engaged
-   * (see combat/entrenchment.ts); clears the moment it takes a move order.
-   * Reduces incoming damage while defending in place.
-   */
-  entrenchment?: number;
+  /** Temporary sea-domain manifestation. Cargo remains in `units` on its
+   * normal land HP scale; ship HP and the snapshotted naval tech live here. */
+  transport?: TransportManifestation | null;
   /** Combat posture; see ArmyStance. Defaults to 'attack-defend' (balanced). */
   stance?: ArmyStance;
-  /** Within reach of the owner's own territory — see combat/supply.ts. An
-   *  out-of-supply stack fights, holds, and moves worse. Recomputed on a
-   *  slow cadence, not every tick. */
+  /** Whether a supply route exists; low stored supply applies the penalties. */
   inSupply?: boolean;
-  /** Per-army field stores, allocated by each unit's upkeep ratio. */
-  supplyStores?: Partial<Record<UpkeepResource, number>>;
+  /** One field-supply reserve for the whole stack. */
+  supply?: number;
   supplyCapacity?: number;
 }
 
@@ -142,15 +147,11 @@ export function ensureArmyRuntimeState(stack: ArmyStack): void {
   stack.retreat ??= null;
   stack.artillery ??= { targetArmyId: null, manualTarget: false };
   stack.navalCrossing ??= null;
-  stack.organization ??= 100;
-  stack.entrenchment ??= 0;
+  stack.transport ??= null;
   stack.stance ??= 'attack-defend';
   stack.inSupply ??= true;
-  stack.shortageSeverity ??= { funds: 0, food: 0, metal: 0, oil: 0 };
-  stack.supplyStores ??= {};
   stack.supplyCapacity ??= 0;
   stack.extractionAssignment ??= null;
-  stack.shortageSeverity ??= { funds: 0, food: 0, metal: 0, oil: 0 };
 }
 
 export function stackUnitCount(stack: ArmyStack): number {
@@ -207,7 +208,7 @@ export function stackBaseSpeed(stack: ArmyStack): number {
   for (const group of stack.units) {
     if (group.count <= 0) continue;
     const type = unitType(group.typeId);
-    slowest = Math.min(slowest, type.speed * unitStatMultiplier(type, 'movementSpeed', stack.shortageSeverity));
+    slowest = Math.min(slowest, type.speed);
   }
   return Number.isFinite(slowest) ? slowest : 0;
 }
@@ -230,6 +231,9 @@ export function canExtract(stack: ArmyStack): boolean {
  * their count and hp; new types are appended. `source.units` is emptied.
  */
 export function mergeStacks(target: ArmyStack, source: ArmyStack): void {
+  const targetCapacity = stackUnitCount(target) * SUPPLY_CAPACITY_PER_UNIT;
+  const sourceCapacity = stackUnitCount(source) * SUPPLY_CAPACITY_PER_UNIT;
+  const mergedSupply = (target.supply ?? targetCapacity) + (source.supply ?? sourceCapacity);
   for (const incoming of source.units) {
     if (incoming.count <= 0) continue;
     const existing = target.units.find((group) => group.typeId === incoming.typeId);
@@ -242,6 +246,10 @@ export function mergeStacks(target: ArmyStack, source: ArmyStack): void {
     }
   }
   source.units = [];
+  target.supplyCapacity = targetCapacity + sourceCapacity;
+  target.supply = Math.min(target.supplyCapacity, mergedSupply);
+  source.supplyCapacity = 0;
+  source.supply = 0;
 }
 
 export function makeGroup(typeId: string, count: number, hpFraction = 1): UnitGroup {

@@ -31,6 +31,12 @@ struct Uniforms {
 @group(0) @binding(13) var terrainAlbedoTexture: texture_2d<f32>;
 /** One texel per encoded province id: food, stone, metal, oil potential. */
 @group(0) @binding(18) var provinceResourcePotentialTexture: texture_2d<f32>;
+fn europeEdgeFog(worldXZ: vec2f) -> f32 {
+  if (uniforms.sky.w <= 0.0) { return 0.0; }
+  let distanceToEdge = min(min(worldXZ.x, uniforms.map.x - worldXZ.x),
+    min(worldXZ.y, uniforms.map.y - worldXZ.y));
+  return 1.0 - smoothstep(0.0, uniforms.sky.w, distanceToEdge);
+}
 
 fn wrappedUv(uv: vec2f) -> vec2f {
   return vec2f(fract(uv.x + 1.0), clamp(uv.y, 0.0, 0.999999));
@@ -244,5 +250,9 @@ fn horizontalWorldFog(worldX: f32) -> f32 {
     uniforms.map.x * ${WORLD_FOG_END_RATIO.toFixed(3)},
     horizontalDistance
   );
+}
+
+fn mapFog(worldXZ: vec2f) -> f32 {
+  return select(horizontalWorldFog(worldXZ.x), europeEdgeFog(worldXZ), uniforms.sky.w > 0.0);
 }
 `;

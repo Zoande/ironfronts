@@ -1,7 +1,8 @@
 import {
   extractionEligibility, movementEdgeAllowed, computeArmyVisibility, projectArmyView,
-  currentMovementLeg, legalRetreatPaths, nearestNode, findPath,
-  UNIT_TYPES, BUILDINGS, buildOptions, producibleUnits, armyShortageSummary,
+  currentMovementLeg, remainingOrderTravelHours, legalRetreatPaths, nearestNode, findPath,
+  edgeIdBetween, edgePolyline,
+  UNIT_TYPES, BUILDINGS, buildOptions, producibleUnits,
   provinceResourceOutputBreakdown,
   buildEngineerAssignmentIndex, engineerAssignmentKey,
   unitProductionWorkRate,
@@ -41,11 +42,7 @@ export function projectFor(
       const eligibility = extractionEligibility({ state, world, graph }, army.id);
       projected = { ...projected, actions: { canExtract: eligibility.ok, extractionProvinceId: eligibility.provinceId ?? null,
         extractableResources: [...(eligibility.resources ?? [])],
-        ...(eligibility.reason ? { extractReason: eligibility.reason } : {}) },
-        shortage: {
-          severity: { ...(state.armies[army.id]?.shortageSeverity ?? { funds: 0, food: 0, metal: 0, oil: 0 }) },
-          modifiers: armyShortageSummary(state.armies[army.id]),
-        } };
+        ...(eligibility.reason ? { extractReason: eligibility.reason } : {}) } };
     }
     if (graph && army.own && army.status === 'engaged') {
       projected = {
@@ -55,18 +52,35 @@ export function projectFor(
         ),
       };
     }
-    // Cached so the identical (order, position) pathfinding call below isn't
-    // repeated for an own army — projectArmyView always mirrors x/z from
-    // state.armies, so army.x/z === source.x/z and the result is identical.
-    let ownOrderRoute: ReturnType<typeof orderRouteForClient> | undefined;
+    // Full routes travel as stable edge references; the verified client world
+    // package expands them without bloating every projection snapshot.
     if (graph && army.own) {
       const order = state.armies[army.id]?.order;
-      const route = order && orderRouteForClient(order, graph, army.x, army.z);
-      ownOrderRoute = route || null;
-      if (route) projected = { ...projected, moveRoute: route, moveIntent: order!.intent };
+      const source = state.armies[army.id];
+      const returnAnchor = source?.navalCrossing?.returningToAnchor
+        ? { x: graph.nodeX[source.graphNodeId], z: graph.nodeZ[source.graphNodeId] } : undefined;
+      const roadRoute = order && !order.seaDestination && !returnAnchor
+        ? roadRouteForClient(order, graph, source?.graphNodeId ?? -1, source?.edge) : null;
+      const route = order && !roadRoute
+        ? orderRouteForClient(order, graph, army.x, army.z, source?.edge, returnAnchor) : null;
+      if (roadRoute || route) projected = {
+        ...projected, ...(roadRoute ? { moveRoadRoute: roadRoute } : { moveRoute: route! }),
+        moveIntent: order!.intent,
+      };
     }
     if (graph && army.status !== 'unknown' && gameHoursPerRealSecond > 0) {
       const source = state.armies[army.id];
+      const remainingTravelHours = source?.order && army.own
+        ? remainingOrderTravelHours({ state, world, graph }, source) : null;
+      if (remainingTravelHours !== null && Number.isFinite(remainingTravelHours)) {
+        projected = {
+          ...projected,
+          arrival: {
+            remainingMs: Math.max(0, remainingTravelHours / gameHoursPerRealSecond * 1_000),
+            sampledAtEpochMs,
+          },
+        };
+      }
       if (source?.navalCrossing
         && (source.status === 'embarking' || source.status === 'disembarking')) {
         projected = {
@@ -81,9 +95,18 @@ export function projectFor(
       }
       const leg = source ? currentMovementLeg({ state, world, graph }, source) : null;
       if (leg && leg.worldUnitsPerGameHour > 0) {
-        const route = !source!.order ? undefined
-          : army.own ? (ownOrderRoute ?? undefined)
-          : orderRouteForClient(source!.order, graph, source!.x, source!.z) ?? undefined;
+        const returnAnchor = source?.navalCrossing?.returningToAnchor
+          ? { x: graph.nodeX[source.graphNodeId], z: graph.nodeZ[source.graphNodeId] } : undefined;
+        const route = returnAnchor ? [{ x: source!.x, z: source!.z }, returnAnchor]
+          : !source!.order?.path.length && !source!.order?.seaDestination ? undefined
+          : orderRouteForClient(
+            { path: source!.order.path.length ? [source!.order.path[0]] : [],
+              ...(source!.order.seaDestination && !source!.order.path.length
+                ? { seaDestination: source!.order.seaDestination } : {}),
+              ...(source!.order.path.length === 1 && source!.order.roadDestination
+                ? { roadDestination: source!.order.roadDestination } : {}) },
+            graph, source!.x, source!.z, source!.edge,
+          ) ?? undefined;
         projected = {
           ...projected,
           motion: {
@@ -194,7 +217,7 @@ export function projectFor(
       shortages: structuredClone(own.shortages ?? {}),
       warheads: Math.floor(own.warheads ?? 0),
       phase: own.phase ?? 1,
-      technologies: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, ...(own.technologies ?? {}) },
+      technologies: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1, ...(own.technologies ?? {}) },
       researchSlots: (own.researchSlots ?? [own.research ?? null, null]).map((research) =>
         research ? { ...research } : null),
     } : null,
@@ -279,15 +302,44 @@ export function bearingLabel(dx: number, dz: number): string {
  * order carries no path (e.g. an already-arrived order still being cleaned up).
  */
 export function orderRouteForClient(
-  order: { path: readonly number[] },
-  graph: { nodeX: ArrayLike<number>; nodeZ: ArrayLike<number> },
+  order: { path: readonly number[]; roadDestination?: { edgeId: number; from: number; to: number; distanceAlongEdge: number };
+    seaDestination?: { x: number; z: number } },
+  graph: LandGraph | { nodeX: ArrayLike<number>; nodeZ: ArrayLike<number> },
   armyX: number, armyZ: number,
+  occupied?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null,
+  returnAnchor?: { x: number; z: number },
 ): Array<{ x: number; z: number }> | null {
-  if (!order.path.length) return null;
-  return [
+  if (!order.path.length && !order.seaDestination && !returnAnchor) return null;
+  if (!('edges' in graph)) return [
     { x: armyX, z: armyZ },
+    ...(returnAnchor ? [returnAnchor] : []),
     ...Array.from(order.path, (nodeId) => ({ x: graph.nodeX[nodeId], z: graph.nodeZ[nodeId] })),
+    ...(order.seaDestination ? [{ x: order.seaDestination.x, z: order.seaDestination.z }] : []),
   ];
+  const route = [{ x: armyX, z: armyZ }, ...(returnAnchor ? [returnAnchor] : [])];
+  let from = occupied?.from ?? nearestNode(graph,
+    returnAnchor?.x ?? armyX, returnAnchor?.z ?? armyZ, 0.1);
+  for (const to of order.path) {
+    const firstOccupied = occupied && route.length === 1;
+    const edgeId = firstOccupied
+      ? (occupied.edgeId ?? edgeIdBetween(graph, occupied.from, occupied.to))
+      : edgeIdBetween(graph, from, to);
+    if (edgeId >= 0) {
+      const edge = graph.edges[edgeId];
+      const start = to === edge.to ? edge.from : edge.to;
+      const rawProgress = firstOccupied ? (occupied.distanceAlongEdge ?? 0) : 0;
+      const progress = firstOccupied && occupied.from !== start ? edge.length - rawProgress : rawProgress;
+      const end = order.path[order.path.length - 1] === to
+        && order.roadDestination?.edgeId === edgeId
+        ? (start === order.roadDestination.from
+          ? order.roadDestination.distanceAlongEdge
+          : edge.length - order.roadDestination.distanceAlongEdge) : Infinity;
+      route.push(...edgePolyline(graph, edgeId, start, progress, end).slice(1));
+    } else route.push({ x: graph.nodeX[to], z: graph.nodeZ[to] });
+    from = to;
+  }
+  if (order.seaDestination) route.push({ x: order.seaDestination.x, z: order.seaDestination.z });
+  return route;
 }
 
 /**
@@ -308,7 +360,44 @@ export function rallyRouteForClient(
   if (to < 0) return null;
   const path = findPath(graph, from, to, movementEdgeAllowed({ state, world, graph }, countryId));
   if (!path || path.length < 2) return null;
-  return path.map((nodeId) => ({ x: graph.nodeX[nodeId], z: graph.nodeZ[nodeId] }));
+  const route = [{ x: graph.nodeX[path[0]], z: graph.nodeZ[path[0]] }];
+  for (let i = 1; i < path.length; i += 1) {
+    const edgeId = edgeIdBetween(graph, path[i - 1], path[i]);
+    if (edgeId >= 0) route.push(...edgePolyline(graph, edgeId, path[i - 1]).slice(1));
+  }
+  return route;
+}
+
+/** Stable edge references for full client route rendering. Sea routes fall
+ * back to explicit world points because they are not road centerlines. */
+export function roadRouteForClient(
+  order: { path: readonly number[]; roadDestination?: { edgeId: number; from: number; to: number; distanceAlongEdge: number } }, graph: LandGraph,
+  startNode: number,
+  occupied?: { edgeId?: number; from: number; to: number; distanceAlongEdge?: number } | null,
+): Array<{ edgeId: number; from: number; to: number; startDistance: number; endDistance?: number }> | null {
+  if (!order.path.length) return null;
+  const route: Array<{ edgeId: number; from: number; to: number; startDistance: number; endDistance?: number }> = [];
+  let from = occupied?.from ?? startNode;
+  for (let i = 0; i < order.path.length; i += 1) {
+    const to = order.path[i];
+    const firstOccupied = i === 0 && occupied;
+    const edgeId = firstOccupied
+      ? (occupied.edgeId ?? edgeIdBetween(graph, occupied.from, occupied.to))
+      : edgeIdBetween(graph, from, to);
+    const edge = graph.edges[edgeId];
+    if (!edge) return null;
+    const start = to === edge.to ? edge.from : edge.to;
+    const rawProgress = firstOccupied ? (occupied.distanceAlongEdge ?? 0) : 0;
+    const startDistance = firstOccupied && occupied.from !== start ? edge.length - rawProgress : rawProgress;
+    const endDistance = i === order.path.length - 1 && order.roadDestination?.edgeId === edgeId
+      ? (start === order.roadDestination.from
+        ? order.roadDestination.distanceAlongEdge
+        : edge.length - order.roadDestination.distanceAlongEdge) : edge.length;
+    route.push({ edgeId, from: start, to, startDistance,
+      ...(endDistance < edge.length - 1e-6 ? { endDistance } : {}) });
+    from = to;
+  }
+  return route;
 }
 
 export function retreatExitsForClient(

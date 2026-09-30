@@ -44,16 +44,6 @@ export interface UnitUpkeep {
   readonly oilPerHour?: number;
 }
 
-export type UnitStat = 'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap';
-export type ShortageCurve = 'linear' | 'soft' | 'late';
-export interface ShortageEffect {
-  readonly resource: 'funds' | 'food' | 'metal' | 'oil';
-  readonly stat: UnitStat;
-  /** Fraction removed at severity 100 (0..1). */
-  readonly maxPenalty: number;
-  readonly curve?: ShortageCurve;
-}
-
 export interface UnitType {
   readonly id: string;
   /** Visual/gameplay family shared by all levels of this unit. */
@@ -84,7 +74,6 @@ export interface UnitType {
   readonly buildCost: ResourceCost;
   readonly buildWork: number;
   readonly upkeep: UnitUpkeep;
-  readonly shortageEffects: readonly ShortageEffect[];
   /** Compatibility aliases for presentation code during the v4 transition. */
   readonly cost: ResourceCost;
   readonly buildTimeHours: number;

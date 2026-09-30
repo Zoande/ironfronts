@@ -27,6 +27,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
     x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars,
   }),
   z.object({ type: z.literal('stopArmy'), armyId: z.string() }),
+  z.object({ type: z.literal('renameArmy'), armyId: z.string(), name: z.string().trim().min(1).max(24) }),
   z.object({
     type: z.literal('setStance'), armyId: z.string(),
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']),
@@ -34,7 +35,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('extract'), armyId: z.string(), resource: z.enum(['food', 'stone', 'metal', 'oil']) }),
   z.object({ type: z.literal('produce'), provinceId: z.number().int().nonnegative(), unitTypeId: z.string() }),
   z.object({ type: z.literal('build'), provinceId: z.number().int().nonnegative(), buildingId: z.enum(['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump']) }),
-  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored']) }),
+  z.object({ type: z.literal('research'), branch: z.enum(['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy']) }),
   z.object({ type: z.literal('setRally'), provinceId: z.number().int().nonnegative(), target: z.object({ x: z.number().finite(), z: z.number().finite() }).nullable() }),
   z.object({
     type: z.literal('sendDiplomaticMessage'),
@@ -151,7 +152,6 @@ export interface CombatRateModifiers {
   frontageUsed: number;
   frontageLimit: number;
   coordination: number;
-  organization: number;
   stanceOutput: number;
   supply: number;
   protection: number;
@@ -177,23 +177,37 @@ export interface ProjectedArmy {
   composition: null | {
     unitCount: number;
     health: number;
-    /** Organization/readiness, 0..1 of max — separate from health. */
-    organization: number;
-    /** Entrenchment, 0..1 of max. */
-    entrenchment: number;
+    hp: number;
+    maxHp: number;
     /** Combat posture; see game/units/army.ts ArmyStance. */
     stance: 'attack' | 'attack-defend' | 'defend' | 'defend-retreat' | 'retreat';
     /** Within reach of the owner's own territory. */
     inSupply: boolean;
     speed: number;
     groups: ReadonlyArray<{ typeId: string; count: number; health: number }>;
+    /** Combat/movement domain of the currently manifested unit. */
+    domain?: 'land' | 'naval';
+    combatProfile?: {
+      attack: { soft: number; light: number; heavy: number };
+      defense: { soft: number; light: number; heavy: number };
+    };
+    transport?: {
+      kind: 'transport'; level: number; shipCount: number; hp: number; maxHp: number; health: number;
+      cargo: ReadonlyArray<{ typeId: string; shipCount: number; health: number }>;
+    } | null;
   };
   moveOrder: { x: number; z: number } | null;
   /** Authoritative road-graph route for an own army's active order (world-space
    *  points, army position first, destination last). Absent/[] for foreign or
    *  idle stacks. */
   moveRoute?: ReadonlyArray<{ x: number; z: number }>;
+  /** Compact canonical route; the client expands stable edges from its verified world package. */
+  moveRoadRoute?: ReadonlyArray<{
+    edgeId: number; from: number; to: number; startDistance: number; endDistance?: number;
+  }>;
   moveIntent?: 'move' | 'attack';
+  /** Full authoritative wall-clock estimate to the final order destination. */
+  arrival?: { remainingMs: number; sampledAtEpochMs: number };
   /** Next authoritative movement waypoint and wall-clock time remaining. */
   motion?: {
     targetX: number; targetZ: number; durationMs: number;
@@ -210,15 +224,14 @@ export interface ProjectedArmy {
     durationMs: number; remainingMs: number; sampledAtEpochMs: number;
   };
   actions?: { canExtract: boolean; extractionProvinceId: number | null; extractableResources: Array<'food' | 'stone' | 'metal' | 'oil'>; extractReason?: string };
-  shortage?: {
-    severity: Record<'funds' | 'food' | 'metal' | 'oil', number>;
-    modifiers: Record<'combatOutput' | 'movementSpeed' | 'visionRange' | 'extractionOutput' | 'organizationCap', number>;
-  };
   supply?: {
     capacity: number;
-    stores: Readonly<Record<string, number>>;
+    current: number;
     connected: boolean;
-    allocation: Readonly<Record<string, number>>;
+    refillMultiplier: number;
+    shortfalls: ReadonlyArray<'funds' | 'food' | 'metal' | 'oil'>;
+    effectiveness: number;
+    depletionPerHour: number;
   };
   suspendedOrder?: { x: number; z: number; intent: 'move' | 'attack' } | null;
   battleFronts?: ReadonlyArray<{

@@ -28,8 +28,6 @@ import { stepExtraction } from '../extraction';
 import { stepProduction, type UnitCompletion } from '../production';
 import { stepConstruction, type BuildingCompletion } from '../construction';
 import { stepCombat, stepCapture, type CaptureEvent, type CombatEvent } from '../combat';
-import { stepEntrenchment } from '../combat/entrenchment';
-import { regenOrganization } from '../combat/organization';
 import { stepSupply } from '../combat/supply';
 import { stepPhaseProgression } from '../phase';
 import { stepWarheads } from '../strike';
@@ -37,6 +35,7 @@ import { stepTechnology } from '../technology';
 import { stepAi } from '../ai/simple-ai';
 import { applyCommand as runCommand, type CommandResult, type GameCommand } from '../commands';
 import { wrappedDistance } from '../geometry';
+import { ensureCountryProvinceResourceBaseline } from '../economy/resource-generation';
 
 /** Longest game-time step a single `tick` will integrate; larger dt is accumulated
  *  so a stall can't teleport armies through provinces. */
@@ -133,20 +132,19 @@ export class GameSession {
     }
 
     // --- gameplay systems, fixed order ------------------------------
-    stepMovement(this, dtHours);
+    const contactTimes = new Map<string,number>();
+    for (const cap of stepMovement(this, dtHours, contactTimes)) this.pendingCaptures.push(cap);
     if (cadence.supplyHours + 1e-12 >= SUPPLY_INTERVAL) {
       const elapsedSupplyHours = cadence.supplyHours;
       cadence.supplyHours %= SUPPLY_INTERVAL;
       stepSupply(this, elapsedSupplyHours);
     }
-    stepEntrenchment(this, dtHours);
-    regenOrganization(this, dtHours);
     stepExtraction(this, dtHours);
     for (const b of stepConstruction(this, dtHours)) this.pendingBuildings.push(b);
     stepWarheads(this, dtHours);
     stepTechnology(this.state.countries, dtHours);
     for (const done of stepProduction(this, dtHours)) this.pendingCompletions.push(done);
-    for (const ev of stepCombat(this, dtHours)) this.pendingCombat.push(ev);
+    for (const ev of stepCombat(this, dtHours, contactTimes)) this.pendingCombat.push(ev);
     for (const cap of stepCapture(this)) this.pendingCaptures.push(cap);
     // --- simple defensive AI (slow cadence) -----------------------
     if (cadence.aiHours + 1e-12 >= AI_INTERVAL) {
@@ -315,6 +313,13 @@ export class GameSession {
     }
     if (best !== null) {
       this.state.countries[best].controller = 'ai';
+      if (this.state.provinceEconomies) {
+        ensureCountryProvinceResourceBaseline(
+          this.state.provinceEconomies, this.world, this.state.provinceOwners,
+          best, ['stone', 'metal'],
+        );
+        recomputeIncome(this.state, this.world, this.graph);
+      }
       // The AI opponent now needs an economy too — give it the same strategic
       // baseline the player got at init (idempotent if its natural geography
       // already covers stone + metal).

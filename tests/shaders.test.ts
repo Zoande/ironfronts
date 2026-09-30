@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WgslReflect } from 'wgsl_reflect/wgsl_reflect.module.js';
 import { create, globals } from 'webgpu';
 import {
-  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, infantryModelShader, infrastructureShader, lineShader, mapMarkerShader, polarCapShader, propShader,
+  armyMarkerShader, armyModelShader, cityLightShader, combatEffectShader, countryLabelShader, landModelShader, landShadowShader, infrastructureShader, lineShader, mapMarkerShader, polarCapShader, propShader,
   rainShader, terrainShader, waterShader, waterwayShader,
 } from '../src/shaders';
 
@@ -23,10 +23,17 @@ describe('WGSL programs', () => {
     expect(armyMarkerShader).toContain('smoothstep(7600.0, 9200.0, zoom)');
   });
 
-  it('keeps strategic troop models small relative to roads and towns', () => {
-    const scale = Number(/let scale = select\(([\d.]+),/.exec(armyModelShader)?.[1]);
-    expect(scale).toBeGreaterThan(0);
-    expect(scale).toBeLessThanOrEqual(2.1);
+  it('keeps strategic troop models small with separate infantry and transport scales', () => {
+    // Infantry intentionally matches the authored model at 1.5x the base
+    // land scale. Transports keep their own scale rather than that multiplier.
+    const scales = /let\s+scale\s*=\s*select\(\s*select\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*0u\s*\)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*5u\s*\)/.exec(armyModelShader);
+    expect(scales, 'base land, infantry, and transport scale selection').not.toBeNull();
+    const [land, infantry, transport] = scales!.slice(1).map(Number);
+    expect(land).toBeGreaterThan(0);
+    expect(land).toBeLessThanOrEqual(2.1);
+    expect(infantry).toBeCloseTo(land * 1.5, 6);
+    expect(transport).toBeGreaterThan(0);
+    expect(transport).toBeLessThanOrEqual(2.15);
   });
 
   it('renders at-sea armies as procedural transport ships on the water surface', () => {
@@ -42,7 +49,7 @@ describe('WGSL programs', () => {
     // infantry rifle points forward (-Z), not out the side (+X)
     expect(armyModelShader).toContain('center = vec3f(0.06, 1.72, -0.78)');
     // gait only animates while the unit is actually moving between syncs
-    expect(armyModelShader).toContain('let moveAmt = clamp(distance(model.a.xy, model.c.xy) / 3.0, 0.0, 1.0)');
+    expect(armyModelShader).toContain('let moveAmt = select(0.0,1.0,(u32(model.b.z)&2u)!=0u)');
   });
 
   it('holds marker plaques and count badges at a constant CSS size across graphics presets', () => {
@@ -50,11 +57,11 @@ describe('WGSL programs', () => {
     expect(armyModelShader).toContain('* 2.0 * uniforms.viewport.z / uniforms.viewport.xy');
   });
 
-  it('renders the explosion as layered fire, embers, smoke and ground dust', () => {
-    expect(combatEffectShader).toContain('let fireLife = 1.0 - smoothstep(0.0, 0.55, input.age)');
-    expect(combatEffectShader).toContain('let smokeLife = smoothstep(0.06, 0.5, input.age)');
-    expect(combatEffectShader).toContain('let emberField = valueNoise(uv * 9.0 + input.seed * 120.0)');
-    expect(combatEffectShader).toContain('* uniforms.viewport.z');
+  it('samples and blends authored smoke/fire frames in world-scaled billboards', () => {
+    expect(combatEffectShader).toContain('textureSampleLevel(effectAtlas');
+    expect(combatEffectShader).toContain('fract(frame)');
+    expect(combatEffectShader).toContain('effect.c.w');
+    expect(combatEffectShader).toContain('vec2f(rotated.x,-rotated.y)');
   });
 
   it('pulls towns and forests down to a strategic map scale', () => {
@@ -268,7 +275,8 @@ describe('WGSL programs', () => {
     ['army markers', armyMarkerShader,
       ['armyMarkerVertex', 'armyCompositionVertex'], ['armyCompositionFragment', 'armyMarkerFragment']],
     ['army models', armyModelShader, ['armyModelVertex', 'armyKindCountVertex'], ['armyModelFragment', 'armyKindCountFragment']],
-    ['infantry model', infantryModelShader, ['infantryModelVertex'], ['infantryModelFragment']],
+    ['land model', landModelShader, ['landModelVertex'], ['landModelFragment']],
+    ['land shadows and ship wake', landShadowShader, ['landShadowVertex'], ['landShadowFragment']],
     ['combat effects', combatEffectShader, ['combatEffectVertex'], ['combatEffectFragment']],
     ['country labels', countryLabelShader, ['countryLabelVertex'], ['countryLabelFragment']],
   ])('parses the %s shader and exposes its render entry points', (_name, source, vertexNames, fragmentNames) => {
@@ -291,7 +299,7 @@ describe('WGSL programs', () => {
     const device = await adapter.requestDevice();
     const modules = new Map<string, GPUShaderModule>();
     for (const [label, source] of [
-      ['terrain', terrainShader], ['polar caps', polarCapShader], ['water', waterShader], ['waterways', waterwayShader], ['infrastructure', infrastructureShader], ['props', propShader], ['city lights', cityLightShader], ['rain', rainShader], ['lines', lineShader], ['map markers', mapMarkerShader], ['army markers', armyMarkerShader], ['army models', armyModelShader], ['infantry model', infantryModelShader], ['combat effects', combatEffectShader], ['country labels', countryLabelShader],
+      ['terrain', terrainShader], ['polar caps', polarCapShader], ['water', waterShader], ['waterways', waterwayShader], ['infrastructure', infrastructureShader], ['props', propShader], ['city lights', cityLightShader], ['rain', rainShader], ['lines', lineShader], ['map markers', mapMarkerShader], ['army markers', armyMarkerShader], ['army models', armyModelShader], ['land model', landModelShader], ['land shadows',landShadowShader], ['combat effects', combatEffectShader], ['country labels', countryLabelShader],
     ] as const) {
       const module = device.createShaderModule({ label, code: source });
       modules.set(label, module);
@@ -412,7 +420,10 @@ describe('WGSL programs', () => {
       depthStencil: { ...depthStencil, depthWriteEnabled: false, depthCompare: 'always' },
     })).resolves.toBeDefined();
     await expect(device.createRenderPipelineAsync({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [common, layer] }),
+      layout: device.createPipelineLayout({ bindGroupLayouts: [common, layer, device.createBindGroupLayout({entries:[
+        {binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'float'}},
+        {binding:1,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'filtering'}},
+      ]})] }),
       vertex: { module: modules.get('combat effects')!, entryPoint: 'combatEffectVertex' },
       fragment: { module: modules.get('combat effects')!, entryPoint: 'combatEffectFragment', targets: [{ format: 'bgra8unorm' }] },
       primitive: { topology: 'triangle-list' },

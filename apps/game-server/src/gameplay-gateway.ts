@@ -3,11 +3,12 @@
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import {
-  GAME_ID, GAME_VERSION, PROTOCOL_VERSION, clientMessageSchema,
+  PROTOCOL_VERSION, clientMessageSchema,
   type PlayerProjection, type ServerMessage, type WorldDescriptor,
 } from '@ironfronts/protocol';
 import { verifyGameTicket } from '@ironfronts/protocol/ticket';
 import type { GameRuntime } from './runtime';
+import { config } from './config';
 import type { AuthoritativeGameClock } from './game-clock';
 import { TicketNonceStore } from './ticket-nonces';
 
@@ -229,7 +230,7 @@ export class GameplayGateway {
         if (message.type === 'authenticate') {
           if (connection) throw new Error('Connection is already authenticated.');
           const claims = verifyGameTicket(message.ticket, this.options.ticketSecret);
-          if (claims.gameId !== GAME_ID) throw new Error('Ticket is for a different game.');
+          if (claims.gameId !== config.gameId) throw new Error('Ticket is for a different game.');
           if (!this.usedNonces.consume(claims.nonce, claims.expiresAt)) {
             throw new Error('Game ticket has already been used.');
           }
@@ -248,7 +249,7 @@ export class GameplayGateway {
           };
           this.connections.add(connection);
           this.sendSocket(socket, {
-            type: 'hello', gameId: GAME_ID, gameVersion: GAME_VERSION,
+            type: 'hello', gameId: config.gameId, gameVersion: config.gameVersion,
             protocolVersion: PROTOCOL_VERSION,
             capabilities: [
               'filtered-baseline', 'change-only-deltas', 'resync',

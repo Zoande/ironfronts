@@ -6,13 +6,16 @@ import { unitType } from '../units/unit-catalog';
 import { issueMoveOrder } from '../units/movement';
 import type { ExactMoveGoal } from '../movement/orders';
 import type { ArmyStack } from '../units/army';
-import type { LandGraph } from '../movement/graph';
+import { nearestRoadPosition, type LandGraph } from '../movement/graph';
 import { routeFromArmy } from '../movement/position';
 import { combinedGraph } from '../movement/naval';
 import { computeArmyVisibility } from '../visibility';
 import { relationOf, setRelation } from '../game-state';
 import { wrappedDistance } from '../geometry';
 import type { AttackCommand, CommandResult } from './types';
+import { movementEdgeAllowed } from '../movement/policy';
+import { movementEdgeTravelCost } from '../movement/speed';
+import { combatDomain } from '../naval/transport';
 
 function reachableProvinceNode(
   ctx: SimContext, army: ArmyStack, provinceId: number, targetX: number, targetZ: number,
@@ -27,16 +30,28 @@ function reachableProvinceNode(
   ) - wrappedDistance(
     ctx.graph.nodeX[b], ctx.graph.nodeZ[b], targetX, targetZ, ctx.world.width,
   ) || a - b);
-  const reachableIn = (graph: LandGraph): ExactMoveGoal | null => {
+  const provinceOwner = ctx.state.provinceOwners[provinceId] ?? 0;
+  const prospectiveWars = new Set(provinceOwner > 0 ? [provinceOwner] : []);
+  const reachableIn = (
+    graph: LandGraph, allowNeutral: boolean,
+  ): ExactMoveGoal | null => {
+    const allowed = allowNeutral ? undefined
+      : movementEdgeAllowed(ctx, army.ownerCountryId, false, prospectiveWars);
+    const cost = movementEdgeTravelCost(
+      ctx, army, graph, allowNeutral
+        ? new Set(Object.keys(ctx.state.countries).map(Number)) : prospectiveWars,
+    );
     for (const node of nodes) {
-      if (routeFromArmy(ctx, army, node, undefined, graph)) return { graph, nodeId: node };
+      if (routeFromArmy(ctx, army, node, allowed, graph, cost)) return { graph, nodeId: node };
     }
     return null;
   };
-  const goal = reachableIn(ctx.graph) ?? reachableIn(combinedGraph(ctx.graph));
+  const merged = combinedGraph(ctx.graph);
+  const goal = reachableIn(ctx.graph, false) ?? reachableIn(merged, false)
+    ?? reachableIn(ctx.graph, true) ?? reachableIn(merged, true);
   return goal === null
     ? { ok: false, reason: 'Attack route unavailable.' }
-    : { ...goal, x: ctx.graph.nodeX[goal.nodeId], z: ctx.graph.nodeZ[goal.nodeId] };
+    : { ...goal, x: ctx.graph.nodeX[goal.nodeId!], z: ctx.graph.nodeZ[goal.nodeId!] };
 }
 
 export function issueAttack(ctx: SimContext, command: AttackCommand): CommandResult {
@@ -70,7 +85,23 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
     if (provinceOwner > 0 && relationOf(ctx.state, army.ownerCountryId, provinceOwner) === 'allied') {
       return { ok: false, reason: 'That province belongs to an ally — move there instead.' };
     }
-    const destination = reachableProvinceNode(ctx, army, province.id, destinationX, destinationZ);
+    const centerClick = hasClickPoint && wrappedDistance(
+      destinationX, destinationZ, province.center[0], province.center[1], ctx.world.width,
+    ) <= 0.01;
+    const merged = combinedGraph(ctx.graph);
+    const exactRoad = hasClickPoint && !centerClick
+      ? nearestRoadPosition(
+        ctx.graph, destinationX, destinationZ, 600, -1,
+        (x, z) => ctx.world.provinceAt(x, z) === province.id,
+      ) ?? nearestRoadPosition(
+        merged, destinationX, destinationZ, 600, -1,
+        (x, z) => ctx.world.provinceAt(x, z) === province.id,
+      ) : null;
+    const destination = exactRoad
+      ? { graph: ctx.graph.component[army.graphNodeId] === ctx.graph.component[exactRoad.from]
+          ? ctx.graph : merged,
+        roadPosition: exactRoad, x: exactRoad.x, z: exactRoad.z }
+      : reachableProvinceNode(ctx, army, province.id, destinationX, destinationZ);
     if ('ok' in destination) return destination;
     return issueMoveOrder(
       ctx, army.id, destination.x, destination.z, 'attack',
@@ -93,6 +124,11 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
   if (!contact || contact === 'hidden') return { ok: false, reason: 'No valid hostile force.' };
   const required = relationOf(ctx.state, army.ownerCountryId, target.ownerCountryId) === 'war'
     ? [] : [target.ownerCountryId];
+  if (combatDomain(army) !== combatDomain(target)) {
+    return { ok: false, reason: combatDomain(target) === 'naval'
+      ? 'Land forces cannot attack a naval target.'
+      : 'Naval forces cannot attack a land target.' };
+  }
   if (artilleryOnly) {
   if (required.some((id) => !command.confirmedWarCountryIds?.includes(id))) {
     return { ok: false, reason: 'War declaration required.', requiredWarCountryIds: required };

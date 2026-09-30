@@ -22,6 +22,12 @@ function world(originalOwnerOf: Record<number, number>): WorldData {
 }
 
 function state(owners: Record<number, number>): GameState {
+  const economy = (funds: number) => ({
+    resourcePotential: { food: 0, stone: 0, metal: 0, oil: 0 },
+    baseProduction: { ...emptyStockpile(), funds },
+    resourceBuildings: { fields: 0, quarry: 0, mine: 0, oilPump: 0 },
+    productionCapacity: 1, constructionCapacity: 1,
+  });
   return {
     version: GAME_STATE_VERSION, seed: 1, scenarioId: 'x', mode: 'campaign',
     fogOfWar: false, economyEnabled: true,
@@ -32,7 +38,8 @@ function state(owners: Record<number, number>): GameState {
     },
     provinceOwners: owners,
     provinceBuildings: {}, productionQueues: {}, constructionQueues: {}, rallyPoints: {},
-    armies: {}, resourceNodes: {}, relations: {}, battles: {}, battleFronts: {},
+    armies: {}, provinceEconomies: { 1: economy(10), 2: economy(10) },
+    resourceNodes: {}, relations: {}, battles: {}, battleFronts: {},
     nextArmyId: 1, nextBattleId: 1, nextFrontId: 1, nextOrderId: 1, nextEventId: 1,
   } as unknown as GameState;
 }

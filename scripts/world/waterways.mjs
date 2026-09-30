@@ -390,10 +390,10 @@ export function buildWaterways({
       waterwayTriangles: sorted.indices.length / 3,
     },
     showcases: {
-      river: [riverShowcaseNode.x, riverShowcaseNode.y],
-      riverMouth: [(mouthA.x + unwrapNear(mouthB.x, mouthA.x, worldWidth)) * 0.5, (mouthA.y + mouthB.y) * 0.5],
-      kielCanal: [kielNode.x, kielNode.y],
-      suezCanal: [suezNode.x, suezNode.y],
+      river: riverShowcaseNode ? [riverShowcaseNode.x, riverShowcaseNode.y] : [worldWidth / 2, worldHeight / 2],
+      riverMouth: mouthA && mouthB ? [(mouthA.x + unwrapNear(mouthB.x, mouthA.x, worldWidth)) * 0.5, (mouthA.y + mouthB.y) * 0.5] : [worldWidth / 2, worldHeight / 2],
+      kielCanal: kielNode ? [kielNode.x, kielNode.y] : [worldWidth / 2, worldHeight / 2],
+      suezCanal: suezNode ? [suezNode.x, suezNode.y] : [worldWidth / 2, worldHeight / 2],
     },
   };
 }

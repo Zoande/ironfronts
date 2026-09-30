@@ -1,6 +1,8 @@
 node_modules/
 dist/
 public/world/
+public/europe/
+*.har
 artifacts/
 data/
 *.log
@@ -13,3 +15,4 @@ ironfronts-backups/
 # (e.g. Call of War wiki unit art) used only as a local dev visual target.
 # See dev-assets/callofwar-reference/README.md before touching this rule.
 dev-assets/
+.env

@@ -1,11 +1,13 @@
 import type { SimContext } from '../sim-context';
 import type { ArmyStack, MoveOrder } from '../units/army';
 import { computeArmyVisibility } from '../visibility';
-import { nearestNode } from './graph';
+import { edgePositionFrom, nearestNode } from './graph';
 import { movementEdgeAllowed } from './policy';
 import { routeFromArmy, leadingEdgeValid } from './position';
 import { closestReachablePath } from './pathfind';
 import { combinedGraph, isSeaEdge } from './naval';
+import { movementEdgeTravelCost } from './speed';
+import { routeToRoadPosition } from './road-route';
 
 function targetPoint(session: SimContext, army: ArmyStack, order: MoveOrder,
   visibility = computeArmyVisibility(session.state, session.world, army.ownerCountryId)): [number, number] {
@@ -48,24 +50,53 @@ export function revalidateOrder(session: SimContext, army: ArmyStack, order: Mov
     && targetNode >= 0 && order.path[order.path.length - 1] !== targetNode;
   if (!nextInvalid && !pursuitChanged) return;
 
+  // A route repair must retain the accepted physical destination, not replace
+  // its coordinates with an endpoint while keeping the old partial distance.
+  const destination = order.roadDestination;
+  if (destination && order.target?.kind !== 'army') {
+    const point = edgePositionFrom(session.graph, destination.edgeId, destination.from, destination.distanceAlongEdge);
+    const road = session.graph.edges[destination.edgeId];
+    const goal = { ...point, edgeId: road.id, from: road.from, to: road.to,
+      distanceAlongEdge: destination.from === road.from ? destination.distanceAlongEdge : road.length - destination.distanceAlongEdge,
+      distanceToRoad: 0 };
+    const route = routeToRoadPosition(session, army, session.graph, goal, edgeAllowed)
+      ?? routeToRoadPosition(session, army, merged, goal, edgeAllowed);
+    if (route) {
+      order.path.splice(0, order.path.length, ...route.path.slice(1));
+      Object.assign(order, { destX: point.x, destZ: point.z, roadDestination: route.roadDestination });
+      order.edgeProgress = 0;
+      return;
+    }
+  }
+
   let routeGraph = session.graph;
   let path = targetNode >= 0
-    ? routeFromArmy(session, army, targetNode, edgeAllowed, routeGraph)
+    ? routeFromArmy(
+      session, army, targetNode, edgeAllowed, routeGraph,
+      movementEdgeTravelCost(session, army, routeGraph),
+    )
     : null;
   if (!path && targetNode >= 0) {
     routeGraph = merged;
-    path = routeFromArmy(session, army, targetNode, edgeAllowed, routeGraph);
+    path = routeFromArmy(
+      session, army, targetNode, edgeAllowed, routeGraph,
+      movementEdgeTravelCost(session, army, routeGraph),
+    );
   }
   if (!path) {
-    const nearest = closestReachablePath(routeGraph, army.graphNodeId, targetX, targetZ, edgeAllowed);
+    const cost = movementEdgeTravelCost(session, army, routeGraph);
+    const nearest = closestReachablePath(
+      routeGraph, army.graphNodeId, targetX, targetZ, edgeAllowed, cost,
+    );
     path = routeFromArmy(
-      session, army, nearest[nearest.length - 1], edgeAllowed, routeGraph,
+      session, army, nearest[nearest.length - 1], edgeAllowed, routeGraph, cost,
     ) ?? [army.graphNodeId];
   }
   order.path.splice(0, order.path.length, ...path.slice(1));
   Object.assign(order, {
     destX: session.graph.nodeX[path[path.length - 1]] ?? army.x,
     destZ: session.graph.nodeZ[path[path.length - 1]] ?? army.z,
+    roadDestination: undefined,
   });
   order.edgeProgress = 0;
 }

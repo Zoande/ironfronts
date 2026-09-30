@@ -267,7 +267,7 @@ fn propFragment(input: PropVertexOutput) -> @location(0) vec4f {
   albedo = mix(albedo, albedo * vec3f(0.72, 0.78, 0.81), uniforms.weather.x * 0.40);
   let distanceToCamera = distance(uniforms.camera.xyz, input.worldPosition);
   let fog = smoothstep(3100.0, 9200.0, distanceToCamera);
-  let worldFog = horizontalWorldFog(input.worldPosition.x);
+  let worldFog = mapFog(input.worldPosition.xz);
   var emission = vec3f(0.0);
   if (input.emissiveKind > 0.5 && input.emissiveKind < 1.5) {
     let windowGrid = (input.materialUv + vec2f(0.5, 0.0)) * vec2f(5.0, 5.0);

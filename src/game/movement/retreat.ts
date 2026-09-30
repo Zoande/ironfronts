@@ -1,12 +1,13 @@
 import type { SimContext } from '../sim-context';
 import type { ArmyStack } from '../units/army';
 import { ensureArmyRuntimeState } from '../units/army';
-import { occupiedEdge } from './position';
+import { canonicalEdgeDistance, occupiedEdge } from './position';
 import { shortestPaths } from './pathfind';
 import { nearestNode } from './graph';
 import { movementEdgeAllowed } from './policy';
 import { wrappedDistance } from '../geometry';
 import { installOrder } from './orders';
+import { movementEdgeTravelCost } from './speed';
 
 export interface RetreatPath {
   readonly firstNodeId: number;
@@ -40,22 +41,41 @@ export function retreatPaths(
     .filter((province) => session.state.provinceOwners[province.id] === army.ownerCountryId);
   const edge = occupiedEdge(session, army);
   for (const first of firstNodes) {
-    const partialReturn = edge && first === edge.from;
+    const edgeEndpoint = edge && (first === edge.from || first === edge.to);
+    const partialReturn = edgeEndpoint && first === edge.from;
     if (!partialReturn && (!session.graph.adjacency[army.graphNodeId]?.includes(first) || !allowed(army.graphNodeId, first))) continue;
+    const blockedEndpoint = edgeEndpoint ? (first === edge.from ? edge.to : edge.from) : army.graphNodeId;
     const {distance,parent} = shortestPaths(session.graph, first, (from,to) => allowed(from,to)
-      && (partialReturn ? to !== edge.to : to !== army.graphNodeId));
+      && to !== blockedEndpoint,
+    movementEdgeTravelCost(session, army, session.graph));
     for (const destination of destinations) {
       if (!partialReturn && destination.node === army.graphNodeId || !Number.isFinite(distance[destination.node])) continue;
       const tail=[destination.node];
       for (let node=destination.node;parent[node]>=0;node=parent[node]) tail.push(parent[node]);
       tail.reverse();
-      // In the partial-return case `first` IS `army.graphNodeId` (edge.from),
-      // so `tail[0]` already equals it — prepending it again produced a
-      // duplicate leading node whose second hop then failed the mid-edge
-      // "next must be edge.from/edge.to" check in validateWorldState.
-      const path=partialReturn?tail:[army.graphNodeId,...tail];
+      // The path convention includes the current node. A partial turn back
+      // repeats edge.from so installOrder leaves it as the first target.
+      const path=[army.graphNodeId,...tail];
+      const road = edge ? session.graph.edges[edge.edgeId] : null;
+      const canonical = edge ? canonicalEdgeDistance(session.graph, edge) : 0;
+      const leadDistance = edgeEndpoint && road
+        ? (first === road.from ? canonical : road.length - canonical)
+        : wrappedDistance(
+          army.x, army.z, session.graph.nodeX[first], session.graph.nodeZ[first], session.world.width,
+        );
+      const edgeIndex = session.graph.adjacency[army.graphNodeId]?.indexOf(first) ?? -1;
+      const fullDistance = edgeEndpoint && road ? road.length
+        : edgeIndex >= 0 ? session.graph.edgeCost[army.graphNodeId][edgeIndex] : leadDistance;
+      const leadCost = fullDistance > 0
+        ? movementEdgeTravelCost(session, army, session.graph)(
+          edgeEndpoint && road ? road.from : army.graphNodeId,
+          edgeEndpoint && road ? road.to : first,
+          fullDistance,
+        )
+          * leadDistance / fullDistance
+        : 0;
       result.push({firstNodeId:first,destinationProvinceId:destination.id,path,
-        length:distance[destination.node]+wrappedDistance(army.x,army.z,session.graph.nodeX[first],session.graph.nodeZ[first],session.world.width)});
+        length:distance[destination.node]+leadCost});
     }
   }
   result.sort((a, b) => a.length - b.length

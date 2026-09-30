@@ -1,0 +1,63 @@
+{
+  "scale": 2.0,
+  "stride": 2.2,
+  "muzzle": [
+    0,
+    1.4,
+    2.66
+  ],
+  "kind": "artillery",
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 11364,
+      "vertices": 5960
+    },
+    {
+      "lod": 1,
+      "triangles": 4772,
+      "vertices": 2664
+    },
+    {
+      "lod": 2,
+      "triangles": 1525,
+      "vertices": 1073
+    }
+  ],
+  "clips": {
+    "Idle": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Walk": {
+      "duration": 1,
+      "fps": 30
+    },
+    "Reverse": {
+      "duration": 1.2,
+      "fps": 30
+    },
+    "Fire": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Reload": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Deploy": {
+      "duration": 1.5,
+      "fps": 30
+    },
+    "Death": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Run": {
+      "duration": 0.8,
+      "fps": 30
+    }
+  },
+  "source": "material/land-armies/artillery.blend",
+  "authoredBy": "Ironfronts / Codex; original procedural Blender source"
+}

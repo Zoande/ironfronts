@@ -28,6 +28,17 @@ import type {
   TechnologyCategory, TradeLegView, UiStore,
 } from '../ui-state';
 
+// Backdrop art for the technology panel, one per branch (see technologyArtworkKey
+// below for the id -> filename mapping). Not every branch has art yet, so lookups
+// are optional — the panel falls back to its plain background when art is missing.
+const technologyBackdropAssets = import.meta.glob('../assets/technology/backdrop-*.jpg', {
+  eager: true, query: '?url', import: 'default',
+}) as Record<string, string>;
+const technologyBackdropUrl = (branch: TechnologyBranch): string | undefined => {
+  const key = branch === 'resourceBuildings' ? 'resource-buildings' : branch;
+  return technologyBackdropAssets[`../assets/technology/backdrop-${key}.jpg`];
+};
+
 export interface GameUiActions {
   setMapMode(mode: MapMode): void;
   clearSelection(): void;
@@ -56,6 +67,7 @@ export interface GameUiActions {
   zoomMap?: (factor: number) => void;
   /** Selected-army orders. 'deselect' clears the selection. */
   armyCommand(command: ArmyPanelCommand): void;
+  renameArmy(armyId: string, name: string): void;
   /** Queue a unit in the selected (own) province. */
   produceUnit(provinceId: number, unitTypeId: string): void;
   /** Start a building in the selected (own, urban) province. */
@@ -129,7 +141,8 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
     { id: 'armored', technology: 'armored', label: 'Armored Warfare', shortLabel: 'Armor', icon: 'unit-medium-tank', description: 'Improves tank protection, engines and heavy firepower.', unlocks: 'Light and medium tank levels' },
   ] },
   { id: 'navy', label: 'Navy', icon: 'tech-navy', lines: [
-    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future naval vessels and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
+    { id: 'transport-service', technology: 'navy', label: 'Naval Logistics', shortLabel: 'Transports', icon: 'tech-navy', description: 'Improves the temporary transport fleet used by embarked land armies.', unlocks: 'Transport ship health, speed and defensive armament' },
+    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future battleships and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
     { id: 'submarines', label: 'Submarine Service', shortLabel: 'Submarines', icon: 'tech-navy', description: 'Future undersea warfare capabilities.', unlocks: 'Planned naval line', comingSoon: true },
   ] },
   { id: 'airforce', label: 'Air Force', icon: 'tech-airforce', lines: [
@@ -164,6 +177,8 @@ function technologyLevelUnlockText(branch: TechnologyBranch, level: number): str
         : `Armored Car & Artillery Level ${level} — also needs Tank Plant/Ordnance Tier ${level}.`;
     case 'armored':
       return `Light & Medium Tank Level ${level} — also needs Tank Plant Tier ${level}.`;
+    case 'navy':
+      return `Transport Ship Level ${level} (more hull strength, speed and defensive armament).`;
   }
 }
 
@@ -179,6 +194,7 @@ function technologyUnlocks(branch: TechnologyBranch, level: number): readonly Te
     case 'training': return [building('barracks', 'Barracks'), building('tankPlant', 'Tank plant'), building('ordnance', 'Ordnance')];
     case 'hybrid': return [unit('armored-car', 'Armored car'), unit('artillery', 'Artillery'), ...(level === 8 ? [building('missileSite', 'Missile site', 1)] : [])];
     case 'armored': return [unit('light-tank', 'Light tank'), unit('medium-tank', 'Medium tank')];
+    case 'navy': return [];
   }
 }
 
@@ -526,6 +542,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     if (selectedTechnologyLevel === 0) {
       selectedTechnologyLevel = Math.min(8, state.technology.levels[selectedTechnology] + 1);
     }
+    const backdrop = technologyBackdropUrl(selectedTechnology);
+    techBody.style.setProperty('--ifg-tech-backdrop', backdrop ? `url("${backdrop}")` : 'none');
     techTabs.replaceChildren(...TECHNOLOGY_CATEGORIES.map((category) => {
       const tab = el('button', 'ifg-tech__tab');
       tab.type = 'button';
@@ -1465,10 +1483,11 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     // patches the store every in-game minute; a full JSON.stringify(army) here
     // rebuilt the whole panel (portraits included) on every one of those.
     const nextArmyKey = showArmy && army ? [
-      army.id, army.identified, army.combat, army.targetingMode ?? '', army.activity,
+      army.id, army.name, army.identified, army.combat, army.targetingMode ?? '', army.activity,
       army.activityKind ?? '', Math.floor((army.activityProgress ?? 0) * 20),
       Math.round(army.activityDurationSeconds ?? 0),
       Math.round((army.health ?? 0) * 100), Math.round((army.strength ?? 0) * 100),
+      Math.round(army.hp ?? 0), Math.round(army.maxHp ?? 0),
       army.unitCount, army.canMove, army.moveDisabledReason ?? '', army.canAttack, army.canRetreat,
       army.canSplit, army.canStop, army.canExtract,
       army.legalRetreatExits?.length ?? 0,
@@ -1477,10 +1496,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       (army.battleFronts ?? []).map((front) =>
         `${front.id}:${Math.round(front.friendlyHp)}:${Math.round(front.enemyHp)}`).join(','),
     ].join('|') : '';
-    if (nextArmyKey !== armyKey) {
+    if (nextArmyKey !== armyKey && !(army && armyCard.querySelector('.ifg-army-panel__name-input') && armyCard.dataset.armyId === army.id)) {
       armyKey = nextArmyKey;
       if (showArmy && army) {
-        renderSelectedArmyPanel(armyCard, army, (command) => actions.armyCommand(command), (typeId) => dossier.openUnit(typeId));
+        armyCard.dataset.armyId = army.id;
+        renderSelectedArmyPanel(armyCard, army, (command) => actions.armyCommand(command),
+          (typeId) => dossier.openUnit(typeId), (name) => actions.renameArmy(army.id, name));
       }
     }
 

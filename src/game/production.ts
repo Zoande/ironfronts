@@ -13,7 +13,7 @@ import type { ProductionOrder } from './game-state';
 import type { BuildingId } from './units/unit-types';
 import { BASE_UNIT_IDS, UNIT_TYPE_BY_ID, baseUnitId, unitType } from './units/unit-catalog';
 import { TECHNOLOGY_LABELS, technologyLevels } from './technology';
-import { makeGroup, mergeStacks, type ArmyStack } from './units/army';
+import { generatedArmyName, makeGroup, mergeStacks, type ArmyStack } from './units/army';
 import { nearestNode } from './movement/graph';
 import { issueMoveOrder } from './units/movement';
 
@@ -199,7 +199,7 @@ function spawnUnit(
   session.state.armies[id] = {
     id,
     ownerCountryId,
-    name: `${unitType(unitTypeId).name} Detachment`,
+    name: generatedArmyName(`${unitType(unitTypeId).name} Det.`),
     x: nx,
     z: nz,
     graphNodeId: node >= 0 ? node : 0,

@@ -8,6 +8,7 @@ import { wrappedDistance } from '../geometry';
 import { addDamage, applyPendingDamage, calculateDamage, type GroupRef, type PendingDamage } from './damage';
 import { removeArmyFromAllFronts } from './fronts';
 import type { CombatEvent } from './events';
+import { combatDomain } from '../naval/transport';
 
 function artilleryDamage(
   army: ArmyStack, target: ArmyStack, dtHours: number,
@@ -35,6 +36,7 @@ export function stepArtillery(session: SimContext, dtHours: number, events: Comb
     visibilityByCountry.set(army.ownerCountryId, visibility);
     const validTargets = armies.filter((target) => target.id !== army.id
       && relationOf(session.state, army.ownerCountryId, target.ownerCountryId) === 'war'
+      && combatDomain(target) === 'land'
       && !target.retreat?.protected
       && visibility.get(target.id) !== 'hidden'
       && wrappedDistance(army.x, army.z, target.x, target.z, session.world.width) <= range);

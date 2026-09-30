@@ -251,6 +251,18 @@ describe('groupEngagedByFront', () => {
 });
 
 describe('groupEngagedByFront + buildBattleAnchors + combatHuddleOffset end-to-end', () => {
+  it('keeps seam neighbors together and chooses multi-front anchors independently of input order', () => {
+    const stacks=[
+      {id:'a',x:990,z:0,ownerCountryId:1,frontIds:['f2','f1']},
+      {id:'b',x:10,z:0,ownerCountryId:2,frontIds:['f1']},
+      {id:'c',x:980,z:0,ownerCountryId:3,frontIds:['f2']},
+    ];
+    const anchors=buildBattleAnchors(groupEngagedByFront(stacks,1000));
+    expect(anchors).toEqual(buildBattleAnchors(groupEngagedByFront([...stacks].reverse(),1000)));
+    expect(anchors.get('a')!.x).toBe(0);
+    expect(combatHuddleOffset(stacks[0],anchors.get('a')!,undefined,undefined,1000)).toEqual({x:0,z:0});
+    expect(combatHuddleOffset(stacks[1],anchors.get('b')!,undefined,undefined,1000)).toEqual({x:0,z:0});
+  });
   it('converges two hostile stacks on a real front to a tight, non-zero-crossing gap', () => {
     // A pair well outside the visual huddle radius but within HUDDLE_MAX_PULL
     // of their shared front — a plausible "far apart despite being engaged"
@@ -319,7 +331,7 @@ describe('groupEngagedByFront + buildBattleAnchors + combatHuddleOffset end-to-e
     expect(visible.count).toBe(2);
     const kinds = [
       visible.floats[2],
-      visible.floats[8 + 2],
+      visible.floats[EFFECT_STRIDE + 2],
     ];
     expect(kinds).toContain(EFFECT_KIND.battleMarker);
     expect(kinds).toContain(EFFECT_KIND.explosion);

@@ -43,6 +43,14 @@ afterEach(() => {
 });
 
 describe('touch camera controls', () => {
+  it('allows the close army LOD while maintaining terrain clearance', () => {
+    const {camera}=createHarness();
+    camera.pitch=.78;
+    camera.zoomAtViewportCenter(.001);
+    expect(camera.distance).toBeLessThan(180);
+    expect(camera.position[1]).toBeGreaterThanOrEqual(79.99);
+    camera.detach();
+  });
   it('pans the map with one finger', () => {
     const { camera, canvas, viewport } = createHarness();
     const startX = camera.target[0];

@@ -87,15 +87,11 @@ export function createProvinceEconomies(
   }
 
   // Guarantee one undeveloped source for every resource to each playable country.
+  const initialOwners = Object.fromEntries(
+    world.provinces.map((province) => [province.id, world.provinceOwner(province.id)]),
+  );
   for (const countryId of playable) {
-    const owned = world.provinces.filter((province) => world.provinceOwner(province.id) === countryId);
-    for (const resource of PHYSICAL_RESOURCES) {
-      if (owned.some((province) => out[province.id].baseProduction[resource] > 0)) continue;
-      const best = [...owned].sort((a, b) => potential[b.id][resource] - potential[a.id][resource] || a.id - b.id)[0];
-      if (!best) continue;
-      out[best.id].baseProduction[resource] = 1;
-      (out[best.id].normalizedOpeningSites ??= []).push(resource);
-    }
+    ensureCountryProvinceResourceBaseline(out, world, initialOwners, countryId);
   }
 
   // Bake national normalization into the original provinces once.
@@ -120,4 +116,25 @@ export function createProvinceEconomies(
     }
   }
   return out;
+}
+
+/** Add deterministic undeveloped sources for resources a participating
+ * country entirely lacks. Also used when a neutral minor becomes active AI. */
+export function ensureCountryProvinceResourceBaseline(
+  economies: Record<number, ProvinceEconomy>, world: WorldData,
+  provinceOwners: Readonly<Record<number, number>>, countryId: number,
+  resources: readonly PhysicalResource[] = PHYSICAL_RESOURCES,
+): void {
+  const owned = world.provinces.filter((province) => provinceOwners[province.id] === countryId);
+  for (const resource of resources) {
+    if (owned.some((province) => (economies[province.id]?.baseProduction[resource] ?? 0) > 0)) continue;
+    const best = [...owned].sort((a, b) =>
+      (economies[b.id]?.resourcePotential[resource] ?? 0)
+        - (economies[a.id]?.resourcePotential[resource] ?? 0) || a.id - b.id)[0];
+    const economy = best ? economies[best.id] : undefined;
+    if (!economy) continue;
+    economy.baseProduction[resource] = 1;
+    const normalized = economy.normalizedOpeningSites ??= [];
+    if (!normalized.includes(resource)) normalized.push(resource);
+  }
 }
