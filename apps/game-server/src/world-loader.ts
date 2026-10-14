@@ -1,42 +1,65 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { buildWorldData, type WorldData } from '@ironfronts/game-core';
 
-async function arrayBuffer(directory: string, name: string): Promise<ArrayBuffer> {
-  const buffer = await readFile(path.join(directory, name));
+async function arrayBuffer(file: string): Promise<ArrayBuffer> {
+  const buffer = await readFile(file);
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 }
 
-export async function loadWorld(directory: string): Promise<{ world: WorldData; version: string; hash: string; legacyHash: string; artifactHashes: Record<string, string> }> {
-  const manifestBytes = await readFile(path.join(directory, 'world.json'));
-  const manifest = JSON.parse(manifestBytes.toString('utf8'));
-  const expectedUrls = {
-    provinceDetails: manifest.sidecars?.provinceDetails?.url,
-    owners: manifest.politics?.owners?.url,
-    ids: manifest.fields?.provinceIds?.url,
-    surface: manifest.fields?.surface?.url,
-    height: manifest.fields?.height?.url,
-    connections: manifest.buffers?.connections?.url,
-    roadNetwork: manifest.sidecars?.roadNetwork?.url,
-    roadCenterlines: manifest.buffers?.roadCenterlines?.url,
-  };
-  const canonical = ['province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32', 'road-network.json', 'road-centerlines.f32'];
-  if (Object.values(expectedUrls).some((url, index) => String(url).replace(/^\//, '') !== canonical[index])) {
+function assetName(value: unknown, fallback?: string): string | undefined {
+  const name = typeof value === 'string' && value.length > 0 ? value : fallback;
+  if (!name) return undefined;
+  if (path.isAbsolute(name) || path.basename(name) !== name || name.includes(String.fromCharCode(92)) || name.includes(':') || name === '.' || name === '..') {
     throw new Error('World manifest points gameplay data outside its identified package.');
   }
-  const details = JSON.parse(await readFile(path.join(directory, 'province-details.json'), 'utf8')).provinces;
-  const roadNetwork = JSON.parse(await readFile(path.join(directory, 'road-network.json'), 'utf8'));
+  return name;
+}
+
+export async function loadWorld(directory: string): Promise<{ world: WorldData; version: string; hash: string; legacyHash: string; artifactHashes: Record<string, string> }> {
+  const packageDirectory = await realpath(directory);
+  const manifestBytes = await readFile(path.join(packageDirectory, 'world.json'));
+  const manifest = JSON.parse(manifestBytes.toString('utf8'));
+  const resolveAsset = async (name: string): Promise<string> => {
+    const resolved = await realpath(path.join(packageDirectory, name));
+    if (!resolved.startsWith(packageDirectory + path.sep)) {
+      throw new Error('World manifest points gameplay data outside its identified package.');
+    }
+    return resolved;
+  };
+  const readAsset = async (name: string): Promise<Buffer> => readFile(await resolveAsset(name));
+  const mandatory = {
+    details: assetName(manifest.sidecars?.provinceDetails?.url, 'province-details.json')!,
+    owners: assetName(manifest.sidecars?.owners?.url, 'province-owners.u32')!,
+    ids: assetName(manifest.fields?.provinceIds?.url, 'province-ids.u16')!,
+    surface: assetName(manifest.fields?.surface?.url, 'surface.rgba8')!,
+    height: assetName(manifest.fields?.height?.url, 'height.f32')!,
+    connections: assetName(manifest.buffers?.connections?.url, 'connections.f32')!,
+  };
+  const roadNetworkName = assetName(manifest.sidecars?.roadNetwork?.url);
+  const roadCenterlinesName = assetName(manifest.buffers?.roadCenterlines?.url);
+  const details = JSON.parse((await readAsset(mandatory.details)).toString('utf8')).provinces;
+  const roadNetwork = roadNetworkName
+    ? JSON.parse((await readAsset(roadNetworkName)).toString('utf8'))
+    : undefined;
   const [owners, ids, surface, connections, roadCenterlines] = await Promise.all([
-    arrayBuffer(directory, 'province-owners.u32'),
-    arrayBuffer(directory, 'province-ids.u16'),
-    arrayBuffer(directory, 'surface.rgba8'),
-    arrayBuffer(directory, 'connections.f32'),
-    arrayBuffer(directory, 'road-centerlines.f32'),
+    arrayBuffer(await resolveAsset(mandatory.owners)),
+    arrayBuffer(await resolveAsset(mandatory.ids)),
+    arrayBuffer(await resolveAsset(mandatory.surface)),
+    arrayBuffer(await resolveAsset(mandatory.connections)),
+    roadCenterlinesName ? arrayBuffer(await resolveAsset(roadCenterlinesName)) : Promise.resolve(new ArrayBuffer(0)),
   ]);
-  const artifactNames = ['world.json', 'province-details.json', 'province-owners.u32', 'province-ids.u16', 'surface.rgba8', 'height.f32', 'connections.f32', 'road-network.json', 'road-centerlines.f32'];
-  const artifactHashes = Object.fromEntries(await Promise.all(artifactNames.sort().map(async (name) => [name,
-    createHash('sha256').update(await readFile(path.join(directory, name))).digest('hex')])));
+  const artifactNames = [
+    'world.json',
+    ...Object.values(mandatory),
+    ...(roadNetworkName ? [roadNetworkName] : []),
+    ...(roadCenterlinesName ? [roadCenterlinesName] : []),
+  ].sort();
+  const artifactHashes = Object.fromEntries(await Promise.all(artifactNames.map(async (name) => [
+    name,
+    createHash('sha256').update(await readAsset(name)).digest('hex'),
+  ])));
   return {
     world: buildWorldData({
       worldWidth: manifest.world.width,
@@ -49,7 +72,7 @@ export async function loadWorld(directory: string): Promise<{ world: WorldData; 
       surface: new Uint8Array(surface),
       surfaceField: manifest.fields.surface,
       connections: new Float32Array(connections),
-      roadNetwork: { ...roadNetwork, centerlines: new Float32Array(roadCenterlines) },
+      ...(roadNetwork ? { roadNetwork: { ...roadNetwork, centerlines: new Float32Array(roadCenterlines) } } : {}),
       resourceNodes: [],
     }),
     version: String(manifest.version),
