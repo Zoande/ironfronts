@@ -1,4 +1,4 @@
-import { isNativeNavy } from './army';
+import { armyCamouflageLevel, isNativeNavy } from './army';
 import { stepFleetMovement } from '../naval/navigation';
 import { COMBAT_SNAP } from '../combat/constants';
 import { supplyEffectiveness } from '../combat/supply';
@@ -50,6 +50,7 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
     if (!army || army.upgrade || (army.status !== 'idle' && !isNativeNavy(army)) || army.order || army.battleFrontIds?.length || army.queuedOrders?.length) continue;
     const target = Object.values(session.state.armies).find((other) => other !== army
       && other.ownerCountryId === army.ownerCountryId
+      && (armyCamouflageLevel(other) > 0) === (armyCamouflageLevel(army) > 0)
       && !other.upgrade && isNativeNavy(other) === isNativeNavy(army) && (other.status === 'idle' || isNativeNavy(other)) && !other.order && !other.battleFrontIds?.length && !other.queuedOrders?.length
       && ((!isNativeNavy(army) && !army.edge && !other.edge && other.graphNodeId === army.graphNodeId)
         || wrappedDistance(other.x, other.z, army.x, army.z, worldWidth) < MERGE_RADIUS));

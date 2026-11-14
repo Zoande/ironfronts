@@ -1,5 +1,5 @@
 import { navalLaunchPoint } from './naval/navigation';
-import { isNativeNavy } from './units/army';
+import { armyCamouflageLevel, isNativeNavy } from './units/army';
 import { wrappedDistance } from './geometry';
 import { armyAtNode } from './movement/position';
 /**
@@ -183,7 +183,8 @@ function spawnUnit(
   // Auto-stack onto a friendly idle army already at that node.
   const existing = Object.values(session.state.armies)
     .filter((a) => !a.upgrade && a.ownerCountryId === ownerCountryId
-      && isNativeNavy(a) === fleet && (fleet ? wrappedDistance(a.x, a.z, nx, nz, world.width) < 26 : armyAtNode(session, a, node) && a.graphNodeId === node) && !a.order && a.extractionAssignment == null
+      && isNativeNavy(a) === fleet
+      && (armyCamouflageLevel(a) > 0) === ((unitType(unitTypeId).camouflageLevel ?? 0) > 0) && (fleet ? wrappedDistance(a.x, a.z, nx, nz, world.width) < 26 : armyAtNode(session, a, node) && a.graphNodeId === node) && !a.order && a.extractionAssignment == null
       && a.status !== 'engaged' && a.status !== 'retreating')
     .sort((a, b) => {
       const an = Number(a.id.replace(/^army-/, ''));
