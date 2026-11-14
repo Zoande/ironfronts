@@ -35,7 +35,7 @@ import { stepTechnology } from '../technology';
 import { stepAi } from '../ai/simple-ai';
 import { advanceQueuedArmyOrders, applyCommand as runCommand, type CommandResult, type GameCommand } from '../commands';
 import { wrappedDistance } from '../geometry';
-import { ensureCountryProvinceResourceBaseline } from '../economy/resource-generation';
+import { ensureCountryProvinceResourceBaseline, ensureWorldOpeningResourceBaseline } from '../economy/resource-generation';
 
 /** Longest game-time step a single `tick` will integrate; larger dt is accumulated
  *  so a stall can't teleport armies through provinces. */
@@ -84,6 +84,9 @@ export class GameSession {
       playerCountryId: 0,
       sandbox: restored.mode === 'sandbox',
     }, scenario, world);
+    if (restored.provinceEconomies && Object.keys(restored.provinceEconomies).length) {
+      ensureWorldOpeningResourceBaseline(restored.provinceEconomies, world, scaffold.diagnostics.eligibleCountryIds);
+    }
     const session = new GameSession({ ...scaffold, state: restored }, world);
     validateWorldState(session);
     return session;

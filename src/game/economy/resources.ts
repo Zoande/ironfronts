@@ -21,6 +21,12 @@ export const RESOURCE_TIER_GATES: Record<ResourceBuildingId, readonly number[]> 
   oilPump: [0.25, 0.42, 0.58, 0.7, 0.8, 0.87, 0.93, 0.98],
 };
 
+/** A home economy can feed its starting force and develop basic industry.
+ * Higher grades still require naturally rich territory and expansion. */
+export const OPENING_RESOURCE_MIN_TIERS: Readonly<Record<PhysicalResource, number>> = {
+  food: 3, stone: 2, metal: 2, oil: 2,
+};
+
 export const RESOURCE_TIER_PASSIVE = [0, 2, 5, 10, 17, 26, 38, 53, 72] as const;
 export const RESOURCE_TIER_ENGINEER_CAP = [1, 2, 4, 7, 11, 16, 22, 29, 38] as const;
 export const RESOURCE_TIER_ENGINEER_MULTIPLIER = [1, 1.5, 2, 2.5, 3.25, 4.25, 5.4, 6.8, 8.5] as const;
