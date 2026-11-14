@@ -57,6 +57,7 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
   z.object({kind:z.literal('attackArmy'),targetArmyId:z.string().min(1)})])).max(32).optional(), queuedOrderError: z.string().nullable().optional(), id: z.string(), ownerCountryId: id, name: z.string(), graphNodeId: id,
     edge: z.object({ from: id, to: id, edgeId: id.optional(), distanceAlongEdge: positive.optional() }).nullable().optional(),
     units: z.array(z.object({ typeId: unit, count: id, hp: positive, experience: positive })), status: z.enum(['idle', 'moving', 'engaged', 'retreating', 'extracting', 'embarking', 'atSea', 'disembarking']), order: order.nullable(), extractingNodeId: id.nullable(), extractionAssignment: z.object({ provinceId: id, resource: z.enum(['food', 'stone', 'metal', 'oil']) }).nullable().optional(),
+    revealedUntilHours: positive.optional(), navalRoute: z.array(point).max(10000).optional(), navalTargetArmyId: z.string().nullable().optional(),
     upgrade: z.object({ entries: z.array(z.object({typeId: unit, targetTypeId: unit, count: id.positive()})).min(1), totalHours: number.positive(), remainingHours: positive }).nullable().optional(),
     lastGraphNodeId: id.nullable().optional(), suspendedOrder: order.nullable().optional(), battleFrontIds: z.array(z.string()).optional(),
     retreat: z.object({ destinationProvinceId: id, protectedUntilNodeId: id, protected: z.boolean() }).nullable().optional(),
@@ -129,7 +130,10 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
     }
     delete army.supplyStores;
     army.navalCrossing ??= null;
-    const naval = army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
+    const native = army.units.every((group) => UNIT_TYPE_BY_ID.get(group.typeId)?.domain === 'naval');
+    if (army.units.some((group) => UNIT_TYPE_BY_ID.get(group.typeId)?.domain === 'naval') && !native) throw new Error('Mixed land and naval army.');
+    const naval = !native && (army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking');
+    if (native && (army.status !== 'atSea' || army.transport || army.navalCrossing || army.edge)) throw new Error('Invalid native fleet.');
     if (naval && !army.transport) {
       army.transport = createTransportManifestation(
         army as unknown as ArmyStack,

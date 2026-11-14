@@ -42,7 +42,7 @@ function queuedCommand(armyId: string, countryId: number, order: QueuedArmyOrder
 /** Dispatch through the same rules after arrival, without a browser driving the queue. */
 export function advanceQueuedArmyOrders(ctx: SimContext): void {
   for (const army of Object.values(ctx.state.armies)) {
-    if (army.upgrade || army.status !== 'idle' || army.order || army.battleFrontIds?.length || !army.queuedOrders?.length) continue;
+    if (army.upgrade || (army.status !== 'idle' && !(army.status === 'atSea' && !army.transport)) || army.order || army.battleFrontIds?.length || !army.queuedOrders?.length) continue;
     const next = army.queuedOrders.shift()!;
     const result = applyImmediateCommand(ctx, queuedCommand(army.id, army.ownerCountryId, next));
     if (!result.ok) {
@@ -77,7 +77,7 @@ export function applyCommand(ctx: SimContext, command: GameCommand): CommandResu
       || order.x < 0 || order.x > ctx.world.width || order.z < 0 || order.z > ctx.world.height)) {
       return { ok: false, reason: 'Target is outside the world.' };
     }
-    if ((army.status === 'idle' || army.status === 'extracting') && !army.order && !army.queuedOrders?.length) {
+    if ((army.status === 'idle' || army.status === 'extracting' || (army.status === 'atSea' && !army.transport)) && !army.order && !army.queuedOrders?.length) {
       const result = applyImmediateCommand(ctx, { ...command, enqueue: false });
       if (result.ok) army.queuedOrderError = null;
       return result;

@@ -64,9 +64,9 @@ export function projectFor(
       const source = state.armies[army.id];
       const returnAnchor = source?.navalCrossing?.returningToAnchor
         ? { x: graph.nodeX[source.graphNodeId], z: graph.nodeZ[source.graphNodeId] } : undefined;
-      const roadRoute = order && !order.seaDestination && !returnAnchor
+      const roadRoute = order && !source?.navalRoute?.length && !order.seaDestination && !returnAnchor
         ? roadRouteForClient(order, graph, source?.graphNodeId ?? -1, source?.edge) : null;
-      const route = order && !roadRoute
+      const route = order && source?.navalRoute?.length ? [{x:army.x,z:army.z}, ...source.navalRoute.map(point=>({...point}))] : order && !roadRoute
         ? orderRouteForClient(order, graph, army.x, army.z, source?.edge, returnAnchor) : null;
       if (roadRoute || route) projected = {
         ...projected, ...(roadRoute ? { moveRoadRoute: roadRoute } : { moveRoute: route! }),
@@ -102,7 +102,7 @@ export function projectFor(
       if (leg && leg.worldUnitsPerGameHour > 0) {
         const returnAnchor = source?.navalCrossing?.returningToAnchor
           ? { x: graph.nodeX[source.graphNodeId], z: graph.nodeZ[source.graphNodeId] } : undefined;
-        const route = returnAnchor ? [{ x: source!.x, z: source!.z }, returnAnchor]
+        const route = source?.navalRoute?.length ? [{x:source.x,z:source.z}, {...source.navalRoute[0]}] : returnAnchor ? [{ x: source!.x, z: source!.z }, returnAnchor]
           : !source!.order?.path.length && !source!.order?.seaDestination ? undefined
           : orderRouteForClient(
             { path: source!.order.path.length ? [source!.order.path[0]] : [],

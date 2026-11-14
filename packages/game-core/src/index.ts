@@ -66,3 +66,5 @@ export {
 } from '../../../src/game/technology';
 
 export { armyUpgradeQuote } from '../../../src/game/units/upgrades';
+
+export { navalLaunchPoint } from '../../../src/game/naval/navigation';

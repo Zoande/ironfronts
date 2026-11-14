@@ -205,8 +205,8 @@ export interface ProjectedArmy {
     /** Combat/movement domain of the currently manifested unit. */
     domain?: 'land' | 'naval';
     combatProfile?: {
-      attack: { soft: number; light: number; heavy: number };
-      defense: { soft: number; light: number; heavy: number };
+      attack: { soft: number; light: number; heavy: number; ship?: number; submarine?: number };
+      defense: { soft: number; light: number; heavy: number; ship?: number; submarine?: number };
     };
     transport?: {
       kind: 'transport'; level: number; shipCount: number; hp: number; maxHp: number; health: number;

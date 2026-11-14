@@ -249,10 +249,9 @@ export function projectArmyView(
       enemyModifiers: friendlyIsA ? rates.sideBModifiers : rates.sideAModifiers,
     }];
   }) : undefined;
-  const artilleryGroups = fullyVisible && combatDomain(army) === 'land'
-    ? army.units.filter((group) => unitType(group.typeId).category === 'artillery') : [];
-  const artilleryRange = artilleryGroups.length
-    ? Math.max(...artilleryGroups.map((group) => unitType(group.typeId).engagementRange)) : 0;
+  const artilleryGroups = fullyVisible && !army.transport
+    ? army.units.filter((group) => unitType(group.typeId).engagementRange > 0) : [];
+  const artilleryRange = Math.max(fullyVisible && combatDomain(army) === 'naval' && !army.transport ? 26 : 0, ...artilleryGroups.map((group) => unitType(group.typeId).engagementRange));
   const supplyPlan = own ? armySupplyPlan(army) : null;
   return {
     id: army.id,
@@ -287,7 +286,7 @@ export function projectArmyView(
     legalRetreatExits: [],
     artillery: artilleryRange > 0 ? {
       range: artilleryRange,
-      targetArmyId: own ? army.artillery?.targetArmyId ?? null : null,
+      targetArmyId: own ? army.navalCombatTargetArmyId ?? army.artillery?.targetArmyId ?? null : null,
       manualTarget: own ? army.artillery?.manualTarget ?? false : false,
     } : null,
   };

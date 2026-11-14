@@ -1,3 +1,4 @@
+import { stepNavalCombat } from './combat/naval';
 /** Authoritative combat phase; subsystems share stable front membership. */
 import type { SimContext } from './sim-context';
 import type { BattleFrontState, BattleRole } from './game-state';
@@ -144,6 +145,7 @@ export function stepCombat(session: SimContext, dtHours: number, contactTimes?: 
     }
   }
   applyPendingDamage(pending);
+  const navalFired = stepNavalCombat(session, dtHours, events);
   if (session.state.simulationTick % 10 === 0) {
     for (const front of activeFronts) {
       events.push({
@@ -179,7 +181,7 @@ export function stepCombat(session: SimContext, dtHours: number, contactTimes?: 
       });
     }
   }
-  stepArtillery(session, dtHours, events);
+  stepArtillery(session, dtHours, events, navalFired);
   cleanupFronts(session, events);
   return events;
 }

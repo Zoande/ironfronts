@@ -1,6 +1,6 @@
 import type { SimContext } from '../sim-context';
 import type { ArmyStack } from '../units/army';
-import { stackBaseSpeed } from '../units/army';
+import { isNativeNavy, stackBaseSpeed } from '../units/army';
 import { TERRAIN_CLASS } from '../world-data';
 import { wrappedDistance } from '../geometry';
 import { supplyEffectiveness } from '../combat/supply';
@@ -174,6 +174,11 @@ export function movementEdgeTravelCost(
 export function remainingOrderTravelHours(session: SimContext, army: ArmyStack): number | null {
   const order = army.order;
   if (!order) return null;
+  if (isNativeNavy(army)) {
+    let distance = 0, previous = {x:army.x,z:army.z};
+    for (const point of army.navalRoute ?? []) { distance += wrappedDistance(previous.x,previous.z,point.x,point.z,session.world.width); previous=point; }
+    return distance / Math.max(.001,stackBaseSpeed(army)*STRATEGIC_MOVEMENT_SCALE*supplyEffectiveness(army));
+  }
   let hours = 0;
   let pathIndex = 0;
   let fromNode = army.graphNodeId;
@@ -254,6 +259,10 @@ export function remainingOrderTravelHours(session: SimContext, army: ArmyStack):
  * terrain, road, retreat, and global movement multipliers as simulation. */
 export function currentMovementLeg(session: SimContext, army: ArmyStack): CurrentMovementLeg | null {
   const order = army.order;
+  if (order && isNativeNavy(army)) {
+    const next = army.navalRoute?.[0];
+    return next ? {targetX:next.x,targetZ:next.z,worldUnitsPerGameHour:stackBaseSpeed(army)*STRATEGIC_MOVEMENT_SCALE*supplyEffectiveness(army),distance:wrappedDistance(army.x,army.z,next.x,next.z,session.world.width)} : null;
+  }
   if (!order || army.status === 'engaged'
     || army.status === 'embarking' || army.status === 'disembarking') return null;
   if (!order.path.length && !order.seaDestination && !army.navalCrossing?.returningToAnchor) return null;

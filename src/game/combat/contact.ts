@@ -1,3 +1,4 @@
+import { combatDomain } from '../naval/transport';
 import type { ArmyStack } from '../units/army';
 import { wrappedDistance } from '../geometry';
 import { COMBAT_SNAP } from './constants';
@@ -5,7 +6,7 @@ import { COMBAT_SNAP } from './constants';
 /** Numerical allowance only; the gameplay contact radius remains 26 units. */
 export const CONTACT_EPSILON = 1e-6;
 export function canEnterCloseCombat(army: ArmyStack): boolean {
-  return !army.retreat?.protected && army.status !== 'embarking'
+  return combatDomain(army) === 'land' && !army.retreat?.protected && army.status !== 'embarking'
     && army.status !== 'atSea' && army.status !== 'disembarking';
 }
 export function armiesInContact(a: ArmyStack, b: ArmyStack, width: number): boolean {

@@ -8,28 +8,28 @@ import { wrappedDistance } from '../geometry';
 import { addDamage, applyPendingDamage, calculateDamage, type GroupRef, type PendingDamage } from './damage';
 import { removeArmyFromAllFronts } from './fronts';
 import type { CombatEvent } from './events';
-import { combatDomain } from '../naval/transport';
+import { revealFiringArmy } from './targeting';
 
 function artilleryDamage(
-  army: ArmyStack, target: ArmyStack, dtHours: number,
+  army: ArmyStack, target: ArmyStack, dtHours: number, distance: number,
 ): Array<{ ref: GroupRef; amount: number }> {
   const artilleryOnly: ArmyStack = {
     ...army,
-    units: army.units.filter((group) => unitType(group.typeId).category === 'artillery'),
+    units: army.units.filter((group) => unitType(group.typeId).engagementRange > 0 && unitType(group.typeId).engagementRange >= distance),
   };
   return calculateDamage([artilleryOnly], 'attack', [target], dtHours);
 }
 
-export function stepArtillery(session: SimContext, dtHours: number, events: CombatEvent[]): void {
+export function stepArtillery(session: SimContext, dtHours: number, events: CombatEvent[], closeFired: ReadonlySet<string> = new Set()): void {
   const armies = Object.values(session.state.armies);
   const pending = new Map<string, PendingDamage>();
   const countries = new Map<string, number>();
   const visibilityByCountry = new Map<number, ReturnType<typeof computeArmyVisibility>>();
   for (const army of armies) {
     ensureArmyRuntimeState(army);
-    if (army.upgrade) continue;
-    if (army.status !== 'idle' && army.status !== 'extracting') continue;
-    const artillery = army.units.filter((group) => unitType(group.typeId).category === 'artillery');
+    if (army.upgrade || closeFired.has(army.id)) continue;
+    if (army.status !== 'idle' && army.status !== 'extracting' && !(army.status === 'atSea' && !army.order)) continue;
+    const artillery = army.units.filter((group) => unitType(group.typeId).engagementRange > 0);
     if (artillery.length === 0) continue;
     const range = Math.max(...artillery.map((group) => unitType(group.typeId).engagementRange));
     const visibility = visibilityByCountry.get(army.ownerCountryId)
@@ -37,7 +37,6 @@ export function stepArtillery(session: SimContext, dtHours: number, events: Comb
     visibilityByCountry.set(army.ownerCountryId, visibility);
     const validTargets = armies.filter((target) => target.id !== army.id
       && relationOf(session.state, army.ownerCountryId, target.ownerCountryId) === 'war'
-      && combatDomain(target) === 'land'
       && !target.retreat?.protected
       && visibility.get(target.id) !== 'hidden'
       && wrappedDistance(army.x, army.z, target.x, target.z, session.world.width) <= range);
@@ -53,7 +52,8 @@ export function stepArtillery(session: SimContext, dtHours: number, events: Comb
       army.artillery!.targetArmyId = target?.id ?? null;
     }
     if (!target) continue;
-    addDamage(pending, artilleryDamage(army, target, dtHours));
+    addDamage(pending, artilleryDamage(army, target, dtHours, wrappedDistance(army.x, army.z, target.x, target.z, session.world.width)));
+    revealFiringArmy(session, army);
     countries.set(target.id, army.ownerCountryId);
     // Damage is continuous. The event is a presentation pulse only, sampled at
     // one real-time Hz so effects do not flood the client or event gateway.

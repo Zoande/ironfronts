@@ -1,3 +1,4 @@
+import { isNativeNavy } from '../units/army';
 /** Atomic stack splitting and mid-edge detachment routing. */
 
 import type { SimContext } from '../sim-context';
@@ -38,10 +39,11 @@ function requestedGroups(
 export function issueSplit(ctx: SimContext, command: SplitArmyCommand): CommandResult {
   const parent = ctx.state.armies[command.armyId];
   ensureArmyRuntimeState(parent);
+  if (parent.upgrade) return {ok:false,reason:'Army is upgrading.'};
   if (parent.status === 'engaged' || parent.status === 'retreating') {
     return { ok: false, reason: 'Cannot split during close combat or retreat.' };
   }
-  if (parent.status === 'embarking' || parent.status === 'atSea' || parent.status === 'disembarking') {
+  if (!isNativeNavy(parent) && (parent.status === 'embarking' || parent.status === 'atSea' || parent.status === 'disembarking')) {
     return { ok: false, reason: 'Cannot split mid sea crossing.' };
   }
   const groups = requestedGroups(parent, command.groups);
@@ -55,10 +57,10 @@ export function issueSplit(ctx: SimContext, command: SplitArmyCommand): CommandR
     x: parent.x,
     z: parent.z,
     graphNodeId: parent.graphNodeId,
-    edge: occupiedEdge(ctx, parent),
+    edge: isNativeNavy(parent) ? null : occupiedEdge(ctx, parent),
     lastGraphNodeId: parent.lastGraphNodeId ?? null,
     units: groups,
-    status: 'idle',
+    status: isNativeNavy(parent) ? 'atSea' : 'idle',
     order: null,
     extractingNodeId: null,
     suspendedOrder: null,

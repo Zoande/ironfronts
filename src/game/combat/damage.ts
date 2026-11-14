@@ -1,3 +1,4 @@
+import { activeTransportStats, combatDomain, damageTransportCargo } from '../naval/transport';
 /** Pure frontage selection, armor-pool damage, and pooled casualty application. */
 
 import type { BattleRole } from '../game-state';
@@ -19,16 +20,28 @@ export interface PendingDamage {
   amount: number;
 }
 
+const ARMOR_CLASSES = ['soft', 'light', 'heavy', 'ship', 'submarine'] as const;
+function groupArmor(army: ArmyStack, group: UnitGroup): ArmorClass {
+  return combatDomain(army) === 'naval' && army.transport ? 'ship' : unitType(group.typeId).armorClass;
+}
+function combatHp(army: ArmyStack, group: UnitGroup): number {
+  return combatDomain(army) === 'naval' && army.transport
+    ? army.transport.cargo.find((cargo) => cargo.cargoTypeId === group.typeId)?.shipHp.reduce((sum, hp) => sum + hp, 0) ?? 0
+    : group.hp;
+}
+function combatMaxHp(army: ArmyStack, group: UnitGroup): number {
+  return group.count * (activeTransportStats(army)?.maxHp ?? unitType(group.typeId).maxHp);
+}
 function armorHealth(armies: readonly ArmyStack[]): Record<ArmorClass, number> {
-  const result: Record<ArmorClass, number> = { soft: 0, light: 0, heavy: 0 };
+  const result: Record<ArmorClass, number> = { soft: 0, light: 0, heavy: 0, ship: 0, submarine: 0 };
   for (const army of armies) {
-    for (const group of army.units) result[unitType(group.typeId).armorClass] += group.hp;
+    for (const group of army.units) result[groupArmor(army, group)] += combatHp(army, group);
   }
   return result;
 }
 
-function profileFor(role: BattleRole, group: UnitGroup): DamageProfile {
-  const type = unitType(group.typeId);
+function profileFor(army: ArmyStack, role: BattleRole, group: UnitGroup): DamageProfile {
+  const type = activeTransportStats(army) ?? unitType(group.typeId);
   return role === 'attack' ? type.attack : type.defense;
 }
 
@@ -41,10 +54,10 @@ export function calculateDamage(
   attackers: readonly ArmyStack[], role: BattleRole, defenders: readonly ArmyStack[], dtHours: number,
 ): Array<{ ref: GroupRef; amount: number }> {
   const hp = armorHealth(defenders);
-  const total = hp.soft + hp.light + hp.heavy;
+  const total = ARMOR_CLASSES.reduce((sum, armor) => sum + hp[armor], 0);
   if (total <= 0) return [];
   const ratio: Record<ArmorClass, number> = {
-    soft: hp.soft / total, light: hp.light / total, heavy: hp.heavy / total,
+    soft: hp.soft / total, light: hp.light / total, heavy: hp.heavy / total, ship: hp.ship / total, submarine: hp.submarine / total,
   };
   const candidates: Array<{
     profile: DamageProfile;
@@ -59,8 +72,8 @@ export function calculateDamage(
   for (const army of attackers) {
     for (const group of army.units) {
       const pool = pooledByType.get(group.typeId) ?? { hp: 0, maxHp: 0 };
-      pool.hp += group.hp;
-      pool.maxHp += group.count * unitType(group.typeId).maxHp;
+      pool.hp += combatHp(army, group);
+      pool.maxHp += combatMaxHp(army, group);
       pooledByType.set(group.typeId, pool);
     }
   }
@@ -69,9 +82,9 @@ export function calculateDamage(
       const pool = pooledByType.get(group.typeId)!;
       const health = pool.maxHp > 0 ? Math.max(MIN_COMBAT_EFFECTIVENESS, Math.min(1, pool.hp / pool.maxHp)) : 0;
       const outputFactor = stanceModifiers(army.stance).attackOutput * supplyEffectiveness(army);
-      const profile = profileFor(role, group);
+      const profile = profileFor(army, role, group);
       const score = health * outputFactor * (
-        profile.soft * ratio.soft + profile.light * ratio.light + profile.heavy * ratio.heavy
+        ARMOR_CLASSES.reduce((sum, armor) => sum + (profile[armor] ?? 0) * ratio[armor], 0)
       );
       for (let ordinal = 0; ordinal < Math.min(group.count, COMBAT_FRONTAGE); ordinal += 1) {
         candidates.push({ profile, health, outputFactor, typeId: group.typeId, armyId: army.id, ordinal, score });
@@ -82,25 +95,23 @@ export function calculateDamage(
     || a.typeId.localeCompare(b.typeId) || a.armyId.localeCompare(b.armyId)
     || a.ordinal - b.ordinal);
   const selected = candidates.slice(0, COMBAT_FRONTAGE);
-  const fire: Record<ArmorClass, number> = { soft: 0, light: 0, heavy: 0 };
+  const fire: Record<ArmorClass, number> = { soft: 0, light: 0, heavy: 0, ship: 0, submarine: 0 };
   for (const unit of selected) {
-    fire.soft += unit.profile.soft * unit.health * unit.outputFactor;
-    fire.light += unit.profile.light * unit.health * unit.outputFactor;
-    fire.heavy += unit.profile.heavy * unit.health * unit.outputFactor;
+    for (const armor of ARMOR_CLASSES) fire[armor] += (unit.profile[armor] ?? 0) * unit.health * unit.outputFactor;
   }
 
   // A ten-unit frontage adds firepower sublinearly; equal large forces take longer.
   const coordination = 1 / Math.sqrt(Math.max(1, selected.length));
   const result: Array<{ ref: GroupRef; amount: number }> = [];
-  for (const armor of ['soft', 'light', 'heavy'] as const) {
+  for (const armor of ARMOR_CLASSES) {
     const classDamage = fire[armor] * coordination * ratio[armor] * Math.max(0, dtHours);
     if (classDamage <= 0 || hp[armor] <= 0) continue;
     for (const army of defenders) {
       const protectionFactor = stanceModifiers(army.stance).damageTaken
         / supplyEffectiveness(army); // low supply weakens defense as well as output
       for (const group of army.units) {
-        if (unitType(group.typeId).armorClass !== armor) continue;
-        result.push({ ref: { army, group }, amount: classDamage * group.hp / hp[armor] * protectionFactor });
+        if (groupArmor(army, group) !== armor) continue;
+        result.push({ ref: { army, group }, amount: classDamage * combatHp(army, group) / hp[armor] * protectionFactor });
       }
     }
   }
@@ -123,6 +134,7 @@ export function addDamage(
 export function applyPendingDamage(pending: ReadonlyMap<string, PendingDamage>): void {
   const unnormalized = new Set<string>();
   for (const item of pending.values()) {
+    if (combatDomain(item.army) === 'naval' && item.army.transport) { damageTransportCargo(item.army, item.group.typeId, item.amount); continue; }
     item.group.hp = Math.max(0, item.group.hp - item.amount);
     unnormalized.add(item.army.id);
   }

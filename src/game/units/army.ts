@@ -96,6 +96,10 @@ export interface ArmyStack {
   /** Server-owned orders continue while the commander is disconnected. */
   queuedOrders?: QueuedArmyOrder[];
   queuedOrderError?: string | null;
+  revealedUntilHours?: number;
+  navalRoute?: Array<{ x: number; z: number }>;
+  navalTargetArmyId?: string | null;
+  navalCombatTargetArmyId?: string | null;
   upgrade?: import('./upgrades').ArmyUpgrade | null;
   /** Resource node id this stack is extracting, or null. */
   extractingNodeId: number | null;
@@ -268,4 +272,14 @@ export function makeGroup(typeId: string, count: number, hpFraction = 1): UnitGr
     hp: count * unitType(typeId).maxHp * hpFraction,
     experience: 0,
   };
+}
+
+/** A mixed formation is only concealed when every surviving troop is concealed. */
+export function armyCamouflageLevel(army: ArmyStack): number {
+  if (army.transport) return 0;
+  const living = army.units.filter((group) => group.count > 0 && group.hp > 0);
+  return living.length ? Math.min(...living.map((group) => unitType(group.typeId).camouflageLevel ?? 0)) : 0;
+}
+export function isNativeNavy(army: ArmyStack): boolean {
+  return army.units.length > 0 && army.units.every((group) => unitType(group.typeId).domain === 'naval');
 }

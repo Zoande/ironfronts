@@ -35,7 +35,7 @@ const army = point.extend({ queuedOrders: z.array(z.discriminatedUnion('kind', [
     stance: z.enum(['attack', 'attack-defend', 'defend', 'defend-retreat', 'retreat']), inSupply: z.boolean(), speed: nonnegative,
     groups: z.array(z.object({ typeId: z.string(), count: integer, health: nonnegative.max(1) })),
     domain: z.enum(['land', 'naval']).optional(),
-    combatProfile: z.object({ attack: z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative }), defense: z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative }) }).optional(),
+    combatProfile: z.object({ attack: z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative, ship: nonnegative.optional(), submarine: nonnegative.optional() }), defense: z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative, ship: nonnegative.optional(), submarine: nonnegative.optional() }) }).optional(),
     transport: z.object({ kind: z.literal('transport'), level: integer.min(1).max(8), shipCount: integer,
       hp: nonnegative, maxHp: nonnegative, health: nonnegative.max(1),
       cargo: z.array(z.object({ typeId: z.string(), shipCount: integer, health: nonnegative.max(1) })) }).nullable().optional(),
@@ -93,7 +93,7 @@ const collectionSchemas = projectionSchema.pick({ countries: true, provinceOwner
 const delta = z.object({ changed: projectionSchema.pick({ simulationTick: true, timeline: true, viewerCountryId: true, startCamera: true, ownCountry: true, weather: true, diplomacy: true }).partial(),
   upserts: collectionSchemas.partial(), removals: z.object(Object.fromEntries(Object.keys(collectionSchemas.shape).map((key) => [key, z.array(z.string()).optional()]))),
   redactions: z.array(z.string()) });
-const profile = z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative });
+const profile = z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative, ship: nonnegative.optional(), submarine: nonnegative.optional() });
 const cost = stockpile.partial();
 const catalogs = z.object({ units: z.array(z.object({ id: z.string(), baseId: z.string(), level: integer.min(1).max(8), technology: z.enum(['infantry', 'resources', 'hybrid', 'armored']), name: z.string(), category: z.enum(['infantry', 'engineer', 'recon', 'armor', 'artillery']),
   armorClass: z.enum(['soft', 'light', 'heavy']), icon: z.string(), maxHp: finite.positive(), speed: nonnegative, attack: profile, defense: profile,
