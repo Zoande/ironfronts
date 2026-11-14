@@ -12,6 +12,7 @@ import { isDebugEntitledUsername } from './debug-entitlement';
 
 await mkdir(path.dirname(config.authDatabasePath), { recursive: true });
 const store = new AuthStore(config.authDatabasePath);
+if (process.env.IRONFRONTS_ADMIN_PASSWORD) await store.ensureAdminAccount(process.env.IRONFRONTS_ADMIN_PASSWORD);
 const limiter = new RateLimiter();
 const SESSION_COOKIE = 'ironfronts_session';
 
@@ -131,7 +132,10 @@ const server = createServer(async (request, response) => {
       if (!limiter.consume(`${remoteKey(request)}:${url.pathname}`)) { sendJson(response, 429, { error: 'Too many attempts. Try again later.' }); return; }
       const input = credentialsSchema.parse(await body(request));
       let authenticated: Account | null;
-      if (url.pathname.endsWith('/register')) authenticated = await store.register(input.username, input.password);
+      if (url.pathname.endsWith('/register')) {
+        if (isDebugEntitledUsername(input.username)) throw new Error('This account is reserved for the administrator.');
+        authenticated = await store.register(input.username, input.password);
+      }
       else authenticated = await store.authenticate(input.username, input.password);
       if (!authenticated) { sendJson(response, 401, { error: 'Invalid username or password.' }); return; }
       const created = store.createSession(authenticated.id, config.sessionTtlMs);

@@ -6,6 +6,7 @@ const originalDiagnosticsPath = process.env.DIAGNOSTICS_PATH;
 afterEach(() => {
   if (originalDiagnosticsPath === undefined) delete process.env.DIAGNOSTICS_PATH;
   else process.env.DIAGNOSTICS_PATH = originalDiagnosticsPath;
+  vi.unstubAllEnvs();
   vi.resetModules();
 });
 
@@ -18,6 +19,15 @@ describe('game server diagnostics configuration', () => {
     process.env.DIAGNOSTICS_PATH = '   ';
     vi.resetModules();
     expect((await import('../../apps/game-server/src/config')).config.diagnosticsPath).toBeUndefined();
+  });
+
+  it('enables the signed admin gate without requiring a second inspector password', async () => {
+    vi.stubEnv('IRONFRONTS_DEBUG_CONTROLS_ENABLED', 'true');
+    vi.stubEnv('IRONFRONTS_DEBUG_PASSWORD', undefined);
+    vi.resetModules();
+    const { config } = await import('../../apps/game-server/src/config');
+    expect(config.debugControlsEnabled).toBe(true);
+    expect(config.debugPassword).toBe('');
   });
 
   it('resolves an explicitly configured diagnostics destination', async () => {

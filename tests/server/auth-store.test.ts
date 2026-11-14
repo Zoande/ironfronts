@@ -36,6 +36,26 @@ describe('SQLite authentication store', () => {
     expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
   });
 
+  it('provisions admin, preserves identity and progress, and revokes sessions only when its password changes', async () => {
+    const store = new AuthStore();
+    await store.ensureAdminAccount('first-admin-password');
+    const original = await store.authenticate('admin', 'first-admin-password');
+    expect(original).not.toBeNull();
+    const id = original!.id;
+    store.grantCommanderProgress(id, { xp: 100 });
+    const session = store.createSession(id, 60_000);
+
+    await store.ensureAdminAccount('first-admin-password');
+    expect(store.sessionAccount(session.token)?.id).toBe(id);
+
+    await store.ensureAdminAccount('replacement-admin-password');
+    expect(await store.authenticate('admin', 'first-admin-password')).toBeNull();
+    expect((await store.authenticate('ADMIN', 'replacement-admin-password'))?.id).toBe(id);
+    expect(store.commanderProfile(id).xp).toBe(100);
+    expect(store.sessionAccount(session.token)).toBeNull();
+    store.close();
+  });
+
   it('restores accounts and sessions from a SQLite file after restart', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'ironfronts-auth-'));
     const databasePath = path.join(directory, 'auth.sqlite');

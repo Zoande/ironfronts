@@ -35,8 +35,8 @@ The root `npm run check` covers every workspace, architecture checks, script lin
 | `DIAGNOSTICS_PATH` | unset | Optional JSONL diagnostics path. No diagnostics file or browser telemetry upload when unset. |
 | `TICKET_SECRET` | local development value | HMAC secret used to verify gameplay tickets. Required to differ from the fallback in production. Must match the issuer. |
 | `INTERNAL_SERVICE_SECRET` | local development value | Bearer secret protecting `/internal/v2/*`. Required to differ from the fallback in production. Must match callers. |
-| `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Deployment gate for debug controls. Access additionally requires the signed `DimaTest1` entitlement and a successful password unlock. |
-| `IRONFRONTS_DEBUG_PASSWORD` | none | Required whenever debug controls are enabled. Kept server-side; unlock from System → World Inspector. |
+| `IRONFRONTS_DEBUG_CONTROLS_ENABLED` | `false` | Deployment gate for debug controls. Access additionally requires the signed `admin` account entitlement after password authentication. |
+| `IRONFRONTS_DEBUG_PASSWORD` | none | Server-side compatibility unlock secret. Use the admin account for automatic QA access. |
 | `NODE_ENV` | unset | When equal to `production`, startup rejects either fallback secret. |
 
 Paths are resolved against `process.cwd()`. Start the process from the repository root unless explicit absolute paths are supplied.
@@ -53,7 +53,7 @@ GAME_DATA_PATH=/var/lib/ironfronts/game.json
 TICKET_SECRET=replace-with-a-long-random-shared-secret
 INTERNAL_SERVICE_SECRET=replace-with-a-different-long-random-secret
 IRONFRONTS_DEBUG_CONTROLS_ENABLED=false
-# IRONFRONTS_DEBUG_PASSWORD=only-set-on-approved-qa-deployments
+# IRONFRONTS_ADMIN_PASSWORD=configure-privately-on-the-auth-server
 ```
 
 ## Network exposure
@@ -131,3 +131,5 @@ To restore, stop the process, replace `GAME_DATA_PATH` with the selected compati
 - Keep the save directory private; snapshots contain all countries' authoritative state and permanent account-to-country assignments.
 - Ticket nonces are process-local and single-use. A restart clears the replay cache, while ticket expiry still applies.
 - The gameplay server enforces a 32 KiB WebSocket message limit and a 32 KiB internal HTTP request-body limit.
+
+`IRONFRONTS_ADMIN_PASSWORD` provisions the reserved `admin` account in the auth service. Password changes preserve its ID/campaign seats and revoke old sessions. Public registration cannot claim that name.

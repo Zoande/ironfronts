@@ -249,10 +249,10 @@ export class GameplayGateway {
           }
           clearTimeout(authenticationTimeout);
           const debugEntitled = this.options.debugControlsEnabled && claims.debugEntitled === true;
-          const debugEnabled = false;
+          const debugEnabled = debugEntitled;
           const revision = this.options.revision();
           const projection = this.options.runtime.projection(
-            claims.countryId, this.options.devSimSpeed.get(), false,
+            claims.countryId, this.options.devSimSpeed.get(), debugEnabled,
           );
           connection = {
             socket, accountId: claims.accountId, countryId: claims.countryId,
