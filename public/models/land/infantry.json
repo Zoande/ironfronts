@@ -1,5 +1,5 @@
 {
-  "scale": 3.0,
+  "scale": 2.0,
   "stride": 1.1,
   "muzzle": [
     -0.22,
@@ -10,18 +10,18 @@
   "lods": [
     {
       "lod": 0,
-      "triangles": 37540,
-      "vertices": 18958
+      "triangles": 37832,
+      "vertices": 19118
     },
     {
       "lod": 1,
-      "triangles": 15766,
-      "vertices": 8071
+      "triangles": 15888,
+      "vertices": 8146
     },
     {
       "lod": 2,
-      "triangles": 5252,
-      "vertices": 2815
+      "triangles": 5294,
+      "vertices": 2850
     }
   ],
   "clips": {

@@ -87,11 +87,11 @@ export function createCatalogDossier(
     title.textContent = 'Unit information'; overlay.setAttribute('aria-label', `${name} information`);
     const attack = object(data, 'attack'); const defense = object(data, 'defense');
     const overview = document.createElement('div'); overview.className = 'ifg-dossier__stats';
-    overview.append(stat('Hitpoints', String(n(data, 'maxHp'))), stat('Speed', String(n(data, 'speed'))), stat('View range', `${n(data, 'visionInner')} / ${n(data, 'visionOuter')}`), stat('Attack range', String(n(data, 'engagementRange'))), stat('Production work', `${n(data, 'buildWork')} h`), stat('Armor', String(data.armorClass ?? 'soft')));
+    overview.append(stat('Hitpoints', String(n(data, 'maxHp'))), stat('Speed', String(n(data, 'speed'))), stat('View range', `${n(data, 'visionInner')} / ${n(data, 'visionOuter')}`), stat('Attack range', String(n(data, 'engagementRange'))), stat('Production work', `${n(data, 'buildWork')} h`), stat('Armor', String(data.armorClass ?? 'soft')), stat('Camouflage level', String(n(data, 'camouflageLevel'))), stat('Reveal level', String(n(data, 'revealLevel'))));
     const combat = document.createElement('table'); combat.className = 'ifg-dossier__combat';
     combat.innerHTML = '<thead><tr><th>Target</th><th>Attack</th><th>Defence</th></tr></thead>';
     const tbody = document.createElement('tbody');
-    for (const [key, label] of [['soft', 'Unarmored'], ['light', 'Light armor'], ['heavy', 'Heavy armor']] as const) {
+    for (const [key, label] of [['soft', 'Unarmored'], ['light', 'Light armor'], ['heavy', 'Heavy armor'], ['ship', 'Surface ship'], ['submarine', 'Submarine']] as const) {
       const tr = document.createElement('tr'); tr.innerHTML = `<th>${label}</th><td>${Number(attack[key] ?? 0).toFixed(1)}</td><td>${Number(defense[key] ?? 0).toFixed(1)}</td>`; tbody.append(tr);
     }
     combat.append(tbody);

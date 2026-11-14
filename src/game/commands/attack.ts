@@ -1,3 +1,6 @@
+import { isNativeNavy } from '../units/army';
+import { fleetAttackRange, isWater, issueFleetMove } from '../naval/navigation';
+import { wrapX } from '../geometry';
 /** Typed province/army attack handling, including artillery-only targeting. */
 
 import type { SimContext } from '../sim-context';
@@ -59,7 +62,9 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
   ensureArmyRuntimeState(army);
   const artilleryOnly = army.units.length > 0
     && army.units.every((group) => unitType(group.typeId).category === 'artillery');
+  if (army.upgrade) return {ok:false,reason:'Army is upgrading.'};
   if (command.target.kind === 'province') {
+    if (isNativeNavy(army)) return {ok:false,reason:'Fleets cannot capture land. Select an enemy force to bombard.'};
     if (artilleryOnly) {
       return { ok: false, reason: 'Artillery-only armies must select an enemy currently in range.' };
     }
@@ -124,10 +129,41 @@ export function issueAttack(ctx: SimContext, command: AttackCommand): CommandRes
   if (!contact || contact === 'hidden') return { ok: false, reason: 'No valid hostile force.' };
   const required = relationOf(ctx.state, army.ownerCountryId, target.ownerCountryId) === 'war'
     ? [] : [target.ownerCountryId];
-  if (combatDomain(army) !== combatDomain(target)) {
-    return { ok: false, reason: combatDomain(target) === 'naval'
-      ? 'Land forces cannot attack a naval target.'
-      : 'Naval forces cannot attack a land target.' };
+  const distance = wrappedDistance(army.x, army.z, target.x, target.z, ctx.world.width);
+  if (isNativeNavy(army)) {
+    if (required.some((id) => !command.confirmedWarCountryIds?.includes(id))) return {ok:false,reason:'War declaration required.',requiredWarCountryIds:required};
+    const range = fleetAttackRange(army);
+    let result: CommandResult;
+    if (distance <= range) {
+      army.navalTargetArmyId = target.id; army.order = null; army.navalRoute = [];
+      army.artillery = { targetArmyId: target.id, manualTarget: true };
+      result = {ok:true};
+    } else {
+      let goal = isWater(ctx.world, target) ? {x:target.x,z:target.z} : null;
+      if (!goal) {
+        const candidates: Array<{x:number;z:number}> = [];
+        for (let radius = 8; radius < range; radius += 8) for (let i = 0; i < 32; i++) {
+          const point = {x:wrapX(target.x + Math.cos(i*Math.PI/16)*radius,ctx.world.width),z:target.z+Math.sin(i*Math.PI/16)*radius};
+          if (isWater(ctx.world, point)) candidates.push(point);
+        }
+        candidates.sort((a,b)=>wrappedDistance(army.x,army.z,a.x,a.z,ctx.world.width)-wrappedDistance(army.x,army.z,b.x,b.z,ctx.world.width));
+        goal = candidates[0] ?? null;
+      }
+      if (!goal) return {ok:false,reason:'The target is too far inland for this fleet.'};
+      result = issueFleetMove(ctx,army,goal.x,goal.z,'attack',{kind:'army',armyId:target.id,lastKnownX:target.x,lastKnownZ:target.z});
+    }
+    if (result.ok) for (const id of required) setRelation(ctx.state,army.ownerCountryId,id,'war');
+    return result;
+  }
+  if (combatDomain(target) === 'naval') {
+    const range = Math.max(26, ...army.units.map(group=>unitType(group.typeId).engagementRange));
+    if (distance > range) return {ok:false,reason:'Naval target is beyond coastal combat/artillery range.'};
+    if (required.some((id) => !command.confirmedWarCountryIds?.includes(id))) return {ok:false,reason:'War declaration required.',requiredWarCountryIds:required};
+    if (army.order || !['idle','extracting'].includes(army.status)) return {ok:false,reason:'Stop before firing at a naval target.'};
+    for (const id of required) setRelation(ctx.state,army.ownerCountryId,id,'war');
+    army.navalTargetArmyId = target.id;
+    if (army.units.some(group=>unitType(group.typeId).engagementRange > 0)) army.artillery = {targetArmyId:target.id,manualTarget:true};
+    return {ok:true};
   }
   if (artilleryOnly) {
   if (required.some((id) => !command.confirmedWarCountryIds?.includes(id))) {

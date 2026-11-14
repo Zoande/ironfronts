@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 5 as const;
+export const PROTOCOL_VERSION = 6 as const;
 export const GAME_ID = 'world-at-war-2' as const;
 export const GAME_VERSION = 'world-at-war@4' as const;
 
@@ -26,6 +26,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
     groups: z.array(z.object({ typeId: z.string(), count: z.number().int().nonnegative() })).min(1),
     x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars,
   }),
+  z.object({ type: z.literal('upgradeArmy'), armyId: z.string(), quoteKey: z.string().min(1).max(8192) }),
   z.object({ type: z.literal('stopArmy'), armyId: z.string() }),
   z.object({ type: z.literal('renameArmy'), armyId: z.string(), name: z.string().trim().min(1).max(24) }),
   z.object({
@@ -165,7 +166,15 @@ export type QueuedArmyOrder =
   | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
   | { kind: 'attackArmy'; targetArmyId: string };
 
+export interface ArmyUpgradeQuote {
+  key: string;
+  entries: Array<{ typeId: string; targetTypeId: string; count: number }>;
+  cost: Partial<Record<'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil', number>>;
+  totalHours: number; canStart: boolean; reason?: string;
+}
 export interface ProjectedArmy {
+  upgradeQuote?: ArmyUpgradeQuote;
+  upgrade?: { remainingHours: number; totalHours: number } | null;
   queuedOrders?: QueuedArmyOrder[];
   queuedOrderError?: string | null;
   id: string;
@@ -196,8 +205,8 @@ export interface ProjectedArmy {
     /** Combat/movement domain of the currently manifested unit. */
     domain?: 'land' | 'naval';
     combatProfile?: {
-      attack: { soft: number; light: number; heavy: number };
-      defense: { soft: number; light: number; heavy: number };
+      attack: { soft: number; light: number; heavy: number; ship?: number; submarine?: number };
+      defense: { soft: number; light: number; heavy: number; ship?: number; submarine?: number };
     };
     transport?: {
       kind: 'transport'; level: number; shipCount: number; hp: number; maxHp: number; health: number;
@@ -348,7 +357,7 @@ export type ProjectionDelta = {
 };
 
 export type ServerMessage =
-  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 5; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean; debugUnlockAvailable?: boolean }
+  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 6; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean; debugUnlockAvailable?: boolean }
   | { type: 'baseline'; revision: number; state: PlayerProjection; catalogs: PresentationCatalogs; clock: GameClockSync }
   | { type: 'delta'; fromRevision: number; revision: number; delta: ProjectionDelta; events: FilteredEvent[] }
   | { type: 'clockSync'; clock: GameClockSync }
@@ -388,7 +397,7 @@ export interface GameTicketClaims {
   gameId: string;
   countryId: number;
   audience: 'game-server';
-  protocolVersion: 5;
+  protocolVersion: 6;
   expiresAt: number;
   nonce: string;
 }
@@ -398,7 +407,7 @@ export interface GameLobby {
   gameId: string;
   name: string;
   gameVersion: string;
-  protocolVersion: 5;
+  protocolVersion: 6;
   assignedCountryId: number | null;
   countries: LobbyCountry[];
 }
@@ -453,7 +462,7 @@ export interface SessionResponse {
   assignment?: { gameId: string; countryId: number } | null;
   profile?: CommanderProfile;
 }
-export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 5 }
+export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 6 }
 
 export const credentialsSchema = z.object({
   username: z.string().trim().min(3).max(32),

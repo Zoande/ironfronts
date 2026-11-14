@@ -10,8 +10,8 @@ describe('army map presentation LOD data', () => {
     expect(canPresentArtilleryFire(source,target,1000)).toBe(true);
     expect(canPresentArtilleryFire(source,{...target,x:200},1000)).toBe(false);
     expect(canPresentArtilleryFire({...source,status:'moving'},target,1000)).toBe(false);
-    expect(canPresentArtilleryFire(source,{...target,status:'atSea'},1000)).toBe(false);
-    expect(canPresentArtilleryFire(source,{...target,composition:{domain:'naval'}},1000)).toBe(false);
+    expect(canPresentArtilleryFire(source,{...target,status:'atSea'},1000)).toBe(true);
+    expect(canPresentArtilleryFire(source,{...target,composition:{domain:'naval'}},1000)).toBe(true);
   });
   it('maps infantry and armor families onto the compact counter silhouettes', () => {
     expect(visualKindForUnit('infantry')).toBe(0);
@@ -31,10 +31,11 @@ describe('army map presentation LOD data', () => {
       { typeId: 'armored-car', count: 5, health: 0.8 },
     ]);
     expect(formation).toEqual([
-      { kind: 0, count: 4, health: 0.875 },
-      { kind: 1, count: 5, health: 0.8 },
-      { kind: 1, count: 5, health: 0.8 },
-      { kind: 2, count: 3, health: 2 / 3 },
+      { kind: 0, count: 3, health: 1 },
+      { kind: 1, count: 5, health: .8 },
+      { kind: 2, count: 1, health: .5 },
+      { kind: 6, count: 1, health: .5 },
+      { kind: 8, count: 2, health: .75 },
     ]);
     expect(dominantVisualKind(buildArmyCompositionRows([
       { typeId: 'infantry', count: 3, health: 1 },
@@ -43,7 +44,7 @@ describe('army map presentation LOD data', () => {
     ]))).toBe(2);
   });
 
-  it('uses at most four slots, guarantees each present category, and respects tiny armies', () => {
+  it('represents every distinct family and respects tiny armies', () => {
     expect(buildArmyFormation([
       { typeId: 'infantry', count: 1, health: 1 },
       { typeId: 'artillery', count: 1, health: 1 },
@@ -56,8 +57,15 @@ describe('army map presentation LOD data', () => {
       { typeId: 'engineer', count: 2, health: 1 },
       { typeId: 'artillery', count: 1, health: 1 },
     ]);
-    expect(mixed).toHaveLength(4);
-    expect(new Set(mixed.map((slot) => slot.kind))).toEqual(new Set([0, 1, 2, 3]));
+    expect(mixed).toHaveLength(6);
+    expect(new Set(mixed.map((slot) => slot.kind))).toEqual(new Set([0, 1, 2, 3, 6, 8]));
+  });
+
+  it('uses distinct models for the full land and naval rosters', () => {
+    const groups = (ids:string[]) => ids.map(typeId=>({typeId,count:1,health:1}));
+    expect(new Set(buildArmyFormation(groups(['infantry','engineer','militia','armored-car','light-tank','medium-tank','artillery'])).map(model=>model.kind)).size).toBe(7);
+    expect(buildArmyFormation(groups(['battleship','destroyer','submarine'])).map(model=>model.kind)).toEqual(expect.arrayContaining([9,10,11]));
+    expect(visualKindForUnit('submarine-l8')).toBe(5);
   });
 
   it('builds one compact marker row per shared icon family, largest first', () => {

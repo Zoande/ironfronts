@@ -1,3 +1,6 @@
+import { navalLaunchPoint } from './naval/navigation';
+import { isNativeNavy } from './units/army';
+import { wrappedDistance } from './geometry';
 import { armyAtNode } from './movement/position';
 /**
  * Urban unit production.
@@ -56,6 +59,7 @@ export function producibleUnits(
   const tech = technologyLevels(country);
   for (const baseId of BASE_UNIT_IDS) {
     const base = UNIT_TYPE_BY_ID.get(baseId)!;
+    if (base.domain === 'naval' && !navalLaunchPoint(session.world, provinceId)) continue;
     const level = Math.min(tech[base.technology], buildingLevel(session, provinceId, base.requiredBuilding));
     if (level > 0) out.push(level === 1 ? baseId : `${baseId}-l${level}`);
   }
@@ -71,6 +75,7 @@ export function queueUnit(
   }
   const type = UNIT_TYPE_BY_ID.get(unitTypeId);
   if (!type) return { ok: false, reason: 'Unknown unit.' };
+  if (type.domain === 'naval' && !navalLaunchPoint(session.world, provinceId)) return { ok: false, reason: 'Warships require a coastal province with a navigable launch and Ordnance Works.' };
   const facilityLevel = buildingLevel(session, provinceId, type.requiredBuilding);
   if (facilityLevel < type.level) {
     return { ok: false, reason: `Requires a ${type.requiredBuilding}.` };
@@ -146,7 +151,7 @@ export function stepProduction(session: SimContext, dtHours: number): UnitComple
     // Rally point: march the fresh unit (or the idle stack it joined) toward it.
     const rally = session.state.rallyPoints[provinceId];
     const army = session.state.armies[armyId];
-    if (rally && army && !army.order && army.status === 'idle') {
+    if (rally && army && !army.order && (army.status === 'idle' || (isNativeNavy(army) && army.status === 'atSea'))) {
       issueMoveOrder(session, armyId, rally.x, rally.z, 'move');
     }
   }
@@ -169,13 +174,16 @@ function spawnUnit(
   // real node elsewhere on the map, which made pathfinding place the new stack
   // in the wrong place entirely.
   const node = nearestNode(session.graph, cx, cz);
-  const nx = node >= 0 ? session.graph.nodeX[node] : cx;
-  const nz = node >= 0 ? session.graph.nodeZ[node] : cz;
+  const fleet = unitType(unitTypeId).domain === 'naval';
+  const launch = fleet ? navalLaunchPoint(world, provinceId) : null;
+  if (fleet && !launch) throw new Error('Queued warship lost its navigable launch.');
+  const nx = launch?.x ?? (node >= 0 ? session.graph.nodeX[node] : cx);
+  const nz = launch?.z ?? (node >= 0 ? session.graph.nodeZ[node] : cz);
 
   // Auto-stack onto a friendly idle army already at that node.
   const existing = Object.values(session.state.armies)
-    .filter((a) => a.ownerCountryId === ownerCountryId
-      && armyAtNode(session, a, node) && a.graphNodeId === node && !a.order && a.extractionAssignment == null
+    .filter((a) => !a.upgrade && a.ownerCountryId === ownerCountryId
+      && isNativeNavy(a) === fleet && (fleet ? wrappedDistance(a.x, a.z, nx, nz, world.width) < 26 : armyAtNode(session, a, node) && a.graphNodeId === node) && !a.order && a.extractionAssignment == null
       && a.status !== 'engaged' && a.status !== 'retreating')
     .sort((a, b) => {
       const an = Number(a.id.replace(/^army-/, ''));
@@ -204,7 +212,7 @@ function spawnUnit(
     z: nz,
     graphNodeId: node >= 0 ? node : 0,
     units: [group],
-    status: 'idle',
+    status: fleet ? 'atSea' : 'idle',
     order: null,
     extractingNodeId: null,
     extractionAssignment: null,

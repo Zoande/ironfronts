@@ -1,0 +1,63 @@
+{
+  "scale": 0.72,
+  "stride": 5.0,
+  "muzzle": [
+    0,
+    2.2,
+    17.68
+  ],
+  "kind": "destroyer",
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 5700,
+      "vertices": 2982
+    },
+    {
+      "lod": 1,
+      "triangles": 2394,
+      "vertices": 1329
+    },
+    {
+      "lod": 2,
+      "triangles": 767,
+      "vertices": 531
+    }
+  ],
+  "clips": {
+    "Idle": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Walk": {
+      "duration": 1,
+      "fps": 30
+    },
+    "Reverse": {
+      "duration": 1.2,
+      "fps": 30
+    },
+    "Fire": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Reload": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Deploy": {
+      "duration": 1.5,
+      "fps": 30
+    },
+    "Death": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Run": {
+      "duration": 0.8,
+      "fps": 30
+    }
+  },
+  "source": "material/land-armies/destroyer.blend",
+  "authoredBy": "Ironfronts / Codex; original procedural Blender source"
+}

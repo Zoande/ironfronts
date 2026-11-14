@@ -18,15 +18,17 @@ import { COMBAT_DAMAGE_SCALE } from '../combat/constants';
 import type { DamageProfile, UnitType } from './unit-types';
 
 /** Continuous HP per timeline hour, integrated every simulation step. */
-function damagePerHour(soft: number, light: number, heavy: number): DamageProfile {
+function damagePerHour(soft: number, light: number, heavy: number, ship = heavy * .2, submarine = heavy * .04): DamageProfile {
   return {
     soft: soft * COMBAT_DAMAGE_SCALE,
     light: light * COMBAT_DAMAGE_SCALE,
     heavy: heavy * COMBAT_DAMAGE_SCALE,
+    ship: ship * COMBAT_DAMAGE_SCALE,
+    submarine: submarine * COMBAT_DAMAGE_SCALE,
   };
 }
 
-const BASE_UNIT_TYPES: readonly UnitType[] = [
+const LAND_UNIT_TYPES: readonly UnitType[] = [
   {
     id: 'infantry',
     baseId: 'infantry', level: 1, technology: 'infantry',
@@ -167,6 +169,34 @@ const BASE_UNIT_TYPES: readonly UnitType[] = [
   },
 ];
 
+/** Coastal Ordnance Works double as the fleet shipyard. */
+function vessel(id: string, name: string, hp: number, speed: number, range: number,
+  attack: DamageProfile, cost: UnitType['buildCost'], work: number): UnitType {
+  return { ...LAND_UNIT_TYPES[0], id, baseId: id, name, technology: 'navy', category: 'naval',
+    domain: 'naval', armorClass: id === 'submarine' ? 'submarine' : 'ship', icon: `unit-${id}`,
+    maxHp: hp, speed, attack, defense: attack, visionOuter: id === 'destroyer' ? 280 : 220, visionInner: 120,
+    engagementRange: range, buildCost: cost, cost, buildWork: work, buildTimeHours: work,
+    requiredBuilding: 'ordnance', stackPriority: id === 'battleship' ? 100 : 80,
+    upkeep: { fundsPerHour: work * 2, oilPerHour: work * .6, metalPerHour: work * .15 },
+    ...(id === 'submarine' ? { camouflageLevel: 1 } : {}),
+    ...(id === 'destroyer' ? { revealLevel: 1 } : {}),
+  };
+}
+const BASE_UNIT_TYPES: readonly UnitType[] = [
+  ...LAND_UNIT_TYPES.map((unit) => unit.id === 'armored-car' ? { ...unit, revealLevel: 1 } : unit),
+  { ...LAND_UNIT_TYPES[0], id: 'militia', baseId: 'militia', name: 'Militia', icon: 'unit-militia',
+    camouflageLevel: 1, maxHp: 75, speed: GAME_PACE.movement.unitWorldUnitsPerHour.militia,
+    attack: damagePerHour(4, 1.8, .8), defense: damagePerHour(5.5, 2.4, 1.1),
+    buildCost: { funds: 220, manpower: 35, food: 25 }, cost: { funds: 220, manpower: 35, food: 25 },
+    buildWork: .5, buildTimeHours: .5, stackPriority: 9 },
+  vessel('battleship', 'Battleship', 700, GAME_PACE.movement.unitWorldUnitsPerHour.battleship, 160, damagePerHour(20, 18, 16, 18, 1.2),
+    { funds: 5200, manpower: 90, metal: 650, oil: 180 }, 6),
+  vessel('destroyer', 'Destroyer', 300, GAME_PACE.movement.unitWorldUnitsPerHour.destroyer, 0, damagePerHour(7, 6, 4, 7, 20),
+    { funds: 2400, manpower: 45, metal: 280, oil: 90 }, 3),
+  vessel('submarine', 'Submarine', 170, GAME_PACE.movement.unitWorldUnitsPerHour.submarine, 0, damagePerHour(1.2, .8, .5, 30, 8),
+    { funds: 2100, manpower: 30, metal: 220, oil: 70 }, 3),
+];
+
 const LEVEL_TIME_MULTIPLIER = [0, 1, 2, 4, 8, 16, 32, 64, 144] as const;
 const scaled = (value: number, factor: number): number => Math.round(value * factor * 100) / 100;
 const scaleRecord = <T extends object>(record: T, factor: number): T =>
@@ -182,13 +212,15 @@ export const UNIT_TYPES: readonly UnitType[] = BASE_UNIT_TYPES.flatMap((base) =>
     const damageFactor = 1 + statStep * 0.18;
     const costFactor = 1 + statStep * 0.45 + statStep * statStep * 0.08;
     const upkeepFactor = 1 + statStep * 0.2;
-    const work = scaled(base.buildWork * LEVEL_TIME_MULTIPLIER[level], 1);
+    const work = scaled(base.buildWork * (base.domain === 'naval' ? 1 + statStep * statStep * .4 : LEVEL_TIME_MULTIPLIER[level]), 1);
     const buildCost = scaleRecord(base.buildCost, costFactor);
     return {
       ...base,
       id: `${base.id}-l${level}`,
       name: `${base.name} Level ${level}`,
       level,
+      camouflageLevel: base.camouflageLevel ? level : 0,
+      revealLevel: base.revealLevel ? level : 0,
       maxHp: scaled(base.maxHp, hpFactor),
       speed: scaled(base.speed, 1 + statStep * 0.025),
       attack: scaleRecord(base.attack, damageFactor),

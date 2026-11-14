@@ -1,3 +1,5 @@
+import { isNativeNavy } from './army';
+import { stepFleetMovement } from '../naval/navigation';
 import { COMBAT_SNAP } from '../combat/constants';
 import { supplyEffectiveness } from '../combat/supply';
 import { SpatialIndex } from '../spatial-index';
@@ -45,11 +47,11 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
   const worldWidth = session.world.width;
   for (const armyId of arrivedIds) {
     const army = session.state.armies[armyId];
-    if (!army || army.status !== 'idle' || army.order || army.battleFrontIds?.length || army.queuedOrders?.length) continue;
+    if (!army || army.upgrade || (army.status !== 'idle' && !isNativeNavy(army)) || army.order || army.battleFrontIds?.length || army.queuedOrders?.length) continue;
     const target = Object.values(session.state.armies).find((other) => other !== army
       && other.ownerCountryId === army.ownerCountryId
-      && other.status === 'idle' && !other.order && !other.battleFrontIds?.length && !other.queuedOrders?.length
-      && ((!army.edge && !other.edge && other.graphNodeId === army.graphNodeId)
+      && !other.upgrade && isNativeNavy(other) === isNativeNavy(army) && (other.status === 'idle' || isNativeNavy(other)) && !other.order && !other.battleFrontIds?.length && !other.queuedOrders?.length
+      && ((!isNativeNavy(army) && !army.edge && !other.edge && other.graphNodeId === army.graphNodeId)
         || wrappedDistance(other.x, other.z, army.x, army.z, worldWidth) < MERGE_RADIUS));
     if (target) {
       mergeStacks(target, army);
@@ -67,8 +69,9 @@ export function stepMovement(session: SimContext, dtHours: number, contactTimes?
   const visibilityByCountry = new Map<number, ReturnType<typeof computeArmyVisibility>>();
   for (const army of Object.values(session.state.armies)) {
     ensureArmyRuntimeState(army);
+    if (isNativeNavy(army)) { const moving = Boolean(army.order); if (!army.upgrade) stepFleetMovement(session, army, dtHours); if (moving && !army.order && !army.navalTargetArmyId) arrivedIds.add(army.id); positions.update(army); continue; }
     const order = army.order;
-    if (!order || army.status === 'engaged') continue;
+    if (!order || army.upgrade || army.status === 'engaged') continue;
     if (isNavalStatus(army.status)) {
       stepNavalCrossing(session, army, order, dtHours);
       if (!army.order) arrivedIds.add(army.id);

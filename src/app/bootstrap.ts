@@ -1,3 +1,4 @@
+import { confirmArmyUpgrade } from '../ui/army-upgrade-dialog';
 import { queuedRouteSegments } from '../client/queued-orders';
 import { landMuzzlePosition, nextLandShot } from '../rendering/land-animation';
 import { setDebugHandles } from '../client/debug-access';
@@ -920,13 +921,14 @@ async function startGame(token: number): Promise<void> {
 
   const buildingIds: BuildingId[] = ['barracks', 'tankPlant', 'ordnance', 'missileSite', 'fields', 'quarry', 'mine', 'oilPump'];
   debugCheatBuildingChoice.replaceChildren(...buildingIds.flatMap((buildingId) =>
-    Array.from({ length: 5 }, (_, index) => {
+    Array.from({ length: 8 }, (_, index) => {
       const option = document.createElement('option');
       option.value = `${buildingId}:${index + 1}`;
       option.textContent = `${buildingLabel(buildingId)} — Level ${index + 1}`;
       return option;
     })));
-  debugCheatUnitChoice.replaceChildren(...['infantry', 'engineer', 'armored-car', 'light-tank', 'artillery', 'medium-tank'].map((unitId) => {
+  debugCheatUnitChoice.replaceChildren(...session.catalogs.units.map((definition) => {
+    const unitId = String(definition.id);
     const option = document.createElement('option');
     option.value = unitId; option.textContent = gameUnitLabel(unitId); return option;
   }));
@@ -1673,12 +1675,13 @@ function syncArmyMarkers(
       // During embark/disembark it remains visibly represented by its troops on
       // the coastal node; reaching land therefore restores the troop models
       // immediately, even while the short unloading dwell finishes.
-      if (army.status === 'atSea' && formation.length) {
+      if (army.composition?.transport && army.status === 'atSea' && formation.length) {
         formation = [{
           kind: 5,
           count: army.composition?.unitCount ?? 0,
           health: army.composition?.health ?? 0,
         }];
+        compositionRows = [{kind:5,count:army.composition?.unitCount ?? 0,health:army.composition?.health ?? 0}];
       }
     }
     armyMarkerScratch.fill(0, cursor, cursor + 28);
@@ -1778,10 +1781,10 @@ function syncArmyMarkers(
       // sprawled across it. Marching = a near-single-file column along the
       // heading with barely any lateral spread; resting = a small loose clump.
       const restSlots: ReadonlyArray<readonly [number, number]> = [
-        [-5, 4.5], [5, 4.5], [-5, -5], [5, -5],
+        [-5, 4.5], [5, 4.5], [-5, -5], [5, -5], [-15, 4.5], [15, 4.5], [-15, -5], [15, -5],
       ];
       const marchSlots: ReadonlyArray<readonly [number, number]> = [
-        [0, 13.5], [-.3, 4.5], [.3, -4.5], [0, -13.5],
+        [0, 13.5], [-.3, 4.5], [.3, -4.5], [0, -13.5], [-.3, -22.5], [.3, -31.5], [0, -40.5], [0, -49.5],
       ];
       const slots = marching ? marchSlots : restSlots;
       const jitterR = marching ? 0.9 : 1.9;
@@ -1789,11 +1792,11 @@ function syncArmyMarkers(
       const armyJitter = hashUnit(army.id);
       for (let index = 0; index < formation.length && modelCount < 4_096; index += 1) {
         const group = formation[index];
-        const [slotR, slotF] = slots[index];
+        const [slotR, slotF] = army.composition?.domain === 'naval' && formation.length === 1 ? [0,0] : slots[index];
         const jr = (hashUnit(`${army.id}:${index}:r`) - 0.5) * jitterR;
         const jf = (hashUnit(`${army.id}:${index}:f`) - 0.5) * jitterF + (armyJitter - 0.5) * 1.5;
-        const right = slotR + jr;
-        const forward = slotF + jf;
+        const right = slotR * (army.composition?.domain === 'naval' ? 3 : 1) + jr;
+        const forward = slotF * (army.composition?.domain === 'naval' ? 4 : 1) + jf;
         const x = armyMotion.x + rightX * right + forwardX * forward;
         const z = armyMotion.z + rightZ * right + forwardZ * forward;
         const targetX = armyMotion.targetX + rightX * right + forwardX * forward;
@@ -1815,17 +1818,17 @@ function syncArmyMarkers(
         armyModelScratch[modelCursor + 6] = (army.id === selectedArmyId ? 1 : 0)
           | (marching ? 2 : 0)
           | (army.status === 'retreating' ? 4 : 0)
-          | (army.status === 'engaged' || (group.kind===3 && opponent && !marching) ? 8 : 0);
+          | (army.status === 'engaged' || (opponent && !marching) ? 8 : 0);
         armyModelScratch[modelCursor + 7] = heading;
         const phase = hashUnit(modelKey);
         const travelled = (landTravel.get(modelKey) ?? 0) + (marching ? Math.min(30, Math.hypot(x-previousX,z-previous.z)) : 0);
         landTravel.set(modelKey, travelled);
         armyModelScratch[modelCursor + 8] = travelled;
         armyModelScratch[modelCursor + 9] = phase;
-        if (group.kind < 4) {
+        if (group.kind !== 5) {
           landCombatVisuals.set(modelKey, { recordOffset: modelCursor, armyId: army.id, kind: group.kind, x, z, heading, phase,
-            hullHeading:group.kind===0?heading:stationaryHullHeadings.get(army.id)??heading,
-            firing:!marching && (army.status==='engaged'||(group.kind===3 && !!opponent)),targetArmyId:opponent?.id });
+            hullHeading:[0,6,7].includes(group.kind)?heading:stationaryHullHeadings.get(army.id)??heading,
+            firing:!marching && (army.status==='engaged'||(!!opponent)),targetArmyId:opponent?.id });
         }
         armyModelScratch[modelCursor + 10] = 0;
         // Facing before this update — the shader eases from it to slot +7 over
@@ -2372,6 +2375,14 @@ function handleArmyCommand(command: ArmyPanelCommand): void {
   const session = activeSession;
   if (!session || !selectedArmyId) { if (command === 'deselect') deselectArmy(); return; }
   if (command === 'deselect') { deselectArmy(); return; }
+  if (command === 'upgrade') {
+    const armyId = selectedArmyId;
+    const quote = session.army(armyId)?.upgradeQuote;
+    if (quote?.entries.length) void confirmArmyUpgrade(quote, gameUnitLabel).then((accepted) => {
+      if (accepted && activeSession === session) session.orderUpgrade(armyId, quote.key);
+    });
+    return;
+  }
   if (command === 'move') {
     targetingMode = 'move'; awaitingMoveTarget = true; refreshSelectedArmy(session); return;
   }
@@ -2435,15 +2446,19 @@ function refreshSelectedArmy(
   const displayedGroups = comp?.transport?.cargo ?? comp?.groups;
   const groups = displayedGroups?.map((g) => ({
     typeId: g.typeId,
+    camouflageLevel: comp?.transport ? 0 : Number(gameUnit(g.typeId).camouflageLevel ?? 0),
+    revealLevel: comp?.transport ? 0 : Number(gameUnit(g.typeId).revealLevel ?? 0),
     label: comp?.transport ? `${gameUnitLabel(g.typeId)} cargo` : gameUnitLabel(g.typeId),
     count: 'shipCount' in g ? g.shipCount : g.count,
     health: g.health,
   }));
-  const scaledManifestationProfile = (profile: { soft: number; light: number; heavy: number } | undefined) =>
+  const scaledManifestationProfile = (profile: { soft: number; light: number; heavy: number; ship?: number; submarine?: number } | undefined) =>
     profile ? {
       soft: profile.soft * (comp?.unitCount ?? 0),
       light: profile.light * (comp?.unitCount ?? 0),
       heavy: profile.heavy * (comp?.unitCount ?? 0),
+      ship: (profile.ship ?? 0) * (comp?.unitCount ?? 0),
+      submarine: (profile.submarine ?? 0) * (comp?.unitCount ?? 0),
     } : undefined;
   const baseActivity = [armyActivityLabel(view.status, awaitingMoveTarget, view.own),
     view.queuedOrders?.length ? `${view.queuedOrders.length} orders queued` : null].filter(Boolean).join(' · ');
@@ -2493,6 +2508,7 @@ function refreshSelectedArmy(
       ? battle.estimatedRealSeconds / Math.max(0.0001, 1 - (combatProgress ?? 0))
       : view.motion && movementRemainingMs > 0
         ? movementRemainingMs / 1_000 / Math.max(0.0001, 1 - (movementProgress ?? 0)) : undefined;
+  const nativeFleet = comp?.domain === 'naval' && !comp.transport;
   const anchoredAtSea = view.status === 'atSea' && !view.moveOrder;
   const moveDisabledReason = !session.fresh
     ? 'Waiting for an authoritative update from the game server.'
@@ -2500,7 +2516,7 @@ function refreshSelectedArmy(
       ? 'This formation is currently locked in close combat.'
       : view.status === 'retreating'
         ? 'This formation is withdrawing and cannot receive a new move order.'
-        : NAVAL_TRANSIT_STATUSES.has(view.status) && !anchoredAtSea
+        : NAVAL_TRANSIT_STATUSES.has(view.status) && !anchoredAtSea && !nativeFleet
           ? 'This formation is in transit and cannot receive a new move order yet.'
           : 'Movement is unavailable in the current state.';
   uiStore.patch({
@@ -2528,8 +2544,10 @@ function refreshSelectedArmy(
         ?? aggregateTroopStat(groups, 'attack', gameUnit),
       defense: scaledManifestationProfile(comp?.combatProfile?.defense)
         ?? aggregateTroopStat(groups, 'defense', gameUnit),
-      activity,
+      activity: view.upgrade ? `Upgrading · ${view.upgrade.remainingHours.toFixed(1)} game h remaining` : activity,
       activityKind,
+      upgrading: Boolean(view.upgrade),
+      upgradeQuote: view.upgradeQuote,
       activityRemainingSeconds,
       activityDurationSeconds,
       activityProgress,
@@ -2537,23 +2555,23 @@ function refreshSelectedArmy(
       arrivalSeconds: arrivalRemainingMs !== undefined ? arrivalRemainingMs / 1_000 : undefined,
       movementProgress,
       own: view.own,
-      canExtract: session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
+      canExtract: !view.upgrade && session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
       extractableResources: view.actions?.extractableResources,
       awaitingMoveTarget: view.own && awaitingMoveTarget,
       // 'strike' is a nation-level order, not an army targeting mode — the army
       // card never reflects it.
       targetingMode: view.own && targetingMode !== 'strike' ? targetingMode : null,
-      canMove: session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
-        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || anchoredAtSea),
-      moveDisabledReason,
-      canAttack: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
-        && !NAVAL_TRANSIT_STATUSES.has(view.status),
-      canRetreat: session.fresh && view.own && view.status === 'engaged' && Boolean(view.legalRetreatExits?.length),
-      canSplit: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
-        && !NAVAL_TRANSIT_STATUSES.has(view.status),
-      canStop: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
-        && !NAVAL_TRANSIT_STATUSES.has(view.status)
-        && (Boolean(view.moveOrder) || view.status === 'extracting' || targetingMode !== null),
+      canMove: !view.upgrade && session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
+        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || anchoredAtSea || nativeFleet),
+      moveDisabledReason: view.upgrade ? 'This army is upgrading and cannot move yet.' : moveDisabledReason,
+      canAttack: !view.upgrade && session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || nativeFleet),
+      canRetreat: !view.upgrade && session.fresh && view.own && view.status === 'engaged' && Boolean(view.legalRetreatExits?.length),
+      canSplit: !view.upgrade && session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || nativeFleet),
+      canStop: !view.upgrade && session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+        && (!NAVAL_TRANSIT_STATUSES.has(view.status) || nativeFleet)
+        && (Boolean(view.moveOrder) || Boolean(view.artillery?.targetArmyId) || view.status === 'extracting' || targetingMode !== null),
       supply: view.supply,
       legalRetreatExits: view.legalRetreatExits,
       battleFronts: view.battleFronts,

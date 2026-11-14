@@ -1,3 +1,4 @@
+import { mayInitiateCombat, revealFiringArmy } from './targeting';
 import { SpatialIndex } from '../spatial-index';
 import type { BattleFrontSideState, BattleFrontState, BattleRole } from '../game-state';
 import { relationOf } from '../game-state';
@@ -241,6 +242,8 @@ export function detectEngagements(session: SimContext, events: CombatEvent[], co
       if (!canEnterCloseCombat(b) || a.ownerCountryId === b.ownerCountryId) continue;
       if (relationOf(session.state, a.ownerCountryId, b.ownerCountryId) !== 'war') continue;
       if (!armiesInContact(a, b, session.world.width)) continue;
+      if (!mayInitiateCombat(session, a, b) && !mayInitiateCombat(session, b, a)) continue;
+      revealFiringArmy(session, a); revealFiringArmy(session, b);
       const front = findOrCreateFront(session, a, b, events);
       const times = joinedAt.get(front.id) ?? new Map<string,number>();
       const at = contactTimes?.get(contactPairKey(a.id,b.id)) ?? 0;

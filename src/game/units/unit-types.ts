@@ -11,16 +11,18 @@
  * for now; a `techTag` field can be added later without touching consumers.
  */
 
-export type UnitCategory = 'infantry' | 'engineer' | 'recon' | 'armor' | 'artillery';
+export type UnitCategory = 'infantry' | 'engineer' | 'recon' | 'armor' | 'artillery' | 'naval';
 
 /** Coarse armour bucket used by the combat table. */
-export type ArmorClass = 'soft' | 'light' | 'heavy';
+export type ArmorClass = 'soft' | 'light' | 'heavy' | 'ship' | 'submarine';
 
 /** HP damage dealt per game-hour to each armour pool by one full-health unit. */
 export interface DamageProfile {
   readonly soft: number;
   readonly light: number;
   readonly heavy: number;
+  readonly ship?: number;
+  readonly submarine?: number;
 }
 
 /** Production buildings. */
@@ -49,7 +51,10 @@ export interface UnitType {
   /** Visual/gameplay family shared by all levels of this unit. */
   readonly baseId: string;
   readonly level: number;
-  readonly technology: 'infantry' | 'resources' | 'hybrid' | 'armored';
+  readonly technology: 'infantry' | 'resources' | 'hybrid' | 'armored' | 'navy';
+  readonly domain?: 'land' | 'naval';
+  readonly camouflageLevel?: number;
+  readonly revealLevel?: number;
   readonly name: string;
   readonly category: UnitCategory;
   readonly armorClass: ArmorClass;

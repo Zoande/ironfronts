@@ -259,6 +259,38 @@ def infantry():
     strap('Rifle sling',[(-.22,-.12,.913),(-.22,-.45,.87),(-.22,-.88,.946)],.016,.004,2,'Weapon')
     return rig(bones), {'scale':2.0,'stride':1.1,'muzzle':[-.22,.993,1.10]}
 
+def humanoid(kind):
+    arm,metadata=infantry()
+    if kind=='militia':
+        for obj in list(PARTS):
+            if any(word in obj.name.lower() for word in ['helmet','chin strap','field pack','pack flap','pack strap','pack buckle','blanket roll']):
+                PARTS.remove(obj);bpy.data.objects.remove(obj,do_unlink=True)
+        loft('Wool civilian field cap',[(0,.012,1.66,.095,.105),(0,.012,1.71,.086,.09),(0,.015,1.75,.045,.05)],13,'Head',28)
+        box('Cap visor',(0,-.09,1.67),(.19,.12,.015),2,'Head',.008)
+        box('Civilian canvas shoulder bag',(.20,.07,1.02),(.15,.16,.22),13,'Chest',.022)
+        strap('Diagonal militia bandolier',[(-.17,-.12,1.39),(.16,-.14,.99)],.045,.014,2,'Chest')
+        for j in range(8):box('Bandolier cartridge',(-.12+j*.035,-.145,1.33-j*.042),(.019,.02,.055),9,'Chest',.003)
+        metadata['stride']=.9
+    elif kind=='engineer':
+        box('Engineer reinforced tool chest',(0,.25,1.21),(.27,.15,.30),6,'Chest',.02)
+        for x in [-.10,.10]:box('Tool chest strap',(x,.332,1.21),(.023,.012,.29),2,'Chest',.003)
+        cylinder('Entrenching shovel handle',(.22,.20,.90),(.22,.20,1.52),.018,5,'Chest',16)
+        box('Entrenching shovel blade',(.22,.20,.86),(.13,.035,.20),4,'Chest',.012)
+        cylinder('Pickaxe shaft',(-.22,.2,.92),(-.22,.2,1.52),.018,5,'Chest',16)
+        cylinder('Pickaxe steel head',(-.38,.2,1.51),(-.06,.2,1.51),.027,4,'Chest',16)
+        for j in range(6):
+            bpy.ops.mesh.primitive_torus_add(major_segments=24,minor_segments=8,location=(0,.35,1.21),major_radius=.105+j*.003,minor_radius=.009)
+            ob=bpy.context.object;ob.rotation_euler.x=math.pi/2
+            finish(ob,'Engineer wire reel',8,'Chest')
+        box('Helmet engineer band',(0,-.098,1.70),(.115,.012,.028),11,'Head',.003)
+    else:
+        for j in range(5):
+            y=-.07+j*.035
+            cylinder('Helmet net cross cord',(-.08,y,1.72),(.08,y,1.72),.0025,2,'Head',8)
+        cylinder('Fixed rifle bayonet',(-.22,-1.04,.996),(-.22,-1.25,.996),.007,4,'Weapon',12,r2=.001)
+        box('Reserve magazine pouch',(.17,.08,.99),(.10,.07,.13),2,'Pelvis',.012)
+    return arm,metadata
+
 def wheel(name,x,y,z,radius,width,bone,tracked=False):
     cylinder(name+' tire',(x-width/2,y,z),(x+width/2,y,z),radius,7,bone,32)
     cylinder(name+' rim',(x-width*.53,y,z),(x+width*.53,y,z),radius*.73,6,bone,28)
@@ -275,7 +307,7 @@ def wheel(name,x,y,z,radius,width,bone,tracked=False):
             ob.rotation_euler.x=-a
 
 def vehicle(kind):
-    tank=kind=='tank';car=kind=='armored-car';art=kind=='artillery'
+    tank=kind in ('tank','light-tank');light=kind=='light-tank';car=kind=='armored-car';art=kind=='artillery'
     bones=[('Root',(0,0,0),(0,0,.3),None),('Hull',(0,0,.6),(0,0,1.0),'Root'),
            ('Turret',(0,-.2,1.45),(0,-.2,1.8),'Hull'),
            ('Gun',(0,-.5,1.65),(0,-1.0,1.65),'Turret'),
@@ -373,6 +405,30 @@ def vehicle(kind):
             cylinder('Handwheel spoke',(-.55,-.05,1.16),(-.55,-.05+math.sin(a)*.16,1.16+math.cos(a)*.16),.012,4,'Turret',10)
         box('Shield marking',(.45,-.318,1.38),(.21,.01,.19),15,'Hull',.001)
         muzzle=[0,1.40,2.66];scale=1.65
+    if light:
+        for obj in list(PARTS):
+            if any(word in obj.name.lower() for word in ['cast turret','commander cupola','cupola lid','rear field pack']):
+                PARTS.remove(obj);bpy.data.objects.remove(obj,do_unlink=True)
+        loft('Light tank angular turret',[(0,-.35,1.5,.74,.70),(0,-.35,1.7,.76,.70),(0,-.30,1.99,.54,.52)],6,'Turret',8)
+        box('Light tank twin hatch',(0,-.2,2.02),(.72,.61,.065),8,'Turret',.018)
+        box('Turret vision block',(-.55,-.75,1.82),(.17,.08,.11),10,'Turret',.01)
+        for obj in PARTS:
+            obj.location.x*=.80;obj.location.y*=.82;obj.location.z*=.82
+            for vertex in obj.data.vertices:
+                vertex.co.x*=.80;vertex.co.y*=.82;vertex.co.z*=.82
+        bones=[(name,(head[0]*.8,head[1]*.82,head[2]*.82),(tail[0]*.8,tail[1]*.82,tail[2]*.82),parent) for name,head,tail,parent in bones]
+        muzzle=[muzzle[0]*.8,muzzle[1]*.82,muzzle[2]*.82]
+    elif tank:
+        for side in [-1,1]:
+            for j in range(4):box('Medium tank spare track armor',(side*1.12,-.65+j*.24,1.42),(.08,.20,.23),8,'Hull',.012)
+        cylinder('Commander radio aerial',(.65,.35,2.2),(.65,.35,3.0),.012,4,'Turret',12)
+    elif car:
+        cylinder('Recon radio aerial',(.52,.8,1.7),(.52,.8,3.1),.012,4,'Hull',12)
+        box('Recon map case',(-.45,.35,1.35),(.28,.45,.18),1,'Hull',.025)
+    elif art:
+        for side in [-1,1]:
+            box('Shell case',(side*.68,1.16,.58),(.36,.70,.25),1,'Hull',.025)
+            for j in range(3):cylinder('Ready ammunition',(side*.68,1.04+j*.15,.75),(side*.68,1.04+j*.15,1.04),.043,9,'Hull',16,r2=.018)
     # Consistent sockets point at the actual muzzle in the rest pose.
     bones[4]=('Muzzle',(muzzle[0],-muzzle[2],muzzle[1]),(muzzle[0],-muzzle[2]-.15,muzzle[1]),'Gun')
     return rig(bones),{'scale':2.0,'stride':2.8 if car else 2.2,'muzzle':muzzle}
@@ -464,6 +520,79 @@ def transport_ship():
         ob.rotation_euler.y=angle
     return rig(bones),{'scale':.72,'stride':5.0,'muzzle':[0,1.3,12]}
 
+def warship(kind):
+    sub=kind=='submarine';big=kind=='battleship'
+    length=48 if big else 34 if not sub else 29
+    beam=4.0 if big else 2.25 if not sub else 1.25
+    bones=[('Root',(0,0,0),(0,0,1),None),('Hull',(0,0,0),(0,0,1),'Root'),
+           ('Turret',(0,-length*.30,1.7),(0,-length*.30,2.3),'Hull'),
+           ('Gun',(0,-length*.35,2.0),(0,-length*.42,2.0),'Turret'),
+           ('Propeller',(0,length*.47,-.3),(0,length*.52,-.3),'Hull'),
+           ('Muzzle',(0,-length*.52,.3 if sub else 2.1),(0,-length*.56,.3 if sub else 2.1),'Gun')]
+    if sub:
+        ellipsoid('Submarine pressure hull',(0,0,.05),(beam,length/2,1.05),8,'Hull',48,24)
+        box('Raised casing',(0,-.5,.86),(1.8,length*.75,.35),6,'Hull',.16)
+        loft('Streamlined conning tower',[(0,-1,1.0,.65,1.6),(0,-1,2.3,.6,1.35),(0,-1,2.8,.5,1.2)],6,'Hull',32)
+        for y,h in [(-1.4,4.1),(-.7,3.8)]:
+            cylinder('Periscope',(0,y,2.3),(0,y,h),.055,4,'Hull',16)
+            cylinder('Periscope head',(0,y,h),(0,y-.3,h),.07,4,'Hull',16)
+        for y in [-length*.32,length*.38]:box('Hydroplane',(0,y,.05),(4.5,1.2,.13),6,'Hull',.05)
+        box('Stern rudder',(0,length*.43,.05),(.15,2.6,2.5),6,'Hull',.05)
+        for x in [-.65,.65]:
+            for z in [-.10,.35]:cylinder('Bow torpedo tube',(x,-length*.43,z),(x,-length*.49,z),.17,4,'Hull',20)
+        for j in range(15):box('Casing drainage slit',(-.92,-8+j*.9,.85),(.02,.38,.10),8,'Hull',.006)
+        cylinder('Deck gun pedestal',(0,-4,1.1),(0,-4,1.55),.2,6,'Hull',20)
+        cylinder('Deck gun',(0,-4,1.6),(0,-6,1.6),.09,4,'Hull',20)
+    else:
+        stations=[(-.5,.01),(-.46,.32),(-.38,.74),(-.24,.98),(0,1),(.3,.95),(.45,.65),(.5,.2)]
+        vertices=[];faces=[]
+        for t,w in stations:
+            for x,z in [(-beam*w,1.35),(-beam*w*.92,-.05),(-beam*w*.5,-1.1),(0,-1.4),(beam*w*.5,-1.1),(beam*w*.92,-.05),(beam*w,1.35)]:vertices.append((x,length*t,z))
+        for j in range(len(stations)-1):
+            for k in range(6):
+                a=j*7+k;faces.append((a,a+7,a+8,a+1))
+            a=j*7;faces.append((a,a+6,a+13,a+7))
+        faces.extend([tuple(range(7)),tuple(reversed(range((len(stations)-1)*7,len(stations)*7)))])
+        mesh=bpy.data.meshes.new('Warship shaped hull');mesh.from_pydata(vertices,[],faces);mesh.update()
+        obj=bpy.data.objects.new('Warship shaped hull',mesh);bpy.context.collection.objects.link(obj);finish(obj,obj.name,6,'Hull')
+        for y,width,height in [(-2,beam*1.2,1.7),(-3.5,beam*.9,2.7),(-4,beam*.7,3.9)]:box('Armored bridge',(0,y,1.35+height/2),(width,3.5,height),6,'Hull',.12)
+        for x in [-beam*.31,0,beam*.31]:box('Bridge window',(x,-5.27,4.25),(.45,.025,.32),10,'Hull',.025)
+        for y in ([1.3,5] if big else [1,4]):
+            cylinder('Funnel',(0,y,1.4),(0,y,4.7),.75 if big else .55,6,'Hull',28)
+            cylinder('Funnel cap',(0,y,4.6),(0,y,4.88),.85 if big else .65,8,'Hull',28)
+        cylinder('Radar mast',(0,-1.5,4.2),(0,-1.5,8.8 if big else 7.4),.085,4,'Hull',20)
+        box('Radar array',(0,-1.5,7.9 if big else 6.6),(3.0,.10,.75),8,'Hull',.03)
+        for x in [-1.2,-.6,0,.6,1.2]:cylinder('Radar lattice',(x,-1.58,7.55 if big else 6.25),(x,-1.58,8.25 if big else 6.95),.025,4,'Hull',10)
+        for index,y in enumerate([-length*.32,-length*.18,length*.32] if big else [-length*.32,length*.30]):
+            front=index<2 if big else index==0
+            direction=-1 if front else 1
+            bone='Turret' if index==0 else 'Hull'
+            gunbone='Gun' if index==0 else 'Hull'
+            cylinder('Main turret ring',(0,y,1.4),(0,y,1.7),1.45 if big else .75,8,bone,28)
+            box('Main gun turret',(0,y,2.1),(2.7 if big else 1.5,2.5 if big else 1.5,1.1 if big else .7),6,bone,.18)
+            for x in ([-.7,0,.7] if big else [0]):
+                cylinder('Naval gun barrel',(x,y+direction*.7,2.2),(x,y+direction*(6 if big else 3),2.2),.14 if big else .08,4,gunbone,24,r2=.09 if big else .05)
+        for side in [-1,1]:
+            for y in range(-int(length*.32),int(length*.36),2):
+                cylinder('Deck rail stanchion',(side*beam*.9,y,1.4),(side*beam*.9,y,2.05),.025,4,'Hull',8)
+            cylinder('Deck safety rail',(side*beam*.9,-length*.32,2),(side*beam*.9,length*.36,2),.025,4,'Hull',10)
+            if big:
+                for y in [-1,4,9]:
+                    box('Secondary gun mount',(side*beam*.77,y,1.9),(1.3,1.4,.7),6,'Hull',.09)
+                    cylinder('Secondary gun',(side*beam*.77,y,2),(side*(beam+1.6),y-1,2),.06,4,'Hull',16)
+            else:
+                for y in [length*.35,length*.40,length*.45]:
+                    cylinder('Depth charge',(side*.95,y,1.7),(side*1.55,y,1.7),.25,8,'Hull',20)
+        if not big:
+            for y in [-.5,1]:
+                for x in [-.5,0,.5]:cylinder('Torpedo launcher',(x,y,1.7),(x,y+3,1.7),.19,4,'Hull',20)
+            ellipsoid('Sonar dome',(0,-length*.30,-1.0),(.6,1.0,.65),8,'Hull',24,16)
+    cylinder('Propeller shaft',(0,length*.42,-.3),(0,length*.52,-.3),.09,4,'Hull',16)
+    for i in range(4):
+        a=i*math.tau/4
+        obj=ellipsoid('Naval propeller blade',(.45*math.sin(a),length*.52,-.3+.45*math.cos(a)),(.17,.07,.5),9,'Propeller',16,10);obj.rotation_euler.y=a
+    return rig(bones),{'scale':.65 if big else .72,'stride':5.0,'muzzle':[0,.3 if sub else 2.2,length*.52]}
+
 def animate(arm,kind):
     clips={'Idle':(60,2),'Walk':(30,1),'Reverse':(36,1.2),'Fire':(90,3),
            'Reload':(90,3),'Deploy':(45,1.5),'Death':(60,2),'Run':(24,.8)}
@@ -504,7 +633,7 @@ def animate(arm,kind):
         for f in range(0,last+1):
             t=f/last;wave=math.sin(t*math.tau)
             for p in arm.pose.bones:p.rotation_euler=(0,0,0);p.location=(0,0,0)
-            if kind=='infantry':
+            if kind in ('infantry','engineer','militia'):
                 if name in ('Walk','Reverse','Run'):
                     amount=.48 if name=='Run' else .32
                     if name=='Reverse':amount=-.23
@@ -528,9 +657,12 @@ def animate(arm,kind):
                         arm.pose.bones[side+'Shin'].rotation_euler.x=-buckle*.65
                     arm.pose.bones['Root'].rotation_euler.x=max(0,min(1,(t-.08)*1.7))*1.4
                     arm.pose.bones['Root'].location.y=-min(1,t*1.5)*.12
-            elif kind=='transport':
+            elif kind in ('transport','battleship','destroyer','submarine'):
                 if name in ('Walk','Reverse','Run'):
                     arm.pose.bones['Propeller'].rotation_euler.y=t*math.tau*3*(-1 if name=='Reverse' else 1)
+                if name=='Fire' and kind!='transport':
+                    kick=math.exp(-max(0,t-.14)*24) if .14<=t<.42 else 0
+                    arm.pose.bones['Gun'].location.y=-kick*.3
                 if name=='Death':
                     arm.pose.bones['Hull'].rotation_euler.y=t*.22
                     arm.pose.bones['Hull'].location.y=-t*1.3
@@ -549,7 +681,7 @@ def animate(arm,kind):
                             else:
                                 a=(distance-6.4-math.pi*.39)/.39+math.pi;y=-1.6+math.sin(a)*.39;z=.49-math.cos(a)*.39
                             rest=arm.data.bones[p.name]
-                            p.location=rest.matrix_local.to_3x3().inverted() @ (Vector((s*1.25,y,z))-rest.head_local)
+                            p.location=rest.matrix_local.to_3x3().inverted() @ (Vector((s*1.25*(.8 if kind=='light-tank' else 1),y*(.82 if kind=='light-tank' else 1),z*(.82 if kind=='light-tank' else 1)))-rest.head_local)
                     arm.pose.bones['Hull'].rotation_euler.x=wave*.008
                 if name=='Fire':
                     kick=math.exp(-max(0,t-.14)*24) if .14<=t<.42 else 0
@@ -571,18 +703,19 @@ def animate(arm,kind):
 
 def preview(mesh,arm,kind):
     scene=bpy.context.scene
-    scene.render.engine='CYCLES';scene.cycles.samples=24
-    scene.render.resolution_x=1000;scene.render.resolution_y=1000;scene.render.resolution_percentage=100
+    scene.render.engine='CYCLES';scene.cycles.samples=16;scene.cycles.use_denoising=False
+    for layer in scene.view_layers:layer.cycles.use_denoising=False
+    scene.render.resolution_x=800;scene.render.resolution_y=800;scene.render.resolution_percentage=100
     scene.world.color=(.17,.17,.17)
     # Studio floor is preview-only, excluded from exports.
     bpy.ops.mesh.primitive_plane_add(size=200)
     floor=bpy.context.object;floor.name='Preview floor'
     mat=bpy.data.materials.new('Preview floor');mat.diffuse_color=(.105,.12,.13,1);floor.data.materials.append(mat)
-    scale=1 if kind=='infantry' else 10 if kind=='transport' else 3.0
-    target=Vector((0,0,.9 if kind=='infantry' else 1))
+    scale=1 if kind in ('infantry','engineer','militia') else 17 if kind=='battleship' else 12 if kind in ('destroyer','submarine','transport') else 3.0
+    target=Vector((0,0,.9 if kind in ('infantry','engineer','militia') else 1))
     bpy.ops.object.camera_add(location=(2.7*scale,-4.4*scale,2.35*scale))
     camera=bpy.context.object;camera.rotation_euler=(target-camera.location).to_track_quat('-Z','Y').to_euler()
-    camera.data.type='ORTHO';camera.data.ortho_scale=2.22 if kind=='infantry' else 31 if kind=='transport' else 7.6
+    camera.data.type='ORTHO';camera.data.ortho_scale=2.22 if kind in ('infantry','engineer','militia') else 55 if kind=='battleship' else 40 if kind in ('destroyer','submarine') else 31 if kind=='transport' else 7.6
     scene.camera=camera
     for loc,power,size in [((-3,-4,6),550,4),((4,-1,3),220,3),((0,4,5),700,3)]:
         bpy.ops.object.light_add(type='AREA',location=tuple(v*scale for v in loc))
@@ -596,7 +729,7 @@ def preview(mesh,arm,kind):
         if image.filepath and image.name.startswith('Land shared '):image.filepath='//../../public/models/land/'+Path(image.filepath).name
     bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE/(kind+'.blend')))
     bpy.ops.render.render(write_still=True)
-    if kind=='infantry':
+    if kind in ('infantry','engineer','militia'):
         arm.animation_data.action=bpy.data.actions.get('Fire');scene.frame_set(10)
         scene.render.filepath=str(PREVIEW/(kind+'-fire.png'));bpy.ops.render.render(write_still=True)
 
@@ -606,8 +739,8 @@ def build(kind):
     for action in list(bpy.data.actions):bpy.data.actions.remove(action)
     PARTS=[];DETAILS=[]
     if MAT is None:MAT=textures()
-    arm,metadata=infantry() if kind=='infantry' else transport_ship() if kind=='transport' else vehicle(kind)
-    if kind=='infantry':
+    arm,metadata=humanoid(kind) if kind in ('infantry','engineer','militia') else transport_ship() if kind=='transport' else warship(kind) if kind in ('battleship','destroyer','submarine') else vehicle(kind)
+    if kind in ('infantry','engineer','militia'):
         # Unite the tailored garment across shoulders, elbows and knees. Preserve
         # softly blended skin weights rather than leaving visible primitive seams.
         cloth=[ob for ob in PARTS if any(word in ob.name.lower() for word in
@@ -681,4 +814,4 @@ def build(kind):
     print('IRONFRONTS_ASSET '+json.dumps(metadata),flush=True)
 
 args=sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else []
-for kind in args or ['infantry','armored-car','tank','artillery','transport']:build(kind)
+for kind in args or ['infantry','engineer','militia','armored-car','light-tank','tank','artillery','transport','battleship','destroyer','submarine']:build(kind)

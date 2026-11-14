@@ -18,8 +18,9 @@ struct ShadowOut {
   let corners=array<vec2f,6>(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(-1,1),vec2f(1,-1),vec2f(1,1));
   let radii=array<vec2f,4>(vec2f(.75,.75),vec2f(2.25,3.7),vec2f(2.9,4.7),vec2f(2.15,2.4));
   let corner=corners[vertex];
-  let ship=kind==5u;
-  let local=select(corner*radii[min(kind,3u)],vec2f(corner.x*6.5,corner.y*12.0+9.0),ship);
+  let ship=kind==5u||kind>=9u;
+  let family=select(select(kind,0u,kind==6u||kind==7u),2u,kind==8u);
+  let local=select(corner*radii[min(family,3u)],vec2f(corner.x*6.5,corner.y*12.0+9.0),ship);
   let heading=select(unit.b.w,unit.c.w,(u32(unit.b.z)&8u)!=0u&&kind>0u);
   let offset=vec2f(local.x*cos(heading)-local.y*sin(heading),local.x*sin(heading)+local.y*cos(heading));
   let travel=select(0.0,clamp((uniforms.sunTime.w-unit.d.w)/max(.0001,unit.d.z),0.0,1.0),unit.d.z>0.0);
@@ -29,7 +30,7 @@ struct ShadowOut {
   let seaSurface=.50+oceanWaveHeight(xz,1.0-bankAt(xz/uniforms.map.xy));
   output.position=uniforms.viewProjection*vec4f(xz.x,select(heightAt(xz/uniforms.map.xy)+.035,seaSurface,ship),xz.y,1);
   output.uv=corner;
-  output.alpha=select(.32,0.0,kind>3u)*(1.0-smoothstep(1500.0,1900.0,uniforms.interaction.y))
+  output.alpha=select(.32,0.0,ship)*(1.0-smoothstep(1500.0,1900.0,uniforms.interaction.y))
     *(1.0-mapFog(xz));
   output.ship=select(0.0,1.0,ship);
   if(ship){output.alpha=select(0.0,.42,(u32(unit.b.z)&2u)!=0u)*(1.0-smoothstep(1500.0,1900.0,uniforms.interaction.y))*(1.0-mapFog(xz));}

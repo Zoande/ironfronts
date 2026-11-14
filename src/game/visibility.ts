@@ -1,3 +1,4 @@
+import { armyCamouflageLevel } from './units/army';
 import { SpatialIndex } from './spatial-index';
 /**
  * Fog of war — information visibility.
@@ -40,6 +41,7 @@ export interface VisionSource {
   z: number;
   outerSq: number;
   innerSq: number;
+  revealLevel?: number;
 }
 
 /** Moving eyes only: the viewer's own army stacks. Territory the viewer holds
@@ -62,6 +64,13 @@ export function friendlyVisionSources(
       return type.visionInner * supplyEffectiveness(army);
     }));
     sources.push({ x: army.x, z: army.z, outerSq: outer * outer, innerSq: inner * inner });
+    if (!transport) for (const group of living) {
+      const type = unitType(group.typeId);
+      if (!type.revealLevel) continue;
+      const radius = type.visionOuter * supplyEffectiveness(army);
+      sources.push({ x: army.x, z: army.z, outerSq: radius * radius,
+        innerSq: (type.visionInner * supplyEffectiveness(army)) ** 2, revealLevel: type.revealLevel });
+    }
   }
   return sources;
 }
@@ -108,7 +117,12 @@ export function computeArmyVisibility(
       result.set(army.id, 'visible');
       continue;
     }
-    let level = pointContactLevel(positions.query(army.x, army.z, radius), army.x, army.z, world.width);
+    const nearby = positions.query(army.x, army.z, radius);
+    const camo = (army.revealedUntilHours ?? 0) > state.clock.gameTimeHours ? 0 : armyCamouflageLevel(army);
+    const detected = camo === 0 || nearby.some((source) => (source.revealLevel ?? 0) >= camo
+      && wrappedDistanceSq(source.x, source.z, army.x, army.z, world.width) <= source.outerSq);
+    if (!detected) { result.set(army.id, 'hidden'); continue; }
+    let level = pointContactLevel(nearby, army.x, army.z, world.width);
     if (level === 'hidden' && ownsGroundAt(state, world, viewerCountryId, army.x, army.z)) {
       level = 'contact';
     }

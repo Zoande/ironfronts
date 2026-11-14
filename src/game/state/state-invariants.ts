@@ -1,3 +1,5 @@
+import { isNativeNavy } from '../units/army';
+import { isWater, clearWaterSegment } from '../naval/navigation';
 import { RESOURCE_TIER_PASSIVE } from '../economy/resources';
 import type { SimContext } from '../sim-context';
 import { armyAtNode } from '../movement/position';
@@ -31,6 +33,16 @@ export function validateWorldState(ctx: SimContext): void {
   }
   for (const army of Object.values(state.armies)) {
     if (!nodeExists(army.graphNodeId) || army.x < 0 || army.x >= world.width || army.z < 0 || army.z > world.height) throw new Error('Invalid army position.');
+    if (isNativeNavy(army)) {
+      if (!isWater(world, army) || army.status !== 'atSea' || army.transport || army.navalCrossing || army.edge) throw new Error('Invalid native fleet position.');
+      let previous = {x: army.x, z: army.z};
+      for (const point of army.navalRoute ?? []) {
+        if (!clearWaterSegment(world, previous, point)) throw new Error('Fleet route crosses land.');
+        previous = point;
+      }
+      if (army.order && (army.order.path.length || !army.navalRoute?.length)) throw new Error('Invalid fleet route.');
+      continue;
+    }
     const naval = army.status === 'embarking' || army.status === 'atSea' || army.status === 'disembarking';
     if (naval) {
       const crossing = army.navalCrossing;

@@ -13,7 +13,7 @@ import { unitType } from '../units/unit-catalog';
 import type { DamageProfile } from '../units/unit-types';
 
 export type CombatDomain = 'land' | 'naval';
-export type NavalUnitKind = 'transport' | 'battleship' | 'submarine';
+export type NavalUnitKind = 'transport' | 'battleship' | 'destroyer' | 'submarine';
 export type NavalTargetClass = 'surface' | 'submarine';
 
 export interface NavalUnitStats {
@@ -61,8 +61,8 @@ export const TRANSPORT_TYPES: readonly NavalUnitStats[] = Array.from(
       targetClass: 'surface',
       maxHp: TRANSPORT_MAX_HP[level],
       speed: TRANSPORT_SPEED[level],
-      attack: { soft: firepower, light: firepower * 0.6, heavy: firepower * 0.3 },
-      defense: { soft: firepower * 1.25, light: firepower * 0.75, heavy: firepower * 0.4 },
+      attack: { soft: firepower, light: firepower * 0.6, heavy: firepower * 0.3, ship: firepower * .5, submarine: firepower * .1 },
+      defense: { soft: firepower * 1.25, light: firepower * 0.75, heavy: firepower * 0.4, ship: firepower * .6, submarine: firepower * .15 },
       visionOuter: 210 + index * 8,
       visionInner: 100 + index * 5,
     };
@@ -193,6 +193,7 @@ export function endTransportManifestation(army: ArmyStack): void {
 /** Underway and unloading formations are sea-domain targets. Embarking troops
  * have reserved ships, but remain land-domain until they leave the port. */
 export function combatDomain(army: ArmyStack): CombatDomain {
+  if (army.units.length && army.units.every((group) => unitType(group.typeId).domain === 'naval')) return 'naval';
   return army.transport && (army.status === 'atSea' || army.status === 'disembarking')
     ? 'naval' : 'land';
 }

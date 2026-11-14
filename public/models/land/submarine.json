@@ -1,0 +1,63 @@
+{
+  "scale": 0.72,
+  "stride": 5.0,
+  "muzzle": [
+    0,
+    0.3,
+    15.08
+  ],
+  "kind": "submarine",
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 6356,
+      "vertices": 3250
+    },
+    {
+      "lod": 1,
+      "triangles": 2668,
+      "vertices": 1406
+    },
+    {
+      "lod": 2,
+      "triangles": 858,
+      "vertices": 516
+    }
+  ],
+  "clips": {
+    "Idle": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Walk": {
+      "duration": 1,
+      "fps": 30
+    },
+    "Reverse": {
+      "duration": 1.2,
+      "fps": 30
+    },
+    "Fire": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Reload": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Deploy": {
+      "duration": 1.5,
+      "fps": 30
+    },
+    "Death": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Run": {
+      "duration": 0.8,
+      "fps": 30
+    }
+  },
+  "source": "material/land-armies/submarine.blend",
+  "authoredBy": "Ironfronts / Codex; original procedural Blender source"
+}

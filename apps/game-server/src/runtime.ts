@@ -1,5 +1,5 @@
 import {
-  GameSession, UNIT_TYPES, BUILDINGS, nearestNode, unitType,
+  navalLaunchPoint, GameSession, UNIT_TYPES, BUILDINGS, nearestNode, unitType,
   setWeatherMode, updateRealWeather,
   type GameCommand, type GameState, type WorldData,
 } from '@ironfronts/game-core';
@@ -161,14 +161,16 @@ export class GameRuntime {
     if (!province) return { ok: false, message: `Province ${provinceId} does not exist.` };
     if (!country) return { ok: false, message: `Country ${countryId} does not exist.` };
     if (!definition) return { ok: false, message: `Unit ${unitTypeId} does not exist.` };
+    const launch = definition.domain === 'naval' ? navalLaunchPoint(this.world, provinceId) : null;
+    if (definition.domain === 'naval' && !launch) return {ok:false,message:'Warships need a navigable coastal province.'};
     const nodeId = nearestNode(this.session.graph, province.center[0], province.center[1]);
     if (nodeId < 0) return { ok: false, message: `Province ${provinceId} has no reachable road node.` };
     const id = `army-${this.session.state.nextArmyId++}`;
     this.session.state.armies[id] = {
       id, ownerCountryId: countryId, name: `${definition.name} ${id}`,
-      x: this.session.graph.nodeX[nodeId], z: this.session.graph.nodeZ[nodeId], graphNodeId: nodeId,
+      x: launch?.x ?? this.session.graph.nodeX[nodeId], z: launch?.z ?? this.session.graph.nodeZ[nodeId], graphNodeId: nodeId,
       edge: null, units: [{ typeId: unitTypeId, count: 1, hp: unitType(unitTypeId).maxHp, experience: 0 }],
-      status: 'idle', order: null, extractingNodeId: null, extractionAssignment: null,
+      status: definition.domain === 'naval' ? 'atSea' : 'idle', order: null, extractingNodeId: null, extractionAssignment: null,
       lastGraphNodeId: null,
       suspendedOrder: null, battleFrontIds: [], retreat: null,
       artillery: { targetArmyId: null, manualTarget: false }, navalCrossing: null, transport: null,

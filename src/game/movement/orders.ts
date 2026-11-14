@@ -1,3 +1,5 @@
+import { isNativeNavy } from '../units/army';
+import { issueFleetMove } from '../naval/navigation';
 import type { SimContext } from '../sim-context';
 import type { ArmyStack, MoveOrder } from '../units/army';
 import { ensureArmyRuntimeState } from '../units/army';
@@ -70,6 +72,7 @@ export function issueMoveOrder(
   const army = session.state.armies[armyId];
   if (!army) return { ok: false, reason: 'No such army.' };
   ensureArmyRuntimeState(army);
+  if (army.upgrade) return { ok: false, reason: 'Army is upgrading.' };
   army.battleFrontIds = army.battleFrontIds!.filter((frontId) => {
     const front = session.state.battleFronts[frontId];
     return Boolean(front && armyParticipatesInFront(army.id, front));
@@ -77,6 +80,7 @@ export function issueMoveOrder(
   if (army.status === 'engaged' && army.battleFrontIds!.length === 0) army.status = 'idle';
   if (army.status === 'engaged') return { ok: false, reason: 'Army is in close combat.' };
   if (army.status === 'retreating') return { ok: false, reason: 'Army is retreating.' };
+  if (isNativeNavy(army)) return issueFleetMove(session, army, destX, destZ, intent, target);
   if (isNavalStatus(army.status) && !(army.status === 'atSea'
     && army.navalCrossing?.fromNodeId === army.navalCrossing?.toNodeId && !army.order)) {
     return { ok: false, reason: 'Army is mid sea crossing.' };
@@ -233,7 +237,8 @@ export function issueStop(session: SimContext, armyId: string): boolean {
   const army = session.state.armies[armyId];
   if (!army) return false;
   ensureArmyRuntimeState(army);
-  if (army.status === 'engaged' || army.status === 'retreating' || isNavalStatus(army.status)) {
+  if (isNativeNavy(army) && !army.upgrade) { army.order = null; army.navalRoute = []; army.navalTargetArmyId = null; if (army.artillery) { army.artillery.targetArmyId = null; army.artillery.manualTarget = false; } return true; }
+  if (army.upgrade || army.status === 'engaged' || army.status === 'retreating' || isNavalStatus(army.status)) {
     return false;
   }
   army.edge = occupiedEdge(session, army);

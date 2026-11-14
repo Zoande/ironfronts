@@ -1,3 +1,4 @@
+import { combatDomain } from '../naval/transport';
 import { armyAtNode } from '../movement/position';
 /** Province-center capture and capture-side cleanup. */
 
@@ -20,7 +21,7 @@ export interface CaptureEvent {
 export function captureProvinceAtArmyNode(
   session: SimContext, army: ArmyStack,
 ): CaptureEvent | null {
-  if (!armyAtNode(session, army) || army.status === 'engaged' || army.status === 'retreating') return null;
+  if (combatDomain(army) === 'naval' || !armyAtNode(session, army) || army.status === 'engaged' || army.status === 'retreating') return null;
   const provinceId = provinceAtNode(session, army.graphNodeId);
   if (provinceId === null) return null;
   const owner = session.state.provinceOwners[provinceId] ?? 0;

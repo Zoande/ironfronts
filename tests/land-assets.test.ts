@@ -12,7 +12,7 @@ function asset(family:string,lod:number) {
 }
 
 describe('original resident land assets',()=>{
-  for(const family of ['infantry','armored-car','tank','artillery','transport'])it(`${family} has complete compatible LODs and animation sockets`,()=>{
+  for(const family of ['infantry','engineer','militia','armored-car','light-tank','tank','artillery','transport','battleship','destroyer','submarine'])it(`${family} has complete compatible LODs and animation sockets`,()=>{
     let lastTriangles=Infinity;
     let jointNames:string[]=[];
     for(let lod=0;lod<3;lod++){

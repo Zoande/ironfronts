@@ -19,7 +19,7 @@ try {
     const { DEMO_ARMY } = await import('/src/ui/army.ts');
     const state = createInitialState({phase:'in-game',playerCountry:{name:'United Kingdom',color:'#375fa3'},
       resources:['money','manpower','food','stone','metal','oil'].map(id=>({id,label:id,value:123456,delta:-15.5})),
-      selectedArmy:{...DEMO_ARMY,attack:{soft:342,light:12500,heavy:69},activity:'Moving · 12 orders queued'},
+      selectedArmy:{...DEMO_ARMY,attack:{soft:342,light:12500,heavy:69,ship:45,submarine:9},activity:'Moving · 12 orders queued'},
     });
     window.commandUiStore = createUiStore(state);
     mountGameUi(window.commandUiStore,new Proxy({}, {get:()=>()=>{}}));
@@ -68,4 +68,19 @@ try {
     console.log(JSON.stringify({mode,...result}));
   }
   }
+  await page.evaluate(() => {
+    const store=window.commandUiStore;
+    store.patch({selectedArmy:{...store.get().selectedArmy,combat:'idle',battleFronts:[],domain:'naval',transportLevel:undefined,
+      groups:[{typeId:'submarine-l3',label:'Submarine Level 3',count:1,health:1,camouflageLevel:3,revealLevel:0}]}});
+  });
+  assert.match(await page.locator('.ifg-army-unit__details').textContent(),/Camo 3.*Reveal 0/);
+  await page.evaluate(() => {
+    const store=window.commandUiStore;
+    store.patch({selectedArmy:{...store.get().selectedArmy,domain:'naval',transportLevel:4,
+      groups:[{typeId:'medium-tank',label:'Medium Tank cargo',count:2,health:.8}]}});
+  });
+  assert.equal(await page.locator('[data-unit-type="transport"]').count(),1);
+  assert.equal(await page.locator('[data-unit-type="medium-tank"]').count(),0);
+  assert.match(await page.locator('.ifg-army-unit__details').textContent(),/Convoy Level 4.*Medium Tank cargo/);
+  console.log('Camouflage/reveal levels and convoy portrait/cargo display verified.');
 } finally { await browser.close(); }

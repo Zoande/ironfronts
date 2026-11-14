@@ -145,8 +145,8 @@ export class CombatEffectPool {
     const distance = Math.hypot(targetX-x,targetZ-z);
     if (!Number.isFinite(distance) || distance < .1) return;
     const dir = Math.atan2(targetZ-z,targetX-x);
-    const small = kind < 2;
-    const artillery = kind === 3;
+    const small = kind < 2 || kind === 6 || kind === 7;
+    const artillery = kind === 3 || kind === 9;
     const flight = small ? Math.max(65,Math.min(160,distance*2)) : artillery ? 850 : 320;
     const impactAt = now + flight;
     this.spawn(EFFECT_KIND.muzzleFlash,x,z,{ ...options,now,dir,lifetimeMs: small ? 65 : 100,

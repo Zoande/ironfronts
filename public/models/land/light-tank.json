@@ -1,0 +1,63 @@
+{
+  "scale": 2.0,
+  "stride": 2.2,
+  "muzzle": [
+    0.0,
+    1.517,
+    2.7142
+  ],
+  "kind": "light-tank",
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 40460,
+      "vertices": 21272
+    },
+    {
+      "lod": 1,
+      "triangles": 16992,
+      "vertices": 9538
+    },
+    {
+      "lod": 2,
+      "triangles": 5384,
+      "vertices": 3874
+    }
+  ],
+  "clips": {
+    "Idle": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Walk": {
+      "duration": 1,
+      "fps": 30
+    },
+    "Reverse": {
+      "duration": 1.2,
+      "fps": 30
+    },
+    "Fire": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Reload": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Deploy": {
+      "duration": 1.5,
+      "fps": 30
+    },
+    "Death": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Run": {
+      "duration": 0.8,
+      "fps": 30
+    }
+  },
+  "source": "material/land-armies/light-tank.blend",
+  "authoredBy": "Ironfronts / Codex; original procedural Blender source"
+}

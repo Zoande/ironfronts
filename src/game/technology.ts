@@ -96,7 +96,8 @@ export function technologyLevels(country: CountryState | undefined): TechnologyL
 }
 
 export function technologyBranchForUnit(baseId: string): TechnologyBranch {
-  if (baseId === 'infantry') return 'infantry';
+  if (['battleship', 'destroyer', 'submarine'].includes(baseId)) return 'navy';
+  if (baseId === 'infantry' || baseId === 'militia') return 'infantry';
   if (baseId === 'engineer') return 'resources';
   if (baseId === 'light-tank' || baseId === 'medium-tank') return 'armored';
   return 'hybrid';

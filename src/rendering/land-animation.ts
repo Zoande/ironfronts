@@ -2,10 +2,10 @@ import { LAND_FIRE_PERIODS, LAND_FIRE_PHASE } from '../shaders/land-animation-co
 export { LAND_FIRE_PERIODS, LAND_FIRE_PHASE } from '../shaders/land-animation-constants';
 
 export function nextLandShot(time: number, phase: number, kind: number): { cycle: number; at: number } {
-  const period = LAND_FIRE_PERIODS[kind as 0 | 1 | 2 | 3] ?? 3;
+  const period = LAND_FIRE_PERIODS[kind] ?? 3;
   let cycle = Math.ceil(time / period + phase - LAND_FIRE_PHASE);
   // Every fourth rifle cycle is a deliberate reload, shared with the shader.
-  if (kind === 0 && ((cycle % 4) + 4) % 4 === 3) cycle++;
+  if ([0,6,7].includes(kind) && ((cycle % 4) + 4) % 4 === 3) cycle++;
   return { cycle, at: (cycle + LAND_FIRE_PHASE - phase) * period };
 }
 

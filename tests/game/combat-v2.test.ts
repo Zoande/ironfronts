@@ -54,8 +54,9 @@ describe('v2 continuous combat', () => {
       soft: soft * COMBAT_DAMAGE_SCALE,
       light: light * COMBAT_DAMAGE_SCALE,
       heavy: heavy * COMBAT_DAMAGE_SCALE,
+      ship: heavy * .2 * COMBAT_DAMAGE_SCALE, submarine: heavy * .04 * COMBAT_DAMAGE_SCALE,
     });
-    expect(UNIT_TYPES.filter((unit) => unit.level === 1).map((unit) => [unit.id, unit.attack, unit.defense])).toEqual([
+    expect(UNIT_TYPES.filter((unit) => unit.level === 1 && !['militia','battleship','destroyer','submarine'].includes(unit.id)).map((unit) => [unit.id, unit.attack, unit.defense])).toEqual([
       ['infantry', rate(8, 4.4, 2.4), rate(6, 3.3, 1.8)],
       ['engineer', rate(1.8, 0.9, 0.45), rate(2.4, 1.2, 0.6)],
       ['armored-car', rate(6.6, 4.2, 2.1), rate(7.7, 4.9, 2.45)],

@@ -26,7 +26,7 @@ describe('WGSL programs', () => {
   it('keeps strategic troop models small with separate infantry and transport scales', () => {
     // Infantry intentionally matches the authored model at 1.5x the base
     // land scale. Transports keep their own scale rather than that multiplier.
-    const scales = /let\s+scale\s*=\s*select\(\s*select\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*0u\s*\)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*5u\s*\)/.exec(armyModelShader);
+    const scales = /let\s+scale\s*=\s*select\(\s*select\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*kind\s*==\s*0u\s*\)\s*,\s*([\d.]+)\s*,\s*\(kind\s*==\s*5u\s*\|\|\s*kind\s*>=\s*9u\)\s*\)/.exec(armyModelShader);
     expect(scales, 'base land, infantry, and transport scale selection').not.toBeNull();
     const [land, infantry, transport] = scales!.slice(1).map(Number);
     expect(land).toBeGreaterThan(0);
@@ -39,7 +39,7 @@ describe('WGSL programs', () => {
   it('renders at-sea armies as procedural transport ships on the water surface', () => {
     expect(armyModelShader).toContain('kind == 5u');
     expect(armyModelShader).toContain('halfSize = vec3f(1.18, 0.42, 3.20)');
-    expect(armyModelShader).toContain('select(heightAt(centerXZ / uniforms.map.xy), 0.35, kind == 5u)');
+    expect(armyModelShader).toContain('select(heightAt(centerXZ / uniforms.map.xy), 0.35, (kind == 5u || kind >= 9u))');
   });
 
   it('faces vehicles and infantry down their line of travel and adds a marching gait', () => {

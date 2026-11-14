@@ -67,8 +67,10 @@ fn landModelVertex(
   let flags = u32(model.b.z + 0.5);
   let moving = (flags & 2u) != 0u;
   let retreating = (flags & 4u) != 0u;
-  let ship = model.a.w > 4.5;
-  let engaged = (flags & 8u) != 0u && !ship;
+  let kind = u32(model.a.w + .5);
+  let ship = kind == 5u || kind >= 9u;
+  let humanoid = kind == 0u || kind == 6u || kind == 7u;
+  let engaged = (flags & 8u) != 0u;
   let legTravel = select(0.0, clamp((uniforms.sunTime.w-model.d.w)/max(model.d.z,.0001),0.0,1.0),model.d.z>0.0);
   let travelled = model.c.x + distance(model.d.xy,model.a.xy)*legTravel;
   let phase = model.c.y;
@@ -79,10 +81,10 @@ fn landModelVertex(
     clock = travelled / max(.01,animationParams.sizing.y*animationParams.sizing.x) + phase;
   } else if (engaged) {
     state = 3u;
-    let periods = array<f32,4>(${LAND_FIRE_PERIODS.map((value) => value.toFixed(1)).join(',')});
-    clock = uniforms.sunTime.w / periods[min(3u,u32(model.a.w))] + phase;
+    let periods = array<f32,${LAND_FIRE_PERIODS.length}>(${LAND_FIRE_PERIODS.map((value) => value.toFixed(1)).join(',')});
+    clock = uniforms.sunTime.w / periods[min(${LAND_FIRE_PERIODS.length-1}u,kind)] + phase;
   }
-  if (state==3u && model.a.w<.5 && u32(floor(clock))%4u==3u) { state=4u; }
+  if (state==3u && humanoid && u32(floor(clock))%4u==3u) { state=4u; }
   let dead=(flags&16u)!=0u;
   if(dead){state=6u;clock=(uniforms.sunTime.w-model.c.y)/2.0;}
   var skin=landSkin(state,clock,joints,weights);
@@ -100,7 +102,7 @@ fn landModelVertex(
   var headingDelta = model.b.w - model.c.w;
   headingDelta -= 6.2831853 * round(headingDelta / 6.2831853);
   var heading = model.c.w + headingDelta * motion;
-  let independentTurret=engaged && model.a.w>.5 && model.a.w<4.0;
+  let independentTurret=engaged && !humanoid && kind != 5u && kind != 11u;
   if(independentTurret){heading=model.c.w;}
   let cosine = cos(heading);
   let sine = sin(heading);
