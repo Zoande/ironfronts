@@ -5,7 +5,7 @@ import { armyUpgradeQuote, stepArmyUpgrades } from '../../src/game/units/upgrade
 import { applyCommand } from '../../src/game/commands';
 import { initialTechnologyLevels } from '../../src/game/technology';
 import { parseGameState } from '../../src/game/state-schema';
-import { unitType } from '../../src/game/units/unit-catalog';
+import { UNIT_TYPES, unitType } from '../../src/game/units/unit-catalog';
 import { projectFor } from '../../apps/game-server/src/projection';
 import { serverMessageSchema } from '../../packages/protocol/src/index';
 
@@ -77,8 +77,13 @@ describe('whole-army timed upgrades', () => {
     const foreign = projectFor(c.state, c.world, c.graph, 2);
     expect(own.armies.a.upgradeQuote?.entries.length).toBe(1);
     expect(foreign.armies.a.upgradeQuote).toBeUndefined();
-    const message = serverMessageSchema.parse({type:'baseline',revision:0,state:own,catalogs:{units:[],buildings:[]},clock:{gameStartedAtEpochMs:0,gameEpochMs:0,serverEpochMs:0,speed:1,generation:0,utcOffsetMinutes:0}});
+    const message = serverMessageSchema.parse({type:'baseline',revision:0,state:own,catalogs:{units:UNIT_TYPES.map(unit=>({...unit})),buildings:[]},clock:{gameStartedAtEpochMs:0,gameEpochMs:0,serverEpochMs:0,speed:1,generation:0,utcOffsetMinutes:0}});
     expect(message.type).toBe('baseline');
-    if (message.type === 'baseline') expect(message.state.armies.a.upgradeQuote).toEqual(own.armies.a.upgradeQuote);
+    if (message.type === 'baseline') {
+      expect(message.state.armies.a.upgradeQuote).toEqual(own.armies.a.upgradeQuote);
+      expect(message.catalogs.units.find(unit=>unit.id==='submarine-l3')).toMatchObject({domain:'naval',camouflageLevel:3,armorClass:'submarine'});
+      expect(message.catalogs.units.find(unit=>unit.id==='destroyer-l3')).toMatchObject({revealLevel:3});
+      expect((message.catalogs.units.find(unit=>unit.id==='infantry')!.attack as Record<string,number>).ship).toBeGreaterThan(0);
+    }
   });
 });

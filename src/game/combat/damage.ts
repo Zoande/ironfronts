@@ -30,7 +30,7 @@ function combatHp(army: ArmyStack, group: UnitGroup): number {
     : group.hp;
 }
 function combatMaxHp(army: ArmyStack, group: UnitGroup): number {
-  return group.count * (activeTransportStats(army)?.maxHp ?? unitType(group.typeId).maxHp);
+  return group.count * ((combatDomain(army) === 'naval' ? activeTransportStats(army)?.maxHp : undefined) ?? unitType(group.typeId).maxHp);
 }
 function armorHealth(armies: readonly ArmyStack[]): Record<ArmorClass, number> {
   const result: Record<ArmorClass, number> = { soft: 0, light: 0, heavy: 0, ship: 0, submarine: 0 };
@@ -41,7 +41,7 @@ function armorHealth(armies: readonly ArmyStack[]): Record<ArmorClass, number> {
 }
 
 function profileFor(army: ArmyStack, role: BattleRole, group: UnitGroup): DamageProfile {
-  const type = activeTransportStats(army) ?? unitType(group.typeId);
+  const type = (combatDomain(army) === 'naval' ? activeTransportStats(army) : null) ?? unitType(group.typeId);
   return role === 'attack' ? type.attack : type.defense;
 }
 
@@ -134,7 +134,11 @@ export function addDamage(
 export function applyPendingDamage(pending: ReadonlyMap<string, PendingDamage>): void {
   const unnormalized = new Set<string>();
   for (const item of pending.values()) {
-    if (combatDomain(item.army) === 'naval' && item.army.transport) { damageTransportCargo(item.army, item.group.typeId, item.amount); continue; }
+    if (item.army.transport) {
+      const amount = combatDomain(item.army) === 'naval' ? item.amount
+        : item.amount * activeTransportStats(item.army)!.maxHp / unitType(item.group.typeId).maxHp;
+      damageTransportCargo(item.army, item.group.typeId, amount); continue;
+    }
     item.group.hp = Math.max(0, item.group.hp - item.amount);
     unnormalized.add(item.army.id);
   }

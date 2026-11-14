@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PROTOCOL_VERSION = 5 as const;
+export const PROTOCOL_VERSION = 6 as const;
 export const GAME_ID = 'world-at-war-2' as const;
 export const GAME_VERSION = 'world-at-war@4' as const;
 
@@ -357,7 +357,7 @@ export type ProjectionDelta = {
 };
 
 export type ServerMessage =
-  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 5; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean; debugUnlockAvailable?: boolean }
+  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 6; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean; debugUnlockAvailable?: boolean }
   | { type: 'baseline'; revision: number; state: PlayerProjection; catalogs: PresentationCatalogs; clock: GameClockSync }
   | { type: 'delta'; fromRevision: number; revision: number; delta: ProjectionDelta; events: FilteredEvent[] }
   | { type: 'clockSync'; clock: GameClockSync }
@@ -397,7 +397,7 @@ export interface GameTicketClaims {
   gameId: string;
   countryId: number;
   audience: 'game-server';
-  protocolVersion: 5;
+  protocolVersion: 6;
   expiresAt: number;
   nonce: string;
 }
@@ -407,7 +407,7 @@ export interface GameLobby {
   gameId: string;
   name: string;
   gameVersion: string;
-  protocolVersion: 5;
+  protocolVersion: 6;
   assignedCountryId: number | null;
   countries: LobbyCountry[];
 }
@@ -462,7 +462,7 @@ export interface SessionResponse {
   assignment?: { gameId: string; countryId: number } | null;
   profile?: CommanderProfile;
 }
-export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 5 }
+export interface ConnectResponse { ticket: string; websocketUrl: string; protocolVersion: 6 }
 
 export const credentialsSchema = z.object({
   username: z.string().trim().min(3).max(32),

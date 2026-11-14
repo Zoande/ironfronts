@@ -95,8 +95,8 @@ const delta = z.object({ changed: projectionSchema.pick({ simulationTick: true, 
   redactions: z.array(z.string()) });
 const profile = z.object({ soft: nonnegative, light: nonnegative, heavy: nonnegative, ship: nonnegative.optional(), submarine: nonnegative.optional() });
 const cost = stockpile.partial();
-const catalogs = z.object({ units: z.array(z.object({ id: z.string(), baseId: z.string(), level: integer.min(1).max(8), technology: z.enum(['infantry', 'resources', 'hybrid', 'armored']), name: z.string(), category: z.enum(['infantry', 'engineer', 'recon', 'armor', 'artillery']),
-  armorClass: z.enum(['soft', 'light', 'heavy']), icon: z.string(), maxHp: finite.positive(), speed: nonnegative, attack: profile, defense: profile,
+const catalogs = z.object({ units: z.array(z.object({ id: z.string(), baseId: z.string(), level: integer.min(1).max(8), technology: z.enum(['infantry', 'resources', 'hybrid', 'armored', 'navy']), name: z.string(), category: z.enum(['infantry', 'engineer', 'recon', 'armor', 'artillery', 'naval']),
+  domain: z.enum(['land','naval']).optional(), camouflageLevel: integer.max(8).optional(), revealLevel: integer.max(8).optional(), armorClass: z.enum(['soft', 'light', 'heavy', 'ship', 'submarine']), icon: z.string(), maxHp: finite.positive(), speed: nonnegative, attack: profile, defense: profile,
   visionOuter: nonnegative, visionInner: nonnegative, extractionRate: nonnegative, engagementRange: nonnegative, buildCost: cost, buildWork: finite.positive(), upkeep: z.record(z.string(), nonnegative), cost, buildTimeHours: finite.positive(), requiredBuilding: buildingId, stackPriority: finite })),
   buildings: z.array(z.object({ id: buildingId, label: z.string(), kind: z.enum(['military', 'resource']), tiers: z.array(z.unknown()), cost, buildWork: finite.positive(), buildTimeHours: finite.positive() })) });
 const eventBase = { id: z.string(), message: z.string().optional() };
@@ -120,7 +120,7 @@ const clock = z.object({
   timeZone: z.string().min(1).max(100).optional(),
 });
 export const serverMessageSchema: z.ZodType<ServerMessage> = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('hello'), gameId: z.string(), gameVersion: z.string(), protocolVersion: z.literal(5), capabilities: z.array(z.string()),
+  z.object({ type: z.literal('hello'), gameId: z.string(), gameVersion: z.string(), protocolVersion: z.literal(6), capabilities: z.array(z.string()),
     world: z.object({ version: z.string(), hash: z.string().regex(/^[a-f0-9]{64}$/), assetBaseUrl: z.url(),
       artifactHashes: record(z.string().regex(/^[a-f0-9]{64}$/)) }), countryId: integer, debugEnabled: z.boolean(), debugUnlockAvailable: z.boolean().optional() }),
   z.object({ type: z.literal('baseline'), revision: integer, state: projectionSchema, catalogs, clock }),

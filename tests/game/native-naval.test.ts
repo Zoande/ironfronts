@@ -100,6 +100,17 @@ describe('native fleet and stealth rules', () => {
     expect(transport.units[0].hp).toBeCloseTo(transportHp(transport.transport!)/10*190);
   });
 
+  it('keeps reserved transport hulls coherent when artillery hits troops during embarkation', () => {
+    const c=setup();const embarking=army('t',2,590,100,0,'infantry',1);
+    embarking.transport=createTransportManifestation(embarking,1);embarking.status='embarking';
+    embarking.navalCrossing={fromNodeId:0,toNodeId:1,hoursRemaining:.5};
+    c.state.armies.t=embarking;c.state.armies.b=ship('b',1,700,'battleship');
+    stepCombat(c,.01);
+    expect(embarking.units[0].hp).toBeLessThan(100);
+    expect(transportHp(embarking.transport!)).toBeCloseTo(embarking.units[0].hp/10);
+    expect(()=>parseGameState(c.state)).not.toThrow();
+  });
+
   it('routes fleets around islands, preserves water-only paths on reload, and rejects inland destinations', () => {
     const c=setup();Object.assign(c.world,{provinceAt:(x:number,z:number)=>x>850&&x<1050&&z<250?10:-1});
     const start={x:750,z:100}, goal={x:1150,z:100};

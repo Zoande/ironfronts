@@ -185,15 +185,15 @@ function vessel(id: string, name: string, hp: number, speed: number, range: numb
 const BASE_UNIT_TYPES: readonly UnitType[] = [
   ...LAND_UNIT_TYPES.map((unit) => unit.id === 'armored-car' ? { ...unit, revealLevel: 1 } : unit),
   { ...LAND_UNIT_TYPES[0], id: 'militia', baseId: 'militia', name: 'Militia', icon: 'unit-militia',
-    camouflageLevel: 1, maxHp: 75, speed: LAND_UNIT_TYPES[0].speed * .85,
+    camouflageLevel: 1, maxHp: 75, speed: GAME_PACE.movement.unitWorldUnitsPerHour.militia,
     attack: damagePerHour(4, 1.8, .8), defense: damagePerHour(5.5, 2.4, 1.1),
     buildCost: { funds: 220, manpower: 35, food: 25 }, cost: { funds: 220, manpower: 35, food: 25 },
     buildWork: .5, buildTimeHours: .5, stackPriority: 9 },
-  vessel('battleship', 'Battleship', 700, 95, 160, damagePerHour(20, 18, 16, 18, 1.2),
+  vessel('battleship', 'Battleship', 700, GAME_PACE.movement.unitWorldUnitsPerHour.battleship, 160, damagePerHour(20, 18, 16, 18, 1.2),
     { funds: 5200, manpower: 90, metal: 650, oil: 180 }, 6),
-  vessel('destroyer', 'Destroyer', 300, 135, 0, damagePerHour(7, 6, 4, 7, 20),
+  vessel('destroyer', 'Destroyer', 300, GAME_PACE.movement.unitWorldUnitsPerHour.destroyer, 0, damagePerHour(7, 6, 4, 7, 20),
     { funds: 2400, manpower: 45, metal: 280, oil: 90 }, 3),
-  vessel('submarine', 'Submarine', 170, 100, 0, damagePerHour(1.2, .8, .5, 30, 8),
+  vessel('submarine', 'Submarine', 170, GAME_PACE.movement.unitWorldUnitsPerHour.submarine, 0, damagePerHour(1.2, .8, .5, 30, 8),
     { funds: 2100, manpower: 30, metal: 220, oil: 70 }, 3),
 ];
 
