@@ -178,3 +178,18 @@ On non-bfcache `pagehide`, the client stops music/audio, destroys UI, clears pre
 - There is no offline mode; authentication, lobby, and game connection are required.
 
 See [Rendering](rendering.md) for GPU/world details and [Game-server protocol](../game-server/protocol.md) for the authoritative wire contract.
+
+## Responsive command UI regression check
+
+With `npm run client:dev` running, execute:
+
+```sh
+IRONFRONTS_BROWSER=/path/to/chrome node scripts/qa/command-ui-check.mjs
+```
+
+The check mounts the real HUD modules in a local browser fixture and exercises
+idle and engaged armies at 320, 375, 640, 806, 1024 and 1280px. It checks damage
+text containment, access to all army details by scrolling, page bounds, and the
+six/seven-resource strips. It needs no account or GPU and sends no game commands.
+`IRONFRONTS_NO_SANDBOX=true` is available for isolated container runners that cannot
+start Chrome's sandbox. The normal launch keeps the browser sandbox enabled.

@@ -414,18 +414,15 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     stone: 'node-stone', metal: 'metal', oil: 'oil',
     warheads: 'structure-ordnance',
   };
-  // What each resource is for and how it's obtained, for the resource-chip
-  // tooltip. Money/manpower/food accrue passively (scale with owned
-  // territory/population); stone/metal/oil only accrue while a stack is
-  // actively extracting a deposit; warheads accrue from Ordnance Workshops
-  // and Missile Sites over time.
+  // Resource sources and buildings produce passively; assigned engineers add
+  // output. Warheads accrue from military infrastructure over time.
   const RESOURCE_DESCRIPTION: Partial<Record<string, string>> = {
     money: 'Funds war spending; passive income from owned territory.',
     manpower: 'Fuels recruitment; passive income from population.',
-    food: 'Feeds your population; passive income from territory.',
-    stone: 'Builds structures; only while a stack extracts a deposit.',
-    metal: 'Arms production; only while a stack extracts a deposit.',
-    oil: 'Fuels vehicles; only while a stack extracts a deposit.',
+    food: 'Feeds troops; rural sources, Fields and assigned engineers produce Food.',
+    stone: 'Builds structures; rural sources and Quarries produce Stone. Assigned engineers increase output.',
+    metal: 'Arms production; rural sources and Mines produce Metal. Assigned engineers increase output.',
+    oil: 'Fuels vehicles; rural sources and Oil Pumps produce Oil. Assigned engineers increase output.',
     warheads: 'Strike ordnance; accrues from Ordnance Workshops/Missile Sites.',
   };
 

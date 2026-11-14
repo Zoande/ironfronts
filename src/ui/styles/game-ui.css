@@ -1274,7 +1274,7 @@
 }
 .ifg-army-panel__stat-table th,
 .ifg-army-panel__stat-table td { padding: 4px 5px; border: 1px solid var(--ifg-rule-soft); text-align: center; }
-.ifg-army-panel__stat-table th:first-child { width: 43%; text-align: left; }
+.ifg-army-panel__stat-table th:first-child { width: 34%; text-align: left; }
 .ifg-army-panel__stat-table thead th {
   color: var(--ifg-dim);
   font-size: 9px;
@@ -2922,4 +2922,84 @@
 
 @media (max-width: 760px) {
   .ifg-tech__tabs { grid-template-columns: repeat(7, minmax(104px,1fr)); }
+}
+
+/* Small screens keep the national economy and every army section readable. */
+.ifg-army-panel__command-label { display: none; }
+@media (max-width: 640px) {
+  .ifg-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 24px auto 32px;
+    grid-template-areas: 'country weather clock system' 'resources resources resources resources';
+    height: auto;
+    gap: 4px 8px;
+    padding: 4px 8px;
+  }
+  .ifg-topbar__country { grid-area: country; min-width: 0; padding-right: 0; border-right: 0; }
+  .ifg-topbar__country-name { display: block; min-width: 0; font-size: 11px; }
+  .ifg-topbar__weather { grid-area: weather; }
+  .ifg-topbar__clock { grid-area: clock; }
+  .ifg-topbar__system { grid-area: system; margin-left: 0; }
+  .ifg-topbar__resources {
+    grid-area: resources;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 8px;
+    width: 100%;
+    padding-top: 4px;
+    border-top: 1px solid var(--ifg-rule-soft);
+    overflow: visible;
+  }
+  .ifg-res { min-width: 0; gap: 5px; }
+  .ifg-res__icon { width: 20px; height: 20px; flex: none; }
+  .ifg-res__value { font-size: 12px; }
+  .ifg-modes, .ifg-notify { top: 110px; }
+}
+
+@media (max-width: 860px) {
+  .ifg-army-panel {
+    display: flex;
+    flex-direction: column;
+    height: min(54dvh, 430px);
+    max-height: calc(100dvh - 180px);
+  }
+  .ifg-army-panel__header {
+    flex: none;
+    height: auto;
+    grid-template-columns: minmax(0, 1fr) auto 28px;
+    grid-template-areas: 'activity activity close' 'identity controls controls';
+    gap: 3px;
+    padding: 4px 7px;
+  }
+  .ifg-army-panel__header-activity { grid-area: activity; grid-template-columns: 20px minmax(0, 1fr) auto; }
+  .ifg-army-panel__identity { grid-area: identity; justify-content: flex-start; }
+  .ifg-army-panel__name { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ifg-army-panel__header-controls { grid-area: controls; justify-content: flex-end; }
+  .ifg-army-panel__close { grid-area: close; }
+  .ifg-army-panel__body { display: block; flex: 1; height: auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  .ifg-army-panel__summary { grid-template-columns: 80px minmax(0, 1fr); grid-template-rows: auto; border-right: 0; border-bottom: 1px solid var(--ifg-rule-soft); }
+  .ifg-army-panel__health { padding: 10px 6px; border-bottom: 0; border-right: 1px solid var(--ifg-rule-soft); }
+  .ifg-army-panel__stats { padding: 10px; overflow: visible; }
+  .ifg-army-panel__stat-table { table-layout: auto; }
+  .ifg-army-panel__stat-table th:first-child { width: 34%; }
+  .ifg-army-panel__stat-table td { padding: 5px; white-space: nowrap; }
+  .ifg-army-panel__center, .ifg-army-panel__composition, .ifg-army-panel__report { overflow: visible; }
+  .ifg-army-panel__composition, .ifg-army-panel__report { padding: 10px; border-right: 0; border-bottom: 1px solid var(--ifg-rule-soft); }
+  .ifg-army-panel__units { flex: none; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); overflow: visible; }
+  .ifg-army-panel__commands--primary { left: 0; right: 0; width: 100%; transform: none; justify-content: center; gap: 4px; }
+  .ifg-army-panel__commands--primary .ifg-army-panel__command { flex: 1 1 0; width: auto; min-width: 0; max-width: 64px; height: 54px; }
+  .ifg-army-panel__commands--primary .ifg-army-panel__command-icon { width: 30px; height: 30px; }
+  .ifg-army-panel__command-label { display: block; font-size: 9px; line-height: 1.1; color: var(--ifg-text); }
+}
+
+.ifg-army-panel__stat-table td { padding-inline: 4px; }
+@media (min-width: 641px) and (max-width: 860px) {
+  .ifg-army-panel__body { display: grid; grid-template-columns: 280px minmax(0, 1fr); align-content: start; }
+  .ifg-army-panel__report { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .ifg-topbar__resources:has([data-res="warheads"]) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 6px;
+  }
 }

@@ -1,3 +1,4 @@
+import { formatDamageRate } from './combat-format';
 /**
  * Army / unit UI components: the map counter and the selected-stack readout.
  *
@@ -25,14 +26,6 @@ const COMBAT_LABEL: Record<CombatStatus, string> = {
   engaged: 'In combat',
   retreating: 'Withdrawing',
 };
-
-function formatDamageRate(value: number): string {
-  if (!Number.isFinite(value)) return '--';
-  // Absolute damage-per-hour dealt to a target stack (see COMBAT_DAMAGE_SCALE
-  // in game/combat/constants.ts) — not a 0..1 fraction, so no percentage sign.
-  if (value <= 0) return '0';
-  return value < 10 ? value.toFixed(1) : String(Math.round(value));
-}
 
 function formatGameDuration(hours: number | null): string {
   if (hours === null || !Number.isFinite(hours)) return 'indeterminate';
@@ -289,15 +282,23 @@ export function renderSelectedArmyPanel(
   );
   statHead.append(headingRow);
   const statBody = node('tbody');
+  const damageCell = (value: number | undefined): HTMLElement => {
+    const cell = node('td', undefined, value === undefined ? '--' : formatDamageRate(value));
+    if (value !== undefined) bindTooltip(cell, () => ({
+      title: `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })} damage per hour`,
+      description: 'Base output against this armor class before battle modifiers.',
+    }));
+    return cell;
+  };
   const appendProfile = (label: string, icon: IconName, value: typeof army.attack): void => {
     const row = node('tr');
     const key = node('th');
     key.append(createIcon(icon, 'ifg-army-stat__icon'), document.createTextNode(label));
     row.append(
       key,
-      node('td', undefined, value ? formatDamageRate(value.soft) : '--'),
-      node('td', undefined, value ? formatDamageRate(value.light) : '--'),
-      node('td', undefined, value ? formatDamageRate(value.heavy) : '--'),
+      damageCell(value?.soft),
+      damageCell(value?.light),
+      damageCell(value?.heavy),
     );
     statBody.append(row);
   };
@@ -344,8 +345,8 @@ export function renderSelectedArmyPanel(
   summary.append(health, stats);
 
   const commands = node('div', 'ifg-army-panel__commands ifg-army-panel__commands--primary');
-  // Text-free order tiles: the pictogram carries the meaning while the full
-  // label and explanation remain available to assistive tech and on hover/focus.
+  // Order tiles retain their full label; narrow layouts also show it below the icon.
+//   // label and explanation remain available to assistive tech and on hover/focus.
   interface CommandTip { description?: string; disabledReason?: string; }
   const command = (
     label: string, icon: IconName, key: ArmyPanelCommand,
@@ -356,7 +357,7 @@ export function renderSelectedArmyPanel(
     button.disabled = !enabled;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-label', label);
-    button.append(createIcon(icon, 'ifg-army-panel__command-icon'));
+    button.append(createIcon(icon, 'ifg-army-panel__command-icon'), node('span', 'ifg-army-panel__command-label', label));
     bindTooltip(button, () => ({
       title: label,
       description: tip.description,
