@@ -124,6 +124,35 @@ describe('native fleet and stealth rules', () => {
     expect(applyCommand(c,{type:'moveArmy',countryId:1,armyId:'d',x:950,z:100}).ok).toBe(false);
   });
 
+  it('keeps concealed submarines separate on arrival while surface escorts can join battleships', () => {
+    const c=setup();c.state.armies.b=ship('b',1,700,'battleship');c.state.armies.s=ship('s',1,720,'submarine');
+    expect(applyCommand(c,{type:'moveArmy',countryId:1,armyId:'s',x:700,z:100}).ok).toBe(true);
+    stepMovement(c,1);
+    expect(Object.keys(c.state.armies)).toHaveLength(2);
+    c.state.armies.d=ship('d',1,720,'destroyer');
+    expect(applyCommand(c,{type:'moveArmy',countryId:1,armyId:'d',x:700,z:100}).ok).toBe(true);
+    stepMovement(c,1);
+    expect(Object.keys(c.state.armies)).toHaveLength(2);
+    expect(c.state.armies.b.units.map(g=>g.typeId)).toContain('destroyer');
+  });
+
+  it('keeps militia concealed instead of automatically merging it into visible infantry', () => {
+    const c=fixture();c.state.armies.i=army('i',1,300,100,1,'infantry',1);c.state.armies.m=army('m',1,100,100,0,'militia',1);
+    expect(applyCommand(c,{type:'moveArmy',countryId:1,armyId:'m',x:300,z:100}).ok).toBe(true);
+    stepMovement(c,10);
+    expect(Object.keys(c.state.armies)).toHaveLength(2);
+    expect(c.state.armies.m.units[0].typeId).toBe('militia');
+  });
+
+  it('launches a newly produced submarine separately from an existing surface fleet', () => {
+    const c=setup();c.state.provinceBuildings[10].ordnance=1;
+    for(const key of Object.keys(c.state.countries[1].stockpile)) (c.state.countries[1].stockpile as unknown as Record<string,number>)[key]=100000;
+    expect(queueUnit(c,10,'battleship',1).ok).toBe(true);stepProduction(c,7);
+    expect(queueUnit(c,10,'submarine',1).ok).toBe(true);stepProduction(c,4);
+    expect(Object.keys(c.state.armies)).toHaveLength(2);
+    expect(Object.values(c.state.armies).every(a=>a.units.length===1)).toBe(true);
+  });
+
   it('builds warships only at coastal ordnance works and launches them into water', () => {
     const c=setup();c.state.provinceBuildings[10].ordnance=1;
     for(const key of Object.keys(c.state.countries[1].stockpile)) (c.state.countries[1].stockpile as unknown as Record<string,number>)[key]=100000;
