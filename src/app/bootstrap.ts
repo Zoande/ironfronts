@@ -3252,8 +3252,8 @@ function playerResourceLines(session: RemoteGameSession): ResourceLine[] {
   const country = session.ownCountry;
   const s = country.stockpile;
   const inc = country.income;
-  // Live extraction rate per game hour for stone/metal/oil (0 when nothing is
-  // being extracted). Server-projected; `?? 0` covers an older projection.
+  // Authoritative production and upkeep include passive sources, developed
+  // buildings and assigned engineers; net rates drive the displayed trend.
   const line = (
     id: ResourceLine['id'], label: string, value: number, key?: keyof typeof s,
   ): ResourceLine => ({
@@ -3269,7 +3269,7 @@ function playerResourceLines(session: RemoteGameSession): ResourceLine[] {
     line('money', 'Funds', s.funds, 'funds'),
     line('manpower', 'Manpower', s.manpower, 'manpower'),
     line('food', 'Food', s.food, 'food'),
-    // stone/metal/oil have no passive income — the rate is current extraction.
+    // Physical resources include passive source/building output and engineers.
     line('stone', 'Stone', s.stone, 'stone'),
     line('metal', 'Metal', s.metal, 'metal'),
     line('oil', 'Oil', s.oil, 'oil'),

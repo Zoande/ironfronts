@@ -16,12 +16,11 @@ describe('icon-first army command strip', () => {
     }
   });
 
-  it('builds each command as an icon-only tile with the full label on aria-label + rich tooltip', () => {
+  it('keeps icon-first commands accessible and provides captions for narrow layouts', () => {
     const start = army.indexOf('const command = (');
     const body = army.slice(start, army.indexOf('  if (army.own) {', start));
     expect(body).toContain("createIcon(icon, 'ifg-army-panel__command-icon')");
-    expect(body).not.toContain('command-label');
-    expect(body).not.toContain('caption');
+    expect(body).toContain('ifg-army-panel__command-label');
     expect(body).toContain("button.setAttribute('aria-label', label)");
     // The shared rich tooltip carries the explanation and (when blocked) the
     // disabled reason — no bare title="" string.
