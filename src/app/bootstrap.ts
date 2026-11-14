@@ -1,3 +1,4 @@
+import { queuedRouteSegments } from '../client/queued-orders';
 import { landMuzzlePosition, nextLandShot } from '../rendering/land-animation';
 import { setDebugHandles } from '../client/debug-access';
 import { describeOrderFailure } from '../ui/order-feedback';
@@ -311,14 +312,6 @@ type QueuedArmyOrder =
   | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
   | { kind: 'attackArmy'; targetArmyId: string };
 type QueuedAttackOrder = Exclude<QueuedArmyOrder, { kind: 'move' }>;
-// Shift-click order queue (client-side only — the server has no notion of
-// a multi-leg order). Each army's queued moves/attacks wait until the army
-// reports 'idle' (its current order finished) before the next one is issued.
-// `armyWaypointIssuing` guards against re-firing the same waypoint on every
-// subsequent 'change' event while the just-sent order is still in flight and
-// the army's locally-known status has not yet flipped away from 'idle'.
-const armyWaypointQueues = new Map<string, QueuedArmyOrder[]>();
-const armyWaypointIssuing = new Set<string>();
 const lastArmyOrderMode = new Map<string, 'move' | 'attack'>();
 const authenticated = await getSession().catch((): SessionResponse => ({ authenticated: false }));
 if (!authenticated.authenticated || !authenticated.account) {
@@ -1217,7 +1210,6 @@ async function bootstrapGameSession(
       armyMotionInterpolator.clear(); combatEffects.clear(); presentationGeneration = session.baselineGeneration;
     }
     syncArmyMarkers(session, renderer);
-    advanceWaypointQueues(session);
   };
   session.addEventListener('change', syncDiplomaticRelations);
   const onDiplomacySessionChange = (): void => syncDiplomacyView(session);
@@ -1304,8 +1296,6 @@ async function bootstrapGameSession(
     window.clearInterval(hudTimer);
     window.clearInterval(civilClockTimer);
     armyMotionInterpolator.clear();
-    armyWaypointQueues.clear();
-    armyWaypointIssuing.clear();
     lastArmyOrderMode.clear();
     clearAllNotificationTimers();
     session.dispose();
@@ -1658,6 +1648,13 @@ function syncArmyMarkers(
       emitSegment(tip.x + WING * (ux * COS + uz * SIN), tip.z + WING * (-ux * SIN + uz * COS), tip.x, tip.z, 1);
     }
 
+    if (army.id === selectedArmyId) {
+      for (const line of queuedRouteSegments(army, session.state.armies, worldWidth)) {
+        if (routeCount >= 4096) break;
+        routeScratch.set([line.from.x,line.from.z,line.to.x,line.to.z,line.attack ? 1 : 0,0.45,0,1],routeCursor);
+        routeCursor += 8; routeCount++;
+      }
+    }
     let formation: ReturnType<typeof buildArmyFormation> = [];
     let compositionRows: ReturnType<typeof buildArmyCompositionRows> = [];
     if (identified) {
@@ -2081,51 +2078,6 @@ function armStrike(session: RemoteGameSession): void {
 /** A one-shot red reticle that snaps onto the click point and fades. Pure DOM,
  *  no renderer pipeline — the immediate "acknowledged" cue for an attack order. */
 let attackFlashEl: HTMLDivElement | null = null;
-/** Shift-click appends a typed move/attack after the active order. */
-function queueWaypoint(armyId: string, order: QueuedArmyOrder): void {
-  const queue = armyWaypointQueues.get(armyId) ?? [];
-  queue.push(order);
-  armyWaypointQueues.set(armyId, queue);
-}
-
-function issueQueuedArmyOrder(
-  session: RemoteGameSession, armyId: string, order: QueuedArmyOrder,
-): { ok: boolean; reason?: string } {
-  const rejected = (reason: string): void => {
-    armyWaypointIssuing.delete(armyId);
-    pushNotification('warning', 'Queued order failed', reason);
-    advanceWaypointQueues(session);
-  };
-  if (order.kind === 'move') {
-    return session.orderMove(armyId, order.x, order.z, 'move', undefined, rejected);
-  }
-  const accepted = (): void => {
-    void audio.playUiCue('confirm');
-    pushNotification('information', 'Queued attack underway', 'Your force is advancing to the next target.');
-  };
-  return order.kind === 'attackArmy'
-    ? session.orderAttackArmy(armyId, order.targetArmyId, accepted, rejected)
-    : session.orderAttackProvince(
-      armyId, order.provinceId, order.x, order.z, accepted, rejected,
-    );
-}
-
-/** Fire the next queued waypoint once an army's current order has finished. */
-function advanceWaypointQueues(session: RemoteGameSession): void {
-  for (const [armyId, queue] of armyWaypointQueues) {
-    const army = session.army(armyId);
-    if (!army || !army.own) { armyWaypointQueues.delete(armyId); armyWaypointIssuing.delete(armyId); continue; }
-    if (army.status !== 'idle') { armyWaypointIssuing.delete(armyId); continue; }
-    if (armyWaypointIssuing.has(armyId)) continue; // already issued; waiting for confirmation
-    if (!queue.length) { armyWaypointQueues.delete(armyId); continue; }
-    const next = queue.shift()!;
-    if (!queue.length) armyWaypointQueues.delete(armyId);
-    armyWaypointIssuing.add(armyId);
-    const result = issueQueuedArmyOrder(session, armyId, next);
-    if (!result.ok) armyWaypointIssuing.delete(armyId);
-  }
-}
-
 function attackOrderAt(
   renderer: WorldRenderer, session: RemoteGameSession, selectedId: string,
   clientX: number, clientY: number,
@@ -2213,7 +2165,7 @@ function handleMapClick(
   //    aiming and issues (or replaces) the immediate order.
   const queuedMode = shiftKey && selectedArmyId && session.ownsArmy(selectedArmyId)
     ? (targetingMode === 'move' || targetingMode === 'attack'
-      ? targetingMode : lastArmyOrderMode.get(selectedArmyId))
+      ? targetingMode : lastArmyOrderMode.get(selectedArmyId) ?? session.army(selectedArmyId)?.moveIntent)
     : undefined;
   if (queuedMode && selectedArmyId) {
     const queued = queuedMode === 'move'
@@ -2226,12 +2178,12 @@ function handleMapClick(
     if (queued.kind === 'invalid') {
       pushNotification('warning', 'Invalid queued order', queued.reason);
     } else {
-      queueWaypoint(selectedArmyId, queued);
+      const result = session.queueArmyOrder(selectedArmyId, queued);
+      if (!result.ok) { pushNotification('warning', 'Order queue rejected', result.reason); return true; }
       lastArmyOrderMode.set(selectedArmyId, queuedMode);
-      advanceWaypointQueues(session);
       void audio.playUiCue(queuedMode === 'move' ? 'move' : 'confirm');
       pushNotification('information', `${queuedMode === 'move' ? 'Move' : 'Attack'} queued`,
-        'Shift-click to add more orders; they will execute in sequence.');
+        'Shift-click to add orders. Dashed arrows mark queued destinations; the server executes them while you are away.');
       syncArmyMarkers(session, renderer);
       refreshSelectedArmy(session);
     }
@@ -2250,7 +2202,6 @@ function handleMapClick(
       } else {
         void audio.playUiCue('move');
         // A fresh, unqueued order supersedes anything still waiting.
-        armyWaypointQueues.delete(selectedArmyId);
         if (targetingMode === 'move') lastArmyOrderMode.set(selectedArmyId, 'move');
       }
       awaitingMoveTarget = false;
@@ -2288,7 +2239,6 @@ function handleMapClick(
       const { title, body } = describeOrderFailure(result.reason ?? 'Invalid target.');
       pushNotification('warning', title, body);
     } else {
-      armyWaypointQueues.delete(selectedArmyId);
       lastArmyOrderMode.set(selectedArmyId, 'attack');
     }
     targetingMode = null;
@@ -2447,8 +2397,6 @@ function handleArmyCommand(command: ArmyPanelCommand): void {
     return;
   }
   if (command === 'stop') {
-    armyWaypointQueues.delete(selectedArmyId);
-    armyWaypointIssuing.delete(selectedArmyId);
     lastArmyOrderMode.delete(selectedArmyId);
     session.orderStop(selectedArmyId);
     awaitingMoveTarget = false;
@@ -2497,10 +2445,12 @@ function refreshSelectedArmy(
       light: profile.light * (comp?.unitCount ?? 0),
       heavy: profile.heavy * (comp?.unitCount ?? 0),
     } : undefined;
-  const baseActivity = armyActivityLabel(view.status, awaitingMoveTarget, view.own);
+  const baseActivity = [armyActivityLabel(view.status, awaitingMoveTarget, view.own),
+    view.queuedOrders?.length ? `${view.queuedOrders.length} orders queued` : null].filter(Boolean).join(' · ');
   const activity = !session.fresh ? 'Reconnecting ? state may be stale'
     : session.pendingForArmy(view.id) ? 'Order pending confirmation'
-      : comp?.transport ? `${baseActivity} · Transport Level ${comp.transport.level}` : baseActivity;
+      : view.queuedOrderError ? `Queue stopped: ${view.queuedOrderError}`
+        : comp?.transport ? `${baseActivity} · Transport Level ${comp.transport.level}` : baseActivity;
   const motionElapsedMs = view.motion?.sampledAtEpochMs === undefined
     ? 0 : Math.max(0, session.serverNow() - view.motion.sampledAtEpochMs);
   const motionDurationMs = view.motion?.durationMs ?? 0;

@@ -18,8 +18,8 @@ const attackTargetSchema = z.discriminatedUnion('kind', [
 ]);
 
 export const commandPayloadSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('moveArmy'), armyId: z.string(), x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars }),
-  z.object({ type: z.literal('attackArmy'), armyId: z.string(), target: attackTargetSchema, confirmedWarCountryIds: confirmedWars }),
+  z.object({ type: z.literal('moveArmy'), armyId: z.string(), x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars, enqueue: z.boolean().optional() }),
+  z.object({ type: z.literal('attackArmy'), armyId: z.string(), target: attackTargetSchema, confirmedWarCountryIds: confirmedWars, enqueue: z.boolean().optional() }),
   z.object({ type: z.literal('retreatArmy'), armyId: z.string(), x: z.number().finite(), z: z.number().finite() }),
   z.object({
     type: z.literal('splitArmy'), armyId: z.string(),
@@ -160,7 +160,14 @@ export interface CombatRateModifiers {
   devastation: number;
 }
 
+export type QueuedArmyOrder =
+  | { kind: 'move'; x: number; z: number }
+  | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
+  | { kind: 'attackArmy'; targetArmyId: string };
+
 export interface ProjectedArmy {
+  queuedOrders?: QueuedArmyOrder[];
+  queuedOrderError?: string | null;
   id: string;
   name: string;
   ownerCountryId: number;

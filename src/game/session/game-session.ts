@@ -33,7 +33,7 @@ import { stepPhaseProgression } from '../phase';
 import { stepWarheads } from '../strike';
 import { stepTechnology } from '../technology';
 import { stepAi } from '../ai/simple-ai';
-import { applyCommand as runCommand, type CommandResult, type GameCommand } from '../commands';
+import { advanceQueuedArmyOrders, applyCommand as runCommand, type CommandResult, type GameCommand } from '../commands';
 import { wrappedDistance } from '../geometry';
 import { ensureCountryProvinceResourceBaseline } from '../economy/resource-generation';
 
@@ -132,6 +132,7 @@ export class GameSession {
     }
 
     // --- gameplay systems, fixed order ------------------------------
+    advanceQueuedArmyOrders(this);
     const contactTimes = new Map<string,number>();
     for (const cap of stepMovement(this, dtHours, contactTimes)) this.pendingCaptures.push(cap);
     if (cadence.supplyHours + 1e-12 >= SUPPLY_INTERVAL) {

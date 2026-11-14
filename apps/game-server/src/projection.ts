@@ -37,7 +37,8 @@ export function projectFor(
       state, world, viewerCountryId, armyId, visibility, gameHoursPerRealSecond,
     );
     if (!army) return [];
-    let projected: import('@ironfronts/protocol').ProjectedArmy = army;
+    const queue = army.own ? state.armies[army.id]?.queuedOrders : undefined;
+    let projected: import('@ironfronts/protocol').ProjectedArmy = army.own ? { ...army, queuedOrders: queue?.map(order => ({ ...order })) ?? [], queuedOrderError: state.armies[army.id]?.queuedOrderError ?? null } : army;
     if (graph && army.own) {
       const eligibility = extractionEligibility({ state, world, graph }, army.id);
       projected = { ...projected, actions: { canExtract: eligibility.ok, extractionProvinceId: eligibility.provinceId ?? null,

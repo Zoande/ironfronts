@@ -45,10 +45,10 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
   const worldWidth = session.world.width;
   for (const armyId of arrivedIds) {
     const army = session.state.armies[armyId];
-    if (!army || army.status !== 'idle' || army.order || army.battleFrontIds?.length) continue;
+    if (!army || army.status !== 'idle' || army.order || army.battleFrontIds?.length || army.queuedOrders?.length) continue;
     const target = Object.values(session.state.armies).find((other) => other !== army
       && other.ownerCountryId === army.ownerCountryId
-      && other.status === 'idle' && !other.order && !other.battleFrontIds?.length
+      && other.status === 'idle' && !other.order && !other.battleFrontIds?.length && !other.queuedOrders?.length
       && ((!army.edge && !other.edge && other.graphNodeId === army.graphNodeId)
         || wrappedDistance(other.x, other.z, army.x, army.z, worldWidth) < MERGE_RADIUS));
     if (target) {

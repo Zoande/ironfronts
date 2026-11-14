@@ -7,6 +7,7 @@ import type { MarketResource } from '../trade';
 
 export interface MoveArmyCommand {
   readonly type: 'moveArmy';
+  readonly enqueue?: boolean;
   readonly countryId: number;
   readonly armyId: string;
   readonly x: number;
@@ -20,6 +21,7 @@ export type AttackTarget =
 
 export interface AttackCommand {
   readonly type: 'attackArmy';
+  readonly enqueue?: boolean;
   readonly countryId: number;
   readonly armyId: string;
   readonly target: AttackTarget;

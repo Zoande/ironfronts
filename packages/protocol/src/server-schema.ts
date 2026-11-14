@@ -22,7 +22,9 @@ const combatRateModifiers = z.object({
   stanceOutput: nonnegative, supply: nonnegative,
   protection: nonnegative, terrain: nonnegative, devastation: nonnegative,
 });
-const army = point.extend({
+const army = point.extend({ queuedOrders: z.array(z.discriminatedUnion('kind', [point.extend({kind:z.literal('move')}),
+  point.extend({kind:z.literal('attackProvince'),provinceId:z.number().int().nonnegative()}),
+  z.object({kind:z.literal('attackArmy'),targetArmyId:z.string().min(1)})])).max(32).optional(), queuedOrderError: z.string().nullable().optional(),
   id: z.string(), name: z.string(), ownerCountryId: integer, ownerName: z.string(), ownerColor: z.string(), own: z.boolean(),
   contact: z.enum(['contact', 'visible']), status: z.enum(['idle', 'moving', 'extracting', 'engaged', 'retreating', 'embarking', 'atSea', 'disembarking', 'unknown']),
   graphNodeId: integer.optional(),
@@ -37,7 +39,7 @@ const army = point.extend({
       cargo: z.array(z.object({ typeId: z.string(), shipCount: integer, health: nonnegative.max(1) })) }).nullable().optional(),
   }).nullable(),
   moveOrder: point.nullable(), moveRoute: z.array(point).optional(),
-  moveRoadRoute: z.array(z.object({ edgeId: integer, from: integer, to: integer, startDistance: nonnegative })).optional(),
+  moveRoadRoute: z.array(z.object({ edgeId: integer, from: integer, to: integer, startDistance: nonnegative, endDistance: nonnegative.optional() })).optional(),
   moveIntent: z.enum(['move', 'attack']).optional(),
   arrival: z.object({ remainingMs: nonnegative, sampledAtEpochMs: finite }).optional(),
   motion: z.object({ targetX: finite, targetZ: finite, durationMs: nonnegative, progress: nonnegative.max(1).optional(), route: z.array(point).optional(), sampledAtEpochMs: finite.optional(), generation: integer.optional() }).optional(),

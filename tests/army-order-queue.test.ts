@@ -20,6 +20,7 @@ describe('map attack targeting and Shift order queue', () => {
     expect(bootstrap).toContain("| { kind: 'attackProvince'; provinceId: number; x: number; z: number }");
     expect(bootstrap).toContain("| { kind: 'attackArmy'; targetArmyId: string }");
     expect(bootstrap).toContain("lastArmyOrderMode.set(selectedArmyId, 'attack')");
-    expect(bootstrap).toContain('issueQueuedArmyOrder(session, armyId, next)');
+    expect(bootstrap).toContain('session.queueArmyOrder(selectedArmyId, queued)');
+    expect(bootstrap).not.toContain('armyWaypointQueues');
   });
 });

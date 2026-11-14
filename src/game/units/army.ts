@@ -50,6 +50,11 @@ export interface UnitGroup {
   experience: number;
 }
 
+export type QueuedArmyOrder =
+  | { kind: 'move'; x: number; z: number }
+  | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
+  | { kind: 'attackArmy'; targetArmyId: string };
+
 export interface MoveOrder {
   /** Ordered land movement-graph node ids still to traverse (current target first). */
   readonly path: number[];
@@ -88,6 +93,9 @@ export interface ArmyStack {
   units: UnitGroup[];
   status: ArmyStatus;
   order: MoveOrder | null;
+  /** Server-owned orders continue while the commander is disconnected. */
+  queuedOrders?: QueuedArmyOrder[];
+  queuedOrderError?: string | null;
   /** Resource node id this stack is extracting, or null. */
   extractingNodeId: number | null;
   /** V4 renewable production assignment. */
