@@ -1,0 +1,63 @@
+{
+  "scale": 2.0,
+  "stride": 1.1,
+  "muzzle": [
+    -0.22,
+    0.993,
+    1.1
+  ],
+  "kind": "engineer",
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 40564,
+      "vertices": 20486
+    },
+    {
+      "lod": 1,
+      "triangles": 17036,
+      "vertices": 8722
+    },
+    {
+      "lod": 2,
+      "triangles": 5673,
+      "vertices": 3043
+    }
+  ],
+  "clips": {
+    "Idle": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Walk": {
+      "duration": 1,
+      "fps": 30
+    },
+    "Reverse": {
+      "duration": 1.2,
+      "fps": 30
+    },
+    "Fire": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Reload": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Deploy": {
+      "duration": 1.5,
+      "fps": 30
+    },
+    "Death": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Run": {
+      "duration": 0.8,
+      "fps": 30
+    }
+  },
+  "source": "material/land-armies/engineer.blend",
+  "authoredBy": "Ironfronts / Codex; original procedural Blender source"
+}

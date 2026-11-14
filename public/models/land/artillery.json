@@ -10,18 +10,18 @@
   "lods": [
     {
       "lod": 0,
-      "triangles": 11364,
-      "vertices": 5960
+      "triangles": 11940,
+      "vertices": 6264
     },
     {
       "lod": 1,
-      "triangles": 4772,
-      "vertices": 2664
+      "triangles": 5014,
+      "vertices": 2801
     },
     {
       "lod": 2,
-      "triangles": 1525,
-      "vertices": 1073
+      "triangles": 1609,
+      "vertices": 1129
     }
   ],
   "clips": {

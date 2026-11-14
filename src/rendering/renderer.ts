@@ -184,8 +184,8 @@ export class WorldRenderer {
   private readonly landUnits: Array<{
     kind: number; family: string; model?: LandModel; layer?: InstanceLayer;
     state: { sourceRevision: number; cameraRevision: number; copyMask?:number }; scratch: Float32Array;
-  }> = ['infantry','armored-car','tank','artillery','transport'].map((family,index) => ({
-    family, kind: index === 4 ? 5 : index, state: { sourceRevision: -1, cameraRevision: -1 }, scratch: new Float32Array(4096*16),
+  }> = ['infantry','armored-car','tank','artillery','transport','engineer','militia','light-tank','battleship','destroyer','submarine'].map((family,index) => ({
+    family, kind: index >= 4 ? index + 1 : index, state: { sourceRevision: -1, cameraRevision: -1 }, scratch: new Float32Array(4096*16),
   }));
   /** One bit per loaded model family, including naval transport. */
   private armyModelMode = 0;
@@ -1463,7 +1463,8 @@ export class WorldRenderer {
       let visible = false;
       for (const copy of worldCopies(this.manifest.world.wrapX)) {
         const copyX=x+(copy-1)*worldWidth;
-        const inView=this.armyModelSource[sourceOffset+3]===5
+        const modelKind=this.armyModelSource[sourceOffset+3];
+        const inView=modelKind===5 || modelKind>=9
           ? sphereIntersectsFrustum(this.frustumPlanes,copyX,.35,z,22)
           : this.chunkIntersectsView(copyX,z,12);
         if (inView) {

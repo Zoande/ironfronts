@@ -31,6 +31,11 @@ const rasterPortrait = (stem: string): string | undefined => rasterUrls[`./asset
 export const unitFamilyId = (typeId: string): string => typeId.replace(/-l[2-8]$/, '');
 
 const PORTRAIT_BY_TYPE: Readonly<Record<string, string>> = {
+  militia: portrait('militia'),
+  battleship: portrait('battleship'),
+  destroyer: portrait('destroyer'),
+  submarine: portrait('submarine'),
+  transport: portrait('transport'),
   infantry: portrait('infantry'),
   engineer: portrait('engineer'),
   'armored-car': portrait('armored-car'),
@@ -41,6 +46,11 @@ const PORTRAIT_BY_TYPE: Readonly<Record<string, string>> = {
 
 /** One-line role note per unit family, shown in the portrait-card tooltip. */
 export const UNIT_ROLE_NOTE: Readonly<Record<string, string>> = {
+  militia: 'Territorial infantry: camouflage equals technology level. Revealed by armored cars with sufficient reveal level, or for one game hour after firing.',
+  battleship: 'Heavy surface ship with ranged artillery. Strong against destroyers, vulnerable to submarines.',
+  destroyer: 'Fast surface escort: reveal level equals technology level. Detects submarines within its vision radius and counters them with depth charges.',
+  submarine: 'Concealed torpedo vessel. Holds fire until ordered to attack; returns fire when attacked. Firing reveals it for one game hour.',
+  transport: 'Fragile convoy carrying land troops. Hull strength and defensive firepower scale with Naval Logistics level.',
   infantry: 'Cheap line infantry — slow, cheap to replace, holds ground and digs in.',
   engineer: 'Pioneers — weak in a fight, fastest at working a resource deposit.',
   'armored-car': 'Fast recon — wide view range, light gun, screens the advance.',

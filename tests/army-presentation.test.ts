@@ -42,10 +42,10 @@ describe('selected army presentation', () => {
       { typeId: 'artillery', count: 2 },
     ];
     expect(aggregateTroopStat(groups, 'attack', (id) => catalog[id])).toEqual({
-      soft: 91.8, light: 64.4, heavy: 74.6,
+      soft: 91.8, light: 64.4, heavy: 74.6, ship: 0, submarine: 0,
     });
     expect(aggregateTroopStat(groups, 'defense', (id) => catalog[id])).toEqual({
-      soft: 30, light: 18.6, heavy: 14.7,
+      soft: 30, light: 18.6, heavy: 14.7, ship: 0, submarine: 0,
     });
     expect(aggregateTroopStat(undefined, 'attack', (id) => catalog[id])).toBeUndefined();
   });
@@ -93,13 +93,12 @@ describe('selected army presentation', () => {
     expect(roundDisplayedHp(21.4)).toBe(21);
   });
 
-  it('uses icon-led armor damage columns with tooltip descriptions', async () => {
+  it('shows all five target classes with attack and defence columns', async () => {
     const source = await import('node:fs/promises').then((fs) => fs.readFile(
       new URL('../src/ui/army.ts', import.meta.url), 'utf8',
     ));
-    expect(source).toContain("statHeading('Base damage per game hour'");
-    expect(source).toContain("statHeading('Soft damage'");
-    expect(source).toContain("statHeading('Light damage'");
-    expect(source).toContain("statHeading('Heavy damage'");
+    for (const label of ['Unarmored','Light armor','Heavy armor','Surface ship','Submarine']) expect(source).toContain(label);
+    expect(source).toContain("'Attack'");
+    expect(source).toContain("'Defence'");
   });
 });

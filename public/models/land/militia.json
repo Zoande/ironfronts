@@ -1,0 +1,63 @@
+{
+  "scale": 2.0,
+  "stride": 0.9,
+  "muzzle": [
+    -0.22,
+    0.993,
+    1.1
+  ],
+  "kind": "militia",
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 36992,
+      "vertices": 18682
+    },
+    {
+      "lod": 1,
+      "triangles": 15536,
+      "vertices": 7954
+    },
+    {
+      "lod": 2,
+      "triangles": 5178,
+      "vertices": 2775
+    }
+  ],
+  "clips": {
+    "Idle": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Walk": {
+      "duration": 1,
+      "fps": 30
+    },
+    "Reverse": {
+      "duration": 1.2,
+      "fps": 30
+    },
+    "Fire": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Reload": {
+      "duration": 3,
+      "fps": 30
+    },
+    "Deploy": {
+      "duration": 1.5,
+      "fps": 30
+    },
+    "Death": {
+      "duration": 2,
+      "fps": 30
+    },
+    "Run": {
+      "duration": 0.8,
+      "fps": 30
+    }
+  },
+  "source": "material/land-armies/militia.blend",
+  "authoredBy": "Ironfronts / Codex; original procedural Blender source"
+}

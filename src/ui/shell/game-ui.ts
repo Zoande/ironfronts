@@ -125,7 +125,7 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
 }> = [
   { id: 'infantry', label: 'Infantry', icon: 'unit-infantry', lines: [
     { id: 'infantry', technology: 'infantry', label: 'Line Infantry', shortLabel: 'Infantry', icon: 'unit-infantry', description: 'Modernises the line battalions that hold and contest territory.', unlocks: 'Stronger infantry variants at every level' },
-    { id: 'militia', label: 'Territorial Militia', shortLabel: 'Militia', icon: 'tech-militia', description: 'A future low-cost defensive troop family.', unlocks: 'Planned troop line', comingSoon: true },
+    { id: 'militia', technology: 'infantry', label: 'Territorial Militia', shortLabel: 'Militia', icon: 'tech-militia', description: 'Low-cost territorial infantry. Camouflage improves with Infantry Doctrine; armored cars can reveal it.', unlocks: 'Militia levels and camouflage' },
     { id: 'commandos', label: 'Commandos', shortLabel: 'Commandos', icon: 'tech-commandos', description: 'A future elite infiltration and raiding troop family.', unlocks: 'Planned troop line', comingSoon: true },
   ] },
   { id: 'resources', label: 'Resources', icon: 'resource-overlay', lines: [
@@ -143,8 +143,8 @@ const TECHNOLOGY_CATEGORIES: ReadonlyArray<{
   ] },
   { id: 'navy', label: 'Navy', icon: 'tech-navy', lines: [
     { id: 'transport-service', technology: 'navy', label: 'Naval Logistics', shortLabel: 'Transports', icon: 'tech-navy', description: 'Improves the temporary transport fleet used by embarked land armies.', unlocks: 'Transport ship health, speed and defensive armament' },
-    { id: 'surface-fleet', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Future battleships and fleet doctrine.', unlocks: 'Planned naval line', comingSoon: true },
-    { id: 'submarines', label: 'Submarine Service', shortLabel: 'Submarines', icon: 'tech-navy', description: 'Future undersea warfare capabilities.', unlocks: 'Planned naval line', comingSoon: true },
+    { id: 'surface-fleet', technology: 'navy', label: 'Surface Fleet', shortLabel: 'Surface Fleet', icon: 'tech-navy', description: 'Battleship artillery and destroyer anti-submarine escorts. Build at coastal Ordnance Works.', unlocks: 'Battleships · destroyers · reveal levels' },
+    { id: 'submarines', technology: 'navy', label: 'Submarine Service', shortLabel: 'Submarines', icon: 'tech-navy', description: 'Concealed torpedo boats. Hold fire until ordered to attack; destroyers reveal submarines of equal or lower camouflage level.', unlocks: 'Submarine levels and camouflage' },
   ] },
   { id: 'airforce', label: 'Air Force', icon: 'tech-airforce', lines: [
     { id: 'fighters', label: 'Fighter Command', shortLabel: 'Fighters', icon: 'tech-airforce', description: 'Future air-superiority aircraft and doctrine.', unlocks: 'Planned air line', comingSoon: true },
@@ -163,7 +163,7 @@ function technologyLevelUnlockText(branch: TechnologyBranch, level: number): str
   if (level === 1) return 'Baseline — always available.';
   switch (branch) {
     case 'infantry':
-      return `Infantry Level ${level} (more health and firepower) — also needs Barracks Tier ${level}.`;
+      return `Infantry & Militia Level ${level} (militia camouflage ${level}) — also needs Barracks Tier ${level}.`;
     case 'resources':
       return level >= 3
         ? `Engineer Level ${level} — also needs Barracks Tier ${level} and Resource Infrastructure Level ${level - 1}.`
@@ -179,7 +179,7 @@ function technologyLevelUnlockText(branch: TechnologyBranch, level: number): str
     case 'armored':
       return `Light & Medium Tank Level ${level} — also needs Tank Plant Tier ${level}.`;
     case 'navy':
-      return `Transport Ship Level ${level} (more hull strength, speed and defensive armament).`;
+      return `Fleet & Transport Level ${level}; submarine camouflage and destroyer reveal level ${level}. Warships need coastal Ordnance Works Tier ${level}.`;
   }
 }
 
@@ -189,13 +189,13 @@ function technologyUnlocks(branch: TechnologyBranch, level: number): readonly Te
   const unit = (id: string, label: string): TechnologyUnlock => ({ kind: 'unit', id: leveledUnitId(id, level), level, label });
   const building = (id: string, label: string, buildingLevel = level): TechnologyUnlock => ({ kind: 'building', id, level: buildingLevel, label });
   switch (branch) {
-    case 'infantry': return [unit('infantry', 'Infantry')];
+    case 'infantry': return [unit('infantry', 'Infantry'), unit('militia', 'Militia')];
     case 'resources': return [unit('engineer', 'Engineer')];
     case 'resourceBuildings': return [building('fields', 'Fields'), building('quarry', 'Quarry'), building('mine', 'Mine'), building('oilPump', 'Oil pump')];
     case 'training': return [building('barracks', 'Barracks'), building('tankPlant', 'Tank plant'), building('ordnance', 'Ordnance')];
     case 'hybrid': return [unit('armored-car', 'Armored car'), unit('artillery', 'Artillery'), ...(level === 8 ? [building('missileSite', 'Missile site', 1)] : [])];
     case 'armored': return [unit('light-tank', 'Light tank'), unit('medium-tank', 'Medium tank')];
-    case 'navy': return [];
+    case 'navy': return [unit('battleship', 'Battleship'), unit('destroyer', 'Destroyer'), unit('submarine', 'Submarine')];
   }
 }
 

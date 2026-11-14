@@ -42,7 +42,7 @@ export type IconName =
   | 'node-stone' | 'node-metal' | 'node-oil' | 'resource-water'
   | 'cmd-move' | 'cmd-attack' | 'cmd-retreat' | 'cmd-split' | 'cmd-stop' | 'cmd-extract'
   | 'cmd-upgrade' | 'cmd-patrol' | 'cmd-garrison'
-  | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank' | 'unit-artillery'
+  | 'unit-militia' | 'unit-battleship' | 'unit-destroyer' | 'unit-submarine' | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank' | 'unit-artillery'
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
   | 'tech-militia' | 'tech-commandos'
@@ -59,6 +59,10 @@ export type IconName =
 interface IconDef { readonly kind: 'img' | 'svg'; readonly value: string; }
 
 const ICONS: Record<IconName, IconDef> = {
+  'unit-militia': { kind: 'img', value: png('population') },
+  'unit-battleship': { kind: 'svg', value: svg('tech-navy') },
+  'unit-destroyer': { kind: 'svg', value: svg('tech-navy') },
+  'unit-submarine': { kind: 'svg', value: svg('tech-navy') },
   'cmd-upgrade': { kind: 'img', value: png('upgrade') },
   funds: { kind: 'img', value: png('economics') },
   manpower: { kind: 'img', value: png('population') },

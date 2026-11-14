@@ -270,6 +270,8 @@ export type ArmyActivityKind = 'holding' | 'moving' | 'embarking' | 'atSea'
   | 'disembarking' | 'combat' | 'retreating' | 'extracting';
 
 export interface ArmyUnitGroupView {
+  readonly camouflageLevel?: number;
+  readonly revealLevel?: number;
   readonly typeId: string;
   readonly label: string;
   readonly count: number;
@@ -311,8 +313,8 @@ export interface ArmyStackView {
   readonly domain?: 'land' | 'naval';
   readonly transportLevel?: number;
   /** Aggregate armor-specific firepower across every surviving troop. */
-  readonly attack?: { readonly soft: number; readonly light: number; readonly heavy: number };
-  readonly defense?: { readonly soft: number; readonly light: number; readonly heavy: number };
+  readonly attack?: { readonly soft: number; readonly light: number; readonly heavy: number; readonly ship?: number; readonly submarine?: number };
+  readonly defense?: { readonly soft: number; readonly light: number; readonly heavy: number; readonly ship?: number; readonly submarine?: number };
   /** Player-facing current activity, e.g. moving, extracting, or holding. */
   readonly activity: string;
   /** Compact top-bar activity presentation derived from authoritative status. */

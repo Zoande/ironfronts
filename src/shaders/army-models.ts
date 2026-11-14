@@ -124,7 +124,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let copyIndex = instanceIndex / armyModelParams.count;
   let model = armyModels[instanceIndex % armyModelParams.count];
   let copyOffset = f32(i32(copyIndex) - 1) * uniforms.map.x;
-  let kind = min(u32(model.a.w + 0.5), 5u);
+  let sourceKind = u32(model.a.w + 0.5);
+  let kind = select(select(select(min(sourceKind,5u),0u,sourceKind==6u||sourceKind==7u),2u,sourceKind==8u),5u,sourceKind>=9u);
   let partIndex = vertexIndex / 36u;
   let cube = cubePoint(vertexIndex % 36u);
   let part = modelPart(kind, partIndex);
@@ -142,7 +143,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   // flat marker, not the model, so this does not hurt selectability. Trimmed
   // again this pass (1.95 -> 1.7) to sit closer to the road ribbon width.
   // Infantry gets a 1.5x multiplier to match its authored model size.
-  let scale = select(select(1.7, 2.55, kind == 0u), 2.15, kind == 5u);
+  let scale = select(select(1.7, 2.55, kind == 0u), 2.15, (kind == 5u || kind >= 9u));
   var local = (part.center + cube.position * part.halfSize) * scale;
 
   // Marching gait. moveAmt is how far the unit shifted between the last two
@@ -169,7 +170,7 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   let travel = select(0.0, clamp((uniforms.sunTime.w - model.d.w) / max(model.d.z, 0.0001), 0.0, 1.0), model.d.z > 0.0);
   let centerXZ = mix(model.a.xy, model.d.xy, travel) + vec2f(copyOffset, 0.0);
   // Ships ride the rendered sea surface instead of sampling the seabed.
-  let ground = select(heightAt(centerXZ / uniforms.map.xy), 0.35, kind == 5u);
+  let ground = select(heightAt(centerXZ / uniforms.map.xy), 0.35, (kind == 5u || kind >= 9u));
   // Ground lift tracks model scale so shrinking the unit doesn't leave it hovering.
   let worldPosition = vec3f(centerXZ.x + rotated.x, ground + rotated.y + scale * 0.2, centerXZ.y + rotated.z);
   let normal = normalize(vec3f(cube.normal.x * cosine - cube.normal.z * sine, cube.normal.y, cube.normal.x * sine + cube.normal.z * cosine));
@@ -181,8 +182,8 @@ fn armyModelVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_in
   output.alpha = closeFade * (1.0 - mapFog(worldPosition.xz));
   let modelFlags = u32(model.b.z + 0.5);
   if ((modelFlags & 1u) != 0u) { output.color = mix(output.color, vec3f(1.0, 0.84, 0.40), 0.24); }
-  // Four authored land families share a single pipeline; missing files retain a fallback.
-  if (kind < 6u && (armyModelParams.mode & (1u << kind)) != 0u) {
+  // Authored army families share a single pipeline; missing files retain a fallback.
+  if (sourceKind < 12u && (armyModelParams.mode & (1u << sourceKind)) != 0u) {
     output.position = vec4f(2.0, 2.0, 2.0, 1.0);
     output.alpha = 0.0;
   }

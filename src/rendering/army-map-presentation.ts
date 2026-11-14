@@ -5,9 +5,7 @@ export function canPresentArtilleryFire(
   shooter: { x:number; z:number; status:string; artillery?: { range:number } | null },
   target: { x:number; z:number; status:string; composition?: { domain?:string } | null }, width:number,
 ): boolean {
-  return (shooter.status === 'idle' || shooter.status === 'extracting') && !!shooter.artillery
-    && target.status !== 'atSea' && target.status !== 'disembarking'
-    && target.composition?.domain !== 'naval'
+  return (shooter.status === 'idle' || shooter.status === 'extracting' || shooter.status === 'atSea') && !!shooter.artillery
     && wrappedDistance(shooter.x,shooter.z,target.x,target.z,width) <= shooter.artillery.range;
 }
 
@@ -15,9 +13,9 @@ export function canPresentArtilleryFire(
  * icon; armored cars and tanks share another so the compact counter always
  * stays within its two-icon space. */
 export type ArmyVisualKind = 0 | 1 | 2 | 3 | 4 | 5;
-/** Four authored land families; engineers share infantry and both tanks share kind 2.
- * Kind 5 remains the transport ship. */
-export type ArmyModelKind = 0 | 1 | 2 | 3 | 5;
+/** Seven distinct land families and three native warship families.
+ * Kind 5 is the transport manifestation. */
+export type ArmyModelKind = 0 | 1 | 2 | 3 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
 
 export interface ProjectedTroopGroup {
   readonly typeId: string;
@@ -39,6 +37,7 @@ export interface ArmyCompositionRow {
 
 export function visualKindForUnit(typeId: string): ArmyVisualKind {
   typeId = typeId.replace(/-l[2-8]$/, '');
+  if (['battleship','destroyer','submarine','transport'].includes(typeId)) return 5;
   if (typeId === 'engineer' || typeId === 'artillery') return 0;
   if (typeId === 'armored-car' || typeId === 'light-tank' || typeId === 'medium-tank') return 2;
   return 0;
@@ -47,7 +46,13 @@ export function visualKindForUnit(typeId: string): ArmyVisualKind {
 function modelKindForUnit(typeId: string): ArmyModelKind {
   typeId = typeId.replace(/-l[2-8]$/, '');
   if (typeId === 'armored-car') return 1;
-  if (typeId === 'medium-tank' || typeId === 'light-tank') return 2;
+  if (typeId === 'engineer') return 6;
+  if (typeId === 'militia') return 7;
+  if (typeId === 'light-tank') return 8;
+  if (typeId === 'battleship') return 9;
+  if (typeId === 'destroyer') return 10;
+  if (typeId === 'submarine') return 11;
+  if (typeId === 'medium-tank') return 2;
   if (typeId === 'artillery') return 3;
   return 0;
 }
@@ -68,7 +73,7 @@ export function buildArmyCompositionRows(groups: readonly ProjectedTroopGroup[])
     .sort((a, b) => b.count - a.count || a.kind - b.kind);
 }
 
-/** Spread the composition categories over at most four close-range models. */
+/** Represent every present family; homogeneous armies use up to four models. */
 export function buildArmyFormation(groups: readonly ProjectedTroopGroup[]): ArmyFormationGroup[] {
   const buckets = new Map<ArmyModelKind, { count: number; weightedHealth: number }>();
   for (const group of groups) {
@@ -85,7 +90,7 @@ export function buildArmyFormation(groups: readonly ProjectedTroopGroup[]): Army
     }))
     .sort((a, b) => a.kind - b.kind);
   const totalUnits = categories.reduce((sum, category) => sum + category.count, 0);
-  const slotLimit = Math.min(4, totalUnits);
+  const slotLimit = Math.min(Math.max(4, categories.length), totalUnits);
   const remaining = Math.max(0, slotLimit - categories.length);
   if (remaining > 0) {
     let assigned = 0;

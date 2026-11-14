@@ -80,7 +80,7 @@ export function describeArmy(army: ArmyStackView): Array<[string, string]> {
   return [
     ['Force', army.name],
     ['Command', army.country],
-    [army.domain === 'naval' ? 'Transport ships' : 'Divisions', String(army.unitCount)],
+    [army.domain === 'naval' ? (army.transportLevel ? 'Transport ships' : 'Warships') : 'Divisions', String(army.unitCount)],
     ['Strength', `${Math.round(army.strength * 100)}%`],
     ['Readiness', `${Math.round(army.health * 100)}%`],
     ['Status', COMBAT_LABEL[army.combat]],
@@ -274,36 +274,20 @@ export function renderSelectedArmyPanel(
     bindTooltip(heading, () => ({ title: label, description }));
     return heading;
   };
-  headingRow.append(
-    statHeading('Base damage per game hour', 'stat-attack', 'Total damage output against the target per game hour.'),
-    statHeading('Soft damage', 'marker-infantry', 'Damage applied to soft targets.'),
-    statHeading('Light damage', 'marker-light-tank', 'Damage applied to light armor.'),
-    statHeading('Heavy damage', 'marker-medium-tank', 'Damage applied to heavy armor.'),
-  );
+  headingRow.append(statHeading('Target class', 'stat-troops', 'Damage against each target class.'),
+    node('th', undefined, 'Attack'), node('th', undefined, 'Defence'));
   statHead.append(headingRow);
   const statBody = node('tbody');
-  const damageCell = (value: number | undefined): HTMLElement => {
-    const cell = node('td', undefined, value === undefined ? '--' : formatDamageRate(value));
-    if (value !== undefined) bindTooltip(cell, () => ({
-      title: `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })} damage per hour`,
-      description: 'Base output against this armor class before battle modifiers.',
-    }));
-    return cell;
-  };
-  const appendProfile = (label: string, icon: IconName, value: typeof army.attack): void => {
-    const row = node('tr');
-    const key = node('th');
-    key.append(createIcon(icon, 'ifg-army-stat__icon'), document.createTextNode(label));
-    row.append(
-      key,
-      damageCell(value?.soft),
-      damageCell(value?.light),
-      damageCell(value?.heavy),
-    );
+  for (const [key, label] of [['soft', 'Unarmored'], ['light', 'Light armor'], ['heavy', 'Heavy armor'], ['ship', 'Surface ship'], ['submarine', 'Submarine']] as const) {
+    const row = node('tr'); row.append(node('th', undefined, label));
+    for (const profile of [army.attack, army.defense]) {
+      const value = army.identified === false ? undefined : profile?.[key];
+      const cell = node('td', undefined, value === undefined ? '--' : formatDamageRate(value));
+      if (value !== undefined) bindTooltip(cell, () => ({title:`${value.toLocaleString(undefined,{maximumFractionDigits:3})} damage per game hour`}));
+      row.append(cell);
+    }
     statBody.append(row);
-  };
-  appendProfile('Attack', 'stat-attack', army.identified === false ? undefined : army.attack);
-  appendProfile('Defence', 'stat-defence', army.identified === false ? undefined : army.defense);
+  }
   statTable.append(statHead, statBody);
   stats.append(statTable);
   const headerStances = node('div', 'ifg-army-panel__stances');
@@ -423,11 +407,13 @@ export function renderSelectedArmyPanel(
     // secondary, and the numbers / role move onto the hover tooltip. Tightens
     // to a denser grid once the stack fields more than four unit families.
     unitRow.classList.toggle('is-dense', army.groups.length > 4);
-    for (const group of army.groups) {
+    const convoy = army.domain === 'naval' && army.transportLevel;
+    const displayedGroups = convoy ? [{typeId:'transport',label:`Convoy Level ${army.transportLevel}`,count:army.unitCount,health:army.health,camouflageLevel:0,revealLevel:0}] : army.groups;
+    for (const group of displayedGroups) {
       const health = Math.round(group.health * 100);
       const unit = node('article', 'ifg-army-unit');
       unit.dataset.unitType = group.typeId;
-      if (onInspectUnit) {
+      if (onInspectUnit && !convoy) {
         unit.tabIndex = 0; unit.setAttribute('role', 'button');
         unit.addEventListener('click', () => onInspectUnit(group.typeId));
         unit.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onInspectUnit(group.typeId); } });
@@ -439,6 +425,8 @@ export function renderSelectedArmyPanel(
       visual.append(node('b', 'ifg-army-unit__count', `×${group.count}`));
       const details = node('span', 'ifg-army-unit__details');
       details.append(node('strong', undefined, group.label));
+      if (convoy) details.append(node('small', undefined, `Cargo: ${army.groups.map(item=>`${item.count} × ${item.label}`).join(', ')}`));
+      else details.append(node('small', undefined, `Camo ${group.camouflageLevel ?? 0} · Reveal ${group.revealLevel ?? 0}`));
       const condition = node('span', 'ifg-army-unit__condition');
       condition.dataset.state = health >= 66 ? 'ok' : health >= 33 ? 'worn' : 'spent';
       const conditionFill = node('i');
@@ -546,7 +534,7 @@ export function renderSelectedArmyPanel(
   }
   if (army.artillery?.targetArmyId) {
     activity.append(node('span', undefined,
-      `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} continuous bombardment: ${army.artillery.targetArmyId}`));
+      `${army.artillery.manualTarget ? 'Selected' : 'Automatic'} ${army.domain === 'naval' && army.artillery.range <= 26 ? 'naval engagement' : 'continuous bombardment'}: ${army.artillery.targetArmyId}`));
   }
   report.append(activity);
 

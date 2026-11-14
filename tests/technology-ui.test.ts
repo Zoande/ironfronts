@@ -33,10 +33,12 @@ describe('technology tree presentation', () => {
     expect(css).toContain('.ifg-dossier__card');
   });
 
-  it('ships placeholder infantry lines and a wired resource dependency branch', () => {
-    expect(ui).toContain("id: 'militia'");
+  it('enables militia and fleets while retaining future infantry and air lines', () => {
+    expect(ui).toContain("id: 'militia', technology: 'infantry'");
+    expect(ui).toContain("unit('destroyer', 'Destroyer')");
+    expect(ui).toContain("unit('submarine', 'Submarine')");
     expect(ui).toContain("id: 'commandos'");
-    expect(ui.match(/comingSoon: true/g)).toHaveLength(6);
+    expect(ui.match(/comingSoon: true/g)).toHaveLength(3);
     expect(ui).toContain("technology: 'resourceBuildings'");
     expect(ui).toContain("el('i', 'ifg-tech__dependency')");
     expect(css).toContain('.ifg-tech__coming-soon');

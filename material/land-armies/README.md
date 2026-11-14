@@ -1,24 +1,29 @@
 # Original army and transport assets
 
-Four Blender-authored land families replace the former imported soldier/tank pipeline.
-An original coastal transport replaces the procedural ship placeholder.
-Infantry also represents engineers; light and medium tanks share one family.
-Geometry, rigs, motion, material pixels and effect flipbooks are generated from
-the project's own Python sources, without imported art.
+Eleven original Blender-authored families cover every playable troop, warship and convoy.
+Infantry, engineers and militia have separate field equipment and silhouettes; light and medium tanks use distinct geometry.
+Battleships carry heavy turrets, destroyers carry sonar and depth charges, and submarines have a pressure hull, dive planes and periscopes.
+Geometry, rigs, motion, material pixels and effect flipbooks come from the project's own Python sources.
 
 | Family | Close triangles | Middle triangles | Distant triangles |
 | --- | ---: | ---: | ---: |
-| Infantry | 37,540 | 15,766 | 5,252 |
-| Armored car | 23,420 | 9,836 | 3,230 |
-| Tank | 41,024 | 17,230 | 5,535 |
-| Artillery | 11,364 | 4,772 | 1,525 |
-| Transport | 13,636 | 5,726 | 1,722 |
+| infantry | 37,832 | 15,888 | 5,294 |
+| engineer | 40,564 | 17,036 | 5,673 |
+| militia | 36,992 | 15,536 | 5,178 |
+| armored-car | 23,572 | 9,900 | 3,252 |
+| light-tank | 40,460 | 16,992 | 5,384 |
+| tank | 41,932 | 17,610 | 5,660 |
+| artillery | 11,940 | 5,014 | 1,609 |
+| transport | 13,636 | 5,726 | 1,721 |
+| battleship | 6,216 | 2,610 | 829 |
+| destroyer | 5,700 | 2,394 | 767 |
+| submarine | 6,356 | 2,668 | 858 |
 
 ## Rebuilding and editing
 
 Run `npm run build:land-models` with Blender installed. Set `BLENDER_PATH` to
-override the executable (tested with Blender 5.1.1). A family can be rebuilt with
-`npm run build:land-models -- infantry` (also `armored-car`, `tank`, `artillery`, `transport`).
+override the executable (tested with Blender 4.3.2 and 5.1.1). A family can be rebuilt with
+`npm run build:land-models -- infantry` (use any family name from the table above).
 The old infantry/tank npm commands now invoke this builder.
 
 - `scripts/blender/build_land_armies.py`: geometry, rigs, textures, clips, LODs,
@@ -31,7 +36,7 @@ The old infantry/tank npm commands now invoke this builder.
 The builder overwrites generated files, including `.blend` files. Preserve manual
 Blender edits separately or incorporate them into the builder before regenerating.
 Blender uses metres, Z up and -Y forward; exported glTF uses Y up and +Z forward.
-The four land families use the same runtime scale of 2. The 26-metre transport
+Land families use runtime scale 2. The 26-metre transport
 uses scale 0.72 to fit the strategic map without overwhelming coastal settlements.
 
 ## Runtime behavior
@@ -59,7 +64,7 @@ Skeletal animation uses real elapsed time so slow frames cannot separate recoil
 from its scheduled particles. Effects upload every rendered frame. Visual firing is illustrative, not one
 projectile per simulation damage event, and uses only visible target positions.
 
-The ship reuses the material atlas and resident LOD pipeline. It rides sea level,
+All ships reuse the material atlas and resident LOD pipeline. It rides sea level,
 with subtle roll/pitch/heave, an animated propeller and a wake only when moving.
 Both hull and wake follow the rendered wave height.
 Ship visibility is tested at sea level, not against seabed elevation. The common
@@ -78,5 +83,6 @@ inspection, moving/idle ships and a combined coastal scene, records frame timing
 Unit checks verify exported LODs, clips, joints, sockets and shot timing.
 Open `artifacts/land-armies/review.html` for the generated visual review.
 
-Artillery currently has no crew, and engineers and tank subtypes deliberately
-share their family model. Trees and cities remain separate later work.
+Artillery is represented by its gun and carriage; trees and cities use their existing assets.
+
+`node scripts/qa/naval-models-check.mjs` verifies all eleven families in an isolated WebGPU scene, captures the land and naval rosters, and fails on missing models or GPU errors. `node scripts/qa/army-upgrades-check.mjs` and `node scripts/qa/command-ui-check.mjs` verify the refit dialog and army panels at phone and desktop widths. On Linux, set `IRONFRONTS_BROWSER=/usr/bin/chromium`; in environments requiring it, set `IRONFRONTS_NO_SANDBOX=true`.
