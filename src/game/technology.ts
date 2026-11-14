@@ -1,6 +1,7 @@
 /** Country technology progression: two paid, time-based research slots. */
 import type { CommandResult } from './commands/types';
-import type { CountryState, ResearchState, Stockpile, TechnologyBranch, TechnologyLevels } from './game-state';
+import type { CountryState, GameState, ResearchState, Stockpile, TechnologyBranch, TechnologyLevels } from './game-state';
+import { UNIT_TYPE_BY_ID } from './units/unit-catalog';
 import type { BuildingId, ResourceBuildingId } from './units/unit-types';
 
 export const TECHNOLOGY_BRANCHES = ['infantry', 'resources', 'resourceBuildings', 'training', 'hybrid', 'armored', 'navy'] as const;
@@ -47,6 +48,47 @@ export function technologyCost(branch: TechnologyBranch, targetLevel: number): P
 
 export function initialTechnologyLevels(): TechnologyLevels {
   return { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1 };
+}
+
+export function inferLegacyTechnologyLevels(state: GameState, countryId: number): TechnologyLevels {
+  const levels = initialTechnologyLevels();
+
+  for (const [provinceIdText, buildings] of Object.entries(state.provinceBuildings)) {
+    const provinceId = Number(provinceIdText);
+    if (state.provinceOwners[provinceId] !== countryId) continue;
+    levels.training = Math.max(
+      levels.training,
+      buildings.barracks,
+      buildings.tankPlant,
+      buildings.ordnance,
+      buildings.missileSite,
+    );
+    if (buildings.missileSite > 0) levels.hybrid = TECHNOLOGY_MAX_LEVEL;
+  }
+
+  for (const [provinceIdText, economy] of Object.entries(state.provinceEconomies ?? {})) {
+    const provinceId = Number(provinceIdText);
+    if (state.provinceOwners[provinceId] !== countryId) continue;
+    levels.resourceBuildings = Math.max(
+      levels.resourceBuildings,
+      economy.resourceBuildings.fields,
+      economy.resourceBuildings.quarry,
+      economy.resourceBuildings.mine,
+      economy.resourceBuildings.oilPump,
+    );
+  }
+
+  for (const army of Object.values(state.armies)) {
+    if (army.ownerCountryId !== countryId) continue;
+    for (const group of army.units) {
+      const definition = UNIT_TYPE_BY_ID.get(group.typeId);
+      if (!definition) continue;
+      levels[definition.technology] = Math.max(levels[definition.technology], definition.level);
+    }
+  }
+
+  levels.resources = Math.max(levels.resources, levels.resourceBuildings);
+  return levels;
 }
 
 export function technologyLevels(country: CountryState | undefined): TechnologyLevels {
