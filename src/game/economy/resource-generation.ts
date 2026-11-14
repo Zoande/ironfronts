@@ -2,7 +2,7 @@ import type { PhysicalResource, ProvinceEconomy, ResourcePotential, Stockpile } 
 import { emptyStockpile } from '../game-state';
 import type { WorldData } from '../world-data';
 import { RESOURCE_HUBS } from './resource-hubs';
-import { emptyPotential, emptyResourceBuildings, PHYSICAL_RESOURCES, RESOURCE_PRESENCE_CUTOFF } from './resources';
+import { emptyPotential, emptyResourceBuildings, PHYSICAL_RESOURCES, RESOURCE_PRESENCE_CUTOFF, BUILDING_FOR_RESOURCE, RESOURCE_TIER_GATES, OPENING_RESOURCE_MIN_TIERS } from './resources';
 
 const SPREAD: Record<PhysicalResource, readonly [number, number]> = {
   food: [140, 900], stone: [120, 750], metal: [100, 600], oil: [80, 500],
@@ -86,13 +86,7 @@ export function createProvinceEconomies(
     };
   }
 
-  // Guarantee one undeveloped source for every resource to each playable country.
-  const initialOwners = Object.fromEntries(
-    world.provinces.map((province) => [province.id, world.provinceOwner(province.id)]),
-  );
-  for (const countryId of playable) {
-    ensureCountryProvinceResourceBaseline(out, world, initialOwners, countryId);
-  }
+  ensureWorldOpeningResourceBaseline(out, world, [...playable]);
 
   // Bake national normalization into the original provinces once.
   const resources = Object.keys(OPENING_BANDS) as Array<keyof Stockpile>;
@@ -118,22 +112,36 @@ export function createProvinceEconomies(
   return out;
 }
 
-/** Add deterministic undeveloped sources for resources a participating
- * country entirely lacks. Also used when a neutral minor becomes active AI. */
+/** Idempotent repair uses original geography, never current conquests. A captured
+ * source remains with its current owner; restore cannot mint replacement sites. */
+export function ensureWorldOpeningResourceBaseline(
+  economies: Record<number, ProvinceEconomy>, world: WorldData, playableCountryIds: readonly number[],
+): void {
+  const originalOwners = Object.fromEntries(world.provinces.map(p => [p.id, world.provinceOwner(p.id)]));
+  for (const id of playableCountryIds) ensureCountryProvinceResourceBaseline(economies, world, originalOwners, id);
+}
+
+/** Give participating countries a usable rural development path, not merely
+ * passive output at an urban site where resource construction is forbidden. */
 export function ensureCountryProvinceResourceBaseline(
   economies: Record<number, ProvinceEconomy>, world: WorldData,
   provinceOwners: Readonly<Record<number, number>>, countryId: number,
   resources: readonly PhysicalResource[] = PHYSICAL_RESOURCES,
 ): void {
-  const owned = world.provinces.filter((province) => provinceOwners[province.id] === countryId);
+  const owned = world.provinces.filter(p => provinceOwners[p.id] === countryId && economies[p.id]);
+  const rural = owned.filter(p => !p.urban);
   for (const resource of resources) {
-    if (owned.some((province) => (economies[province.id]?.baseProduction[resource] ?? 0) > 0)) continue;
-    const best = [...owned].sort((a, b) =>
-      (economies[b.id]?.resourcePotential[resource] ?? 0)
-        - (economies[a.id]?.resourcePotential[resource] ?? 0) || a.id - b.id)[0];
-    const economy = best ? economies[best.id] : undefined;
-    if (!economy) continue;
-    economy.baseProduction[resource] = 1;
+    const minimumPotential = RESOURCE_TIER_GATES[BUILDING_FOR_RESOURCE[resource]][OPENING_RESOURCE_MIN_TIERS[resource] - 1];
+    const hasOutput = owned.some(p => economies[p.id].baseProduction[resource] > 0);
+    const hasDevelopment = rural.some(p => economies[p.id].resourcePotential[resource] >= minimumPotential);
+    if (hasOutput && (hasDevelopment || !rural.length)) continue;
+    const candidates = rural.length ? rural : owned;
+    const best = [...candidates].sort((a,b) => economies[b.id].resourcePotential[resource]
+      - economies[a.id].resourcePotential[resource] || a.id - b.id)[0];
+    if (!best) continue;
+    const economy = economies[best.id];
+    economy.baseProduction[resource] = Math.max(1, economy.baseProduction[resource]);
+    if (rural.length) economy.resourcePotential[resource] = Math.max(minimumPotential, economy.resourcePotential[resource]);
     const normalized = economy.normalizedOpeningSites ??= [];
     if (!normalized.includes(resource)) normalized.push(resource);
   }
