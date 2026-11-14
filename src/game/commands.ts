@@ -1,6 +1,7 @@
 /** Authoritative gameplay command boundary and ownership gate. */
 
 import { validateRally } from './commands/rally';
+import type { QueuedArmyOrder } from './units/army';
 import type { SimContext } from './sim-context';
 import { issueMoveOrder, issueStop } from './units/movement';
 import { issueManualRetreat } from './combat';
@@ -30,7 +31,68 @@ function controlsArmy(ctx: SimContext, countryId: number, armyId: string): boole
   return ctx.state.armies[armyId]?.ownerCountryId === countryId;
 }
 
+function queuedCommand(armyId: string, countryId: number, order: QueuedArmyOrder): GameCommand {
+  if (order.kind === 'move') return { type: 'moveArmy', armyId, countryId, x: order.x, z: order.z };
+  return { type: 'attackArmy', armyId, countryId, target: order.kind === 'attackArmy'
+    ? { kind: 'army', armyId: order.targetArmyId }
+    : { kind: 'province', provinceId: order.provinceId, x: order.x, z: order.z } };
+}
+
+/** Dispatch through the same rules after arrival, without a browser driving the queue. */
+export function advanceQueuedArmyOrders(ctx: SimContext): void {
+  for (const army of Object.values(ctx.state.armies)) {
+    if (army.status !== 'idle' || army.order || army.battleFrontIds?.length || !army.queuedOrders?.length) continue;
+    const next = army.queuedOrders.shift()!;
+    const result = applyImmediateCommand(ctx, queuedCommand(army.id, army.ownerCountryId, next));
+    if (!result.ok) {
+      army.queuedOrders = [];
+      army.queuedOrderError = result.reason ?? 'Queued order could not be executed.';
+    }
+  }
+}
+
 export function applyCommand(ctx: SimContext, command: GameCommand): CommandResult {
+  if ('armyId' in command && !controlsArmy(ctx, command.countryId, command.armyId)) {
+    return { ok: false, reason: 'Not your army.' };
+  }
+  if ((command.type === 'moveArmy' || command.type === 'attackArmy') && command.enqueue) {
+    const army = ctx.state.armies[command.armyId];
+    if ((army.queuedOrders?.length ?? 0) >= 32) return { ok: false, reason: 'Order queue is full (32 orders).' };
+    let order: QueuedArmyOrder;
+    if (command.type === 'moveArmy') order = { kind: 'move', x: command.x, z: command.z };
+    else if (command.target.kind === 'army') {
+      if (!ctx.state.armies[command.target.armyId]) return { ok: false, reason: 'Target army no longer exists.' };
+      order = { kind: 'attackArmy', targetArmyId: command.target.armyId };
+    } else {
+      const provinceId = command.target.provinceId;
+      const province = ctx.world.provinces.find(p => p.id === provinceId);
+      if (!province) return { ok: false, reason: 'Unknown province.' };
+      order = { kind: 'attackProvince', provinceId: province.id,
+        x: command.target.x ?? province.center[0], z: command.target.z ?? province.center[1] };
+    }
+    if ('x' in order && (!Number.isFinite(order.x) || !Number.isFinite(order.z)
+      || order.x < 0 || order.x > ctx.world.width || order.z < 0 || order.z > ctx.world.height)) {
+      return { ok: false, reason: 'Target is outside the world.' };
+    }
+    if ((army.status === 'idle' || army.status === 'extracting') && !army.order && !army.queuedOrders?.length) {
+      const result = applyImmediateCommand(ctx, { ...command, enqueue: false });
+      if (result.ok) army.queuedOrderError = null;
+      return result;
+    }
+    (army.queuedOrders ??= []).push(order);
+    army.queuedOrderError = null;
+    return { ok: true };
+  }
+  const result = applyImmediateCommand(ctx, command);
+  if (result.ok && 'armyId' in command
+    && ['moveArmy','attackArmy','stopArmy','retreatArmy','splitArmy','extract'].includes(command.type)) {
+    const army = ctx.state.armies[command.armyId];
+    if (army) { army.queuedOrders = []; army.queuedOrderError = null; }
+  }
+  return result;
+}
+
+function applyImmediateCommand(ctx: SimContext, command: GameCommand): CommandResult {
   if ('armyId' in command && !controlsArmy(ctx, command.countryId, command.armyId)) {
     return { ok: false, reason: 'Not your army.' };
   }

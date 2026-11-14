@@ -18,6 +18,7 @@ class FakeConnection extends EventTarget {
   state = state();
   revision = 0;
   fresh = true;
+  authoritativeOrderQueues = false;
   catalogs: PresentationCatalogs = { units: [], buildings: [] };
   commands: unknown[] = [];
   settle: ((ok: boolean, reason?: string, requiredWarCountryIds?: readonly number[], appliedRevision?: number) => void) | null = null;
@@ -31,6 +32,22 @@ class FakeConnection extends EventTarget {
 afterEach(() => vi.useRealTimers());
 
 describe('authoritative command lifecycle', () => {
+  it('negotiates server queue support and waits for authoritative queue state', () => {
+    const connection = new FakeConnection();
+    const session = new RemoteGameSession(connection as unknown as GameConnection, vi.fn());
+    expect(session.queueArmyOrder('a', {kind:'move',x:50,z:70}).ok).toBe(false);
+    expect(connection.commands).toHaveLength(0);
+    connection.authoritativeOrderQueues = true;
+    expect(session.queueArmyOrder('a', {kind:'move',x:50,z:70}).ok).toBe(true);
+    expect(connection.commands[0]).toMatchObject({type:'moveArmy',armyId:'a',x:50,z:70,enqueue:true});
+    expect(session.army('a')?.queuedOrders).toBeUndefined();
+    connection.state.armies.a.queuedOrders = [{kind:'move',x:50,z:70}];
+    connection.revision = 2; connection.dispatchEvent(new Event('state'));
+    connection.settle?.(true, undefined, undefined, 2);
+    expect(session.army('a')?.queuedOrders).toHaveLength(1);
+    expect(session.pendingForArmy('a')).toBe(false);
+  });
+
   it('keeps facts unchanged until the acknowledged revision arrives', () => {
     const connection = new FakeConnection();
     const session = new RemoteGameSession(connection as unknown as GameConnection, vi.fn());

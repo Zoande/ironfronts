@@ -25,6 +25,7 @@ export class GameConnection extends EventTarget {
   status: ConnectionStatus = 'connecting';
   /** Granted by the authenticated server handshake for this connection. */
   debugEnabled = false;
+  authoritativeOrderQueues = false;
   debugUnlockAvailable = false;
   devSimSpeed = 1;
   devSimSpeedEnabled = false;
@@ -88,6 +89,7 @@ export class GameConnection extends EventTarget {
     if (this.closed) return;
     const attempt = ++this.attempt;
     this.diagnosticUploadEnabled = false;
+    this.authoritativeOrderQueues = false;
     if (this.debugEnabled || this.debugUnlockAvailable) {
       this.debugEnabled = false;
       this.debugUnlockAvailable = false;
@@ -156,6 +158,7 @@ export class GameConnection extends EventTarget {
         this.lastMessageMs = performance.now();
         if (message.type === 'hello') {
           hello = true;
+          this.authoritativeOrderQueues = message.capabilities.includes('authoritative-order-queues');
           this.diagnosticUploadEnabled = message.capabilities.includes('client-diagnostics');
           if (!this.diagnosticUploadEnabled) this.diagnosticBacklog.length = 0;
           this.debugEnabled = message.debugEnabled;

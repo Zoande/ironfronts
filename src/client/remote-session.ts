@@ -288,6 +288,15 @@ export class RemoteGameSession extends EventTarget {
     return [...this.pendingCommands.values()].some(({ command }) => command.type === 'research');
   }
 
+  queueArmyOrder(armyId: string, order: import('@ironfronts/protocol').QueuedArmyOrder) {
+    if (!this.connection.authoritativeOrderQueues) return {ok:false,reason:'Reconnect to the updated server before queuing orders.'};
+    return order.kind === 'move'
+      ? this.send({type:'moveArmy', armyId, x:order.x, z:order.z, enqueue:true})
+      : this.send({type:'attackArmy', armyId, enqueue:true, target: order.kind === 'attackArmy'
+        ? {kind:'army',armyId:order.targetArmyId}
+        : {kind:'province',provinceId:order.provinceId,x:order.x,z:order.z}});
+  }
+
   orderMove(
     armyId: string, x: number, z: number, intent: 'move' | 'attack' = 'move',
     onAccepted?: () => void, onRejected?: (reason: string) => void,

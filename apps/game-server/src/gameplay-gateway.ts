@@ -263,7 +263,7 @@ export class GameplayGateway {
             type: 'hello', gameId: config.gameId, gameVersion: config.gameVersion,
             protocolVersion: PROTOCOL_VERSION,
             capabilities: [
-              'filtered-baseline', 'change-only-deltas', 'resync',
+              'filtered-baseline', 'change-only-deltas', 'resync', 'authoritative-order-queues',
               'pending-commands', 'authoritative-timeline',
               ...(this.options.clientLog ? ['client-diagnostics'] : []),
             ],
