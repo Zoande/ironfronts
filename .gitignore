@@ -16,3 +16,7 @@ ironfronts-backups/
 # See dev-assets/callofwar-reference/README.md before touching this rule.
 dev-assets/
 .env
+
+# Production and local environment secrets.
+.env.production
+.env.*.local

@@ -3,7 +3,7 @@ import type { GameState } from './game-state';
 import { INITIAL_GAME_EPOCH_MS } from '../time';
 import { UNIT_TYPE_BY_ID } from '../units/unit-catalog';
 import { qualifyingPhaseFromBuildings } from '../phase';
-import { initialTechnologyLevels } from '../technology';
+import { inferLegacyTechnologyLevels } from '../technology';
 import { createTransportManifestation, transportType } from '../naval/transport';
 import { SUPPLY_CAPACITY_PER_UNIT, type ArmyStack } from '../units/army';
 
@@ -109,7 +109,7 @@ export function parseGameState(input: unknown, initialEpochMs = INITIAL_GAME_EPO
     // save with an Ordnance Workshop or Missile Site must not be retroactively
     // locked out of what it already has.
     country.phase ??= qualifyingPhaseFromBuildings(parsed as unknown as GameState, country.id);
-    country.technologies ??= initialTechnologyLevels();
+    country.technologies ??= inferLegacyTechnologyLevels(parsed as unknown as GameState, country.id);
     country.technologies.resourceBuildings ??= country.technologies.resources;
     country.technologies.navy ??= 1;
     if (country.researchSlots || country.research) {

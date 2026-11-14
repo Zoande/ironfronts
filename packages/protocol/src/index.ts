@@ -81,6 +81,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   // sends it (see gameplay-gateway.ts). Not a gameplay command: it changes
   // the whole server's simulation pace for every connected player, so it is
   // never wrapped in the commandId-acked command envelope above.
+  z.object({ type: z.literal('devUnlockDebug'), password: z.string().min(1).max(256) }),
   z.object({ type: z.literal('devSetClock'), epochMs: z.number().finite().min(-8.64e15).max(8.64e15) }),
   z.object({ type: z.literal('ping'), sentAt: z.number().finite() }),
   z.object({
@@ -340,7 +341,7 @@ export type ProjectionDelta = {
 };
 
 export type ServerMessage =
-  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 5; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean }
+  | { type: 'hello'; gameId: string; gameVersion: string; protocolVersion: 5; capabilities: string[]; world: WorldDescriptor; countryId: number; debugEnabled: boolean; debugUnlockAvailable?: boolean }
   | { type: 'baseline'; revision: number; state: PlayerProjection; catalogs: PresentationCatalogs; clock: GameClockSync }
   | { type: 'delta'; fromRevision: number; revision: number; delta: ProjectionDelta; events: FilteredEvent[] }
   | { type: 'clockSync'; clock: GameClockSync }
@@ -348,6 +349,7 @@ export type ServerMessage =
   | { type: 'event'; event: FilteredEvent }
   | { type: 'pong'; sentAt: number; serverEpochMs: number }
   | { type: 'error'; code: string; message: string; retryable?: boolean }
+  | { type: 'devDebugAccess'; enabled: boolean; message: string }
   // Sent right after `baseline` and again whenever the multiplier changes.
   // `devControlsEnabled: false` in production — the server ignores
   // devSetSimSpeed there regardless, but the client uses this to hide the
@@ -374,6 +376,8 @@ export type FilteredEvent =
 
 export interface GameTicketClaims {
   accountId: string;
+  /** Signed by the auth server from the authenticated username. */
+  debugEntitled?: boolean;
   gameId: string;
   countryId: number;
   audience: 'game-server';

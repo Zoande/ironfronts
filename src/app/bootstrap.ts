@@ -446,7 +446,7 @@ async function teardownPartialLaunch(): Promise<void> {
   lastAppliedWeather = null;
   debugEnabled = false;
   diagnostics.hidden = true;
-  uiStore.patch({ debugEnabled: false });
+  uiStore.patch({ debugEnabled: false, debugUnlockAvailable: false });
   setDebugHandles(window as unknown as Record<string, unknown>, false, {});
   activeStopQuotes?.();
   activeStopQuotes = null;
@@ -550,9 +550,11 @@ async function startGame(token: number): Promise<void> {
   activeRenderer = renderer;
 
   const syncDebugAccess = (): void => {
+    const newlyUnlocked = !debugEnabled && session.debugEnabled;
     debugEnabled = session.debugEnabled;
+    if (newlyUnlocked) { diagnostics.hidden = false; uiStore.patch({ paused: false }); }
     if (!debugEnabled) diagnostics.hidden = true;
-    uiStore.patch({ debugEnabled });
+    uiStore.patch({ debugEnabled, debugUnlockAvailable: session.debugUnlockAvailable });
     setDebugHandles(window as unknown as Record<string, unknown>, debugEnabled, {
       renderer, combatEffects, session,
     });
@@ -778,6 +780,12 @@ async function startGame(token: number): Promise<void> {
     },
     dismissNotification: (id) => removeNotification(id),
     togglePause: (open) => uiStore.patch({ paused: open }),
+    requestDebugAccess: () => {
+      if (session.debugEnabled) { diagnostics.hidden = false; uiStore.patch({ paused: false }); return; }
+      if (!session.debugUnlockAvailable) return;
+      const password = window.prompt('World Inspector password');
+      if (password) session.unlockDebug(password);
+    },
     returnToMenu: () => {
       void (async () => {
         const confirmed = await showGameConfirmation(

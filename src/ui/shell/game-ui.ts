@@ -59,6 +59,7 @@ export interface GameUiActions {
   dismissNotification(id: string): void;
   togglePause(open: boolean): void;
   returnToMenu(): void;
+  requestDebugAccess?(): void;
   /** Arm map-click targeting for a strategic strike (the Warheads chip / N key). */
   armStrike?: () => void;
   focusSelected?: () => void;
@@ -1071,6 +1072,12 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
     row.append(b, el('small', 'ifg-overlay__link-reason', reason));
     secondary.append(row);
   }
+  const debugRow = el('div', 'ifg-overlay__link-row');
+  const debugButton = el('button', 'ifg-overlay__link', 'Unlock World Inspector');
+  debugButton.type = 'button';
+  debugButton.addEventListener('click', () => actions.requestDebugAccess?.());
+  debugRow.append(debugButton);
+  secondary.append(debugRow);
   const diagLine = el('p', 'ifg-overlay__diag', '');
   overlayCard.append(resumeButton, qualityGroup, frameRateGroup, secondary, diagLine);
   overlay.append(overlayCard);
@@ -1515,6 +1522,8 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
 
     // This overlay only blocks local input; the authoritative simulation continues.
     overlay.hidden = !state.paused;
+    debugRow.hidden = !(state.debugUnlockAvailable || state.debugEnabled);
+    debugButton.textContent = state.debugEnabled ? 'Open World Inspector' : 'Unlock World Inspector';
     for (const [level, button] of qualityButtons) {
       const active = level === state.quality;
       button.classList.toggle('is-selected', active);

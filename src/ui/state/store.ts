@@ -401,6 +401,7 @@ export interface StrategicUiState {
   readonly resourceOverlay: boolean;
   /** Whether the debug/world-inspector affordances are exposed at all. */
   readonly debugEnabled: boolean;
+  readonly debugUnlockAvailable: boolean;
   /** Progression tier — 1, 2, or 3. See game/phase.ts. Not to be confused
    *  with `phase` above (lobby/loading/in-game) — named distinctly for that
    *  reason. */
@@ -447,6 +448,7 @@ export function createInitialState(overrides: Partial<StrategicUiState> = {}): S
     paused: false,
     resourceOverlay: false,
     debugEnabled: false,
+    debugUnlockAvailable: false,
     technology: {
       levels: { infantry: 1, resources: 1, resourceBuildings: 1, training: 1, hybrid: 1, armored: 1, navy: 1 },
       slots: [null, null],
