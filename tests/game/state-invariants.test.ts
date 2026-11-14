@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import { validateWorldState } from '../../src/game/state-invariants';
 import { parseGameState } from '../../src/game/state-schema';
-import { GAME_STATE_VERSION } from '../../src/game/game-state';
+import { GameSession } from '../../src/game/session/game-session';
+import { emptyStockpile, GAME_STATE_VERSION } from '../../src/game/game-state';
 import { fixture, army } from '../helpers/simulation';
 import { createTransportManifestation } from '../../src/game/naval/transport';
 
 describe('restored state invariants', () => {
+  it.each([6, 7, 8])('restores legitimate Level %i resource buildings without resetting the campaign', (tier) => {
+    const ctx = fixture();
+    ctx.state.provinceEconomies = {10:{
+      resourcePotential:{food:1,stone:1,metal:1,oil:1},baseProduction:emptyStockpile(),
+      resourceBuildings:{fields:tier,quarry:tier,mine:tier,oilPump:tier},
+      productionCapacity:1,constructionCapacity:1,
+    }};
+    ctx.state.clock.gameTimeHours = 14 * 24;
+    const restored = GameSession.restore(ctx.state, ctx.world);
+    expect(restored.state.clock.gameTimeHours).toBe(14 * 24);
+    expect(restored.state.provinceEconomies?.[10].resourceBuildings.fields).toBe(tier);
+    const reloaded = GameSession.restore(restored.snapshot(), ctx.world);
+    expect(reloaded.state.provinceEconomies?.[10].resourceBuildings.oilPump).toBe(tier);
+    ctx.state.provinceEconomies[10].resourceBuildings.fields = 9;
+    expect(() => GameSession.restore(ctx.state,ctx.world)).toThrow();
+  });
+
   it('rejects off-edge positions, invalid queue owners, relations, and stale counters', () => {
     const cases = [
       (ctx: ReturnType<typeof fixture>) => { ctx.state.armies.a = { ...army(), x: 150, z: 160, edge: { from: 0, to: 1 } }; },
