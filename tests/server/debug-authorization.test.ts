@@ -71,9 +71,9 @@ describe('account + password gated debug authorization', () => {
     enabled.close(); disabled.close();
   });
 
-  it('entitles only DimaTest1, case-insensitively', () => {
-    expect(isDebugEntitledUsername('DimaTest1')).toBe(true);
-    expect(isDebugEntitledUsername('dImAtEsT1')).toBe(true);
+  it('entitles only admin, case-insensitively', () => {
+    expect(isDebugEntitledUsername('admin')).toBe(true);
+    expect(isDebugEntitledUsername('AdMiN')).toBe(true);
     expect(isDebugEntitledUsername('ordinary')).toBe(false);
   });
 
@@ -95,24 +95,10 @@ describe('account + password gated debug authorization', () => {
     socket.close();
   });
 
-  it('requires the password before an entitled account can use debug controls', () => {
+  it('enables tools from the signed admin entitlement after account authentication', () => {
     const { connect, setSpeed } = setup(true);
-    const socket = connect('dima', true);
-    expect(socket.sent.find((message) => message.type === 'hello')).toMatchObject({
-      debugEnabled: false, debugUnlockAvailable: true,
-    });
-
-    socket.message({ type: 'devSetSimSpeed', multiplier: 4 });
-    expect(socket.sent.at(-1)).toMatchObject({ type: 'error', code: 'unauthorized_debug' });
-    expect(setSpeed).not.toHaveBeenCalled();
-
-    socket.message({ type: 'devUnlockDebug', password: 'wrong password' });
-    expect(socket.sent.at(-1)).toMatchObject({ type: 'devDebugAccess', enabled: false });
-
-    socket.message({ type: 'devUnlockDebug', password: debugPassword });
-    expect(socket.sent.some((message) => message.type === 'devDebugAccess' && message.enabled === true)).toBe(true);
-    expect(socket.sent.some((message) => message.type === 'devDiagnostics' && message.devControlsEnabled === true)).toBe(true);
-
+    const socket = connect('admin', true);
+    expect(socket.sent.find((message) => message.type === 'hello')).toMatchObject({ debugEnabled: true });
     socket.message({ type: 'devSetSimSpeed', multiplier: 4 });
     expect(setSpeed).toHaveBeenCalledWith(4);
     socket.close();

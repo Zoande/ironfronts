@@ -120,6 +120,18 @@ export class AuthStore {
     return commanderProfileFromXp(nextXp, [...merged]);
   }
 
+  /** Provision only from private server configuration; preserve campaign identity. */
+  async ensureAdminAccount(password: string): Promise<void> {
+    validatePassword(password);
+    if (await this.authenticate('admin', password)) return;
+    const row = this.database.prepare('SELECT * FROM accounts WHERE normalized_username = ?').get('admin') as AccountRow | undefined;
+    if (!row) { await this.register('admin', password); return; }
+    const salt = randomBytes(16).toString('base64url');
+    const hash = (await scrypt(password, salt, 64) as Buffer).toString('base64url');
+    this.database.prepare('UPDATE accounts SET password_hash = ?, password_salt = ? WHERE id = ?').run(hash, salt, row.id);
+    this.database.prepare('DELETE FROM sessions WHERE account_id = ?').run(row.id);
+  }
+
   async register(username: string, password: string): Promise<Account> {
     const normalizedUsername = normalizeUsername(username);
     validatePassword(password);
