@@ -336,6 +336,8 @@ export interface ArmyStackView {
   /** UI is waiting for a map click to set the move destination. */
   readonly awaitingMoveTarget?: boolean;
   readonly targetingMode?: 'move' | 'attack' | 'retreat' | 'split' | null;
+  readonly upgradeQuote?: import('../../../packages/protocol/src/index').ArmyUpgradeQuote;
+  readonly upgrading?: boolean;
   readonly canMove?: boolean;
   /** Specific explanation shown when movement is unavailable. */
   readonly moveDisabledReason?: string;

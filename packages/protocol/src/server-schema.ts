@@ -25,6 +25,8 @@ const combatRateModifiers = z.object({
 const army = point.extend({ queuedOrders: z.array(z.discriminatedUnion('kind', [point.extend({kind:z.literal('move')}),
   point.extend({kind:z.literal('attackProvince'),provinceId:z.number().int().nonnegative()}),
   z.object({kind:z.literal('attackArmy'),targetArmyId:z.string().min(1)})])).max(32).optional(), queuedOrderError: z.string().nullable().optional(),
+  upgradeQuote: z.object({key:z.string(),entries:z.array(z.object({typeId:z.string(),targetTypeId:z.string(),count:integer.positive()})),cost:stockpile.partial(),totalHours:nonnegative,canStart:z.boolean(),reason:z.string().optional()}).optional(),
+  upgrade: z.object({remainingHours:nonnegative,totalHours:finite.positive()}).nullable().optional(),
   id: z.string(), name: z.string(), ownerCountryId: integer, ownerName: z.string(), ownerColor: z.string(), own: z.boolean(),
   contact: z.enum(['contact', 'visible']), status: z.enum(['idle', 'moving', 'extracting', 'engaged', 'retreating', 'embarking', 'atSea', 'disembarking', 'unknown']),
   graphNodeId: integer.optional(),

@@ -96,6 +96,7 @@ export interface ArmyStack {
   /** Server-owned orders continue while the commander is disconnected. */
   queuedOrders?: QueuedArmyOrder[];
   queuedOrderError?: string | null;
+  upgrade?: import('./upgrades').ArmyUpgrade | null;
   /** Resource node id this stack is extracting, or null. */
   extractingNodeId: number | null;
   /** V4 renewable production assignment. */

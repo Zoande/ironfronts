@@ -1493,7 +1493,7 @@ export function mountGameUi(store: UiStore, actions: GameUiActions): GameUiHandl
       Math.round((army.health ?? 0) * 100), Math.round((army.strength ?? 0) * 100),
       Math.round(army.hp ?? 0), Math.round(army.maxHp ?? 0),
       army.unitCount, army.canMove, army.moveDisabledReason ?? '', army.canAttack, army.canRetreat,
-      army.canSplit, army.canStop, army.canExtract,
+      army.canSplit, army.canStop, army.canExtract, JSON.stringify(army.upgradeQuote), army.upgrading,
       army.legalRetreatExits?.length ?? 0,
       army.artillery?.targetArmyId ?? '',
       (army.groups ?? []).map((g) => `${g.typeId}:${g.count}:${Math.round(g.health * 100)}`).join(','),

@@ -45,10 +45,10 @@ function mergeArrivedStacks(session: SimContext, arrivedIds: ReadonlySet<string>
   const worldWidth = session.world.width;
   for (const armyId of arrivedIds) {
     const army = session.state.armies[armyId];
-    if (!army || army.status !== 'idle' || army.order || army.battleFrontIds?.length || army.queuedOrders?.length) continue;
+    if (!army || army.upgrade || army.status !== 'idle' || army.order || army.battleFrontIds?.length || army.queuedOrders?.length) continue;
     const target = Object.values(session.state.armies).find((other) => other !== army
       && other.ownerCountryId === army.ownerCountryId
-      && other.status === 'idle' && !other.order && !other.battleFrontIds?.length && !other.queuedOrders?.length
+      && !other.upgrade && other.status === 'idle' && !other.order && !other.battleFrontIds?.length && !other.queuedOrders?.length
       && ((!army.edge && !other.edge && other.graphNodeId === army.graphNodeId)
         || wrappedDistance(other.x, other.z, army.x, army.z, worldWidth) < MERGE_RADIUS));
     if (target) {
@@ -68,7 +68,7 @@ export function stepMovement(session: SimContext, dtHours: number, contactTimes?
   for (const army of Object.values(session.state.armies)) {
     ensureArmyRuntimeState(army);
     const order = army.order;
-    if (!order || army.status === 'engaged') continue;
+    if (!order || army.upgrade || army.status === 'engaged') continue;
     if (isNavalStatus(army.status)) {
       stepNavalCrossing(session, army, order, dtHours);
       if (!army.order) arrivedIds.add(army.id);

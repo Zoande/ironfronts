@@ -1,3 +1,4 @@
+import { startArmyUpgrade } from './units/upgrades';
 /** Authoritative gameplay command boundary and ownership gate. */
 
 import { validateRally } from './commands/rally';
@@ -41,7 +42,7 @@ function queuedCommand(armyId: string, countryId: number, order: QueuedArmyOrder
 /** Dispatch through the same rules after arrival, without a browser driving the queue. */
 export function advanceQueuedArmyOrders(ctx: SimContext): void {
   for (const army of Object.values(ctx.state.armies)) {
-    if (army.status !== 'idle' || army.order || army.battleFrontIds?.length || !army.queuedOrders?.length) continue;
+    if (army.upgrade || army.status !== 'idle' || army.order || army.battleFrontIds?.length || !army.queuedOrders?.length) continue;
     const next = army.queuedOrders.shift()!;
     const result = applyImmediateCommand(ctx, queuedCommand(army.id, army.ownerCountryId, next));
     if (!result.ok) {
@@ -55,6 +56,8 @@ export function applyCommand(ctx: SimContext, command: GameCommand): CommandResu
   if ('armyId' in command && !controlsArmy(ctx, command.countryId, command.armyId)) {
     return { ok: false, reason: 'Not your army.' };
   }
+  if ('armyId' in command && ctx.state.armies[command.armyId]?.upgrade
+    && !['renameArmy', 'setStance'].includes(command.type)) return { ok: false, reason: 'This army cannot receive orders until its upgrade completes.' };
   if ((command.type === 'moveArmy' || command.type === 'attackArmy') && command.enqueue) {
     const army = ctx.state.armies[command.armyId];
     if ((army.queuedOrders?.length ?? 0) >= 32) return { ok: false, reason: 'Order queue is full (32 orders).' };
@@ -97,6 +100,8 @@ function applyImmediateCommand(ctx: SimContext, command: GameCommand): CommandRe
     return { ok: false, reason: 'Not your army.' };
   }
   switch (command.type) {
+    case 'upgradeArmy':
+      return startArmyUpgrade(ctx, ctx.state.armies[command.armyId], command.quoteKey);
     case 'moveArmy':
       return issueMoveOrder(
         ctx, command.armyId, command.x, command.z, 'move',

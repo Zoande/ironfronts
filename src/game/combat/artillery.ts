@@ -27,6 +27,7 @@ export function stepArtillery(session: SimContext, dtHours: number, events: Comb
   const visibilityByCountry = new Map<number, ReturnType<typeof computeArmyVisibility>>();
   for (const army of armies) {
     ensureArmyRuntimeState(army);
+    if (army.upgrade) continue;
     if (army.status !== 'idle' && army.status !== 'extracting') continue;
     const artillery = army.units.filter((group) => unitType(group.typeId).category === 'artillery');
     if (artillery.length === 0) continue;

@@ -1,5 +1,5 @@
 import {
-  extractionEligibility, movementEdgeAllowed, computeArmyVisibility, projectArmyView,
+  armyUpgradeQuote, extractionEligibility, movementEdgeAllowed, computeArmyVisibility, projectArmyView,
   currentMovementLeg, remainingOrderTravelHours, legalRetreatPaths, nearestNode, findPath,
   edgeIdBetween, edgePolyline,
   UNIT_TYPES, BUILDINGS, buildOptions, producibleUnits,
@@ -39,6 +39,10 @@ export function projectFor(
     if (!army) return [];
     const queue = army.own ? state.armies[army.id]?.queuedOrders : undefined;
     let projected: import('@ironfronts/protocol').ProjectedArmy = army.own ? { ...army, queuedOrders: queue?.map(order => ({ ...order })) ?? [], queuedOrderError: state.armies[army.id]?.queuedOrderError ?? null } : army;
+    if (army.own) {
+      const source = state.armies[army.id];
+      projected = { ...projected, upgradeQuote: armyUpgradeQuote({state}, source), upgrade: source.upgrade ? { remainingHours: source.upgrade.remainingHours, totalHours: source.upgrade.totalHours } : null };
+    }
     if (graph && army.own) {
       const eligibility = extractionEligibility({ state, world, graph }, army.id);
       projected = { ...projected, actions: { canExtract: eligibility.ok, extractionProvinceId: eligibility.provinceId ?? null,

@@ -158,6 +158,7 @@ export interface RespondResourceTradeCommand {
 
 export type GameCommand =
   | MoveArmyCommand | AttackCommand | RetreatArmyCommand | SplitArmyCommand
+  | { readonly type: 'upgradeArmy'; readonly countryId: number; readonly armyId: string; readonly quoteKey: string }
   | StopArmyCommand | RenameArmyCommand | SetStanceCommand | ExtractCommand | ProduceCommand | BuildCommand | ResearchCommand | RallyCommand
   | SendDiplomaticMessageCommand | ProposeDiplomacyCommand | RespondDiplomacyCommand
   | DeclareWarCommand | EndAllianceCommand | StrikeCommand

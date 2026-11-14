@@ -1,3 +1,4 @@
+import { stepArmyUpgrades } from '../units/upgrades';
 /**
  * `GameSession` — the authoritative owner of gameplay state.
  *
@@ -149,6 +150,7 @@ export class GameSession {
     stepTechnology(this.state.countries, dtHours);
     for (const done of stepProduction(this, dtHours)) this.pendingCompletions.push(done);
     for (const ev of stepCombat(this, dtHours, contactTimes)) this.pendingCombat.push(ev);
+    stepArmyUpgrades(this, dtHours);
     for (const cap of stepCapture(this)) this.pendingCaptures.push(cap);
     // --- simple defensive AI (slow cadence) -----------------------
     if (cadence.aiHours + 1e-12 >= AI_INTERVAL) {

@@ -57,6 +57,7 @@ const stateSchema = z.object({ version: z.literal(4), seed: number, scenarioId: 
   z.object({kind:z.literal('attackArmy'),targetArmyId:z.string().min(1)})])).max(32).optional(), queuedOrderError: z.string().nullable().optional(), id: z.string(), ownerCountryId: id, name: z.string(), graphNodeId: id,
     edge: z.object({ from: id, to: id, edgeId: id.optional(), distanceAlongEdge: positive.optional() }).nullable().optional(),
     units: z.array(z.object({ typeId: unit, count: id, hp: positive, experience: positive })), status: z.enum(['idle', 'moving', 'engaged', 'retreating', 'extracting', 'embarking', 'atSea', 'disembarking']), order: order.nullable(), extractingNodeId: id.nullable(), extractionAssignment: z.object({ provinceId: id, resource: z.enum(['food', 'stone', 'metal', 'oil']) }).nullable().optional(),
+    upgrade: z.object({ entries: z.array(z.object({typeId: unit, targetTypeId: unit, count: id.positive()})).min(1), totalHours: number.positive(), remainingHours: positive }).nullable().optional(),
     lastGraphNodeId: id.nullable().optional(), suspendedOrder: order.nullable().optional(), battleFrontIds: z.array(z.string()).optional(),
     retreat: z.object({ destinationProvinceId: id, protectedUntilNodeId: id, protected: z.boolean() }).nullable().optional(),
     artillery: z.object({ targetArmyId: z.string().nullable(), manualTarget: z.boolean() }).optional(),

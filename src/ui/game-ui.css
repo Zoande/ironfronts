@@ -1,2 +1,8 @@
 /* Stable stylesheet entry; component styles live under src/ui/styles. */
 @import './styles/game-ui.css';
+
+.ifg-upgrade-dialog { max-width: min(38rem, calc(100vw - 2rem)); max-height: 85dvh; overflow: auto; }
+.ifg-upgrade-dialog__troops { padding: 0; list-style: none; display: grid; gap: .7rem; }
+.ifg-upgrade-dialog__troops li { display: flex; align-items: center; gap: .8rem; }
+.ifg-upgrade-dialog__troops .ifg-army-unit__portrait { flex: 0 0 3.5rem; width: 3.5rem; height: 3.5rem; }
+.ifg-upgrade-dialog__total { border-top: 1px solid #897455; padding-top: 1rem; font-weight: bold; }

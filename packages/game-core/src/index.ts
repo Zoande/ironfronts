@@ -64,3 +64,5 @@ export {
   TECHNOLOGY_BRANCHES, TECHNOLOGY_HOURS_BY_LEVEL, TECHNOLOGY_LABELS,
   TECHNOLOGY_MAX_LEVEL, initialTechnologyLevels, startResearch, stepTechnology,
 } from '../../../src/game/technology';
+
+export { armyUpgradeQuote } from '../../../src/game/units/upgrades';

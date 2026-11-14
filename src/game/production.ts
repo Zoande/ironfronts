@@ -174,7 +174,7 @@ function spawnUnit(
 
   // Auto-stack onto a friendly idle army already at that node.
   const existing = Object.values(session.state.armies)
-    .filter((a) => a.ownerCountryId === ownerCountryId
+    .filter((a) => !a.upgrade && a.ownerCountryId === ownerCountryId
       && armyAtNode(session, a, node) && a.graphNodeId === node && !a.order && a.extractionAssignment == null
       && a.status !== 'engaged' && a.status !== 'retreating')
     .sort((a, b) => {

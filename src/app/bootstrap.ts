@@ -1,3 +1,4 @@
+import { confirmArmyUpgrade } from '../ui/army-upgrade-dialog';
 import { queuedRouteSegments } from '../client/queued-orders';
 import { landMuzzlePosition, nextLandShot } from '../rendering/land-animation';
 import { setDebugHandles } from '../client/debug-access';
@@ -2372,6 +2373,14 @@ function handleArmyCommand(command: ArmyPanelCommand): void {
   const session = activeSession;
   if (!session || !selectedArmyId) { if (command === 'deselect') deselectArmy(); return; }
   if (command === 'deselect') { deselectArmy(); return; }
+  if (command === 'upgrade') {
+    const armyId = selectedArmyId;
+    const quote = session.army(armyId)?.upgradeQuote;
+    if (quote?.entries.length) void confirmArmyUpgrade(quote, gameUnitLabel).then((accepted) => {
+      if (accepted && activeSession === session) session.orderUpgrade(armyId, quote.key);
+    });
+    return;
+  }
   if (command === 'move') {
     targetingMode = 'move'; awaitingMoveTarget = true; refreshSelectedArmy(session); return;
   }
@@ -2528,8 +2537,10 @@ function refreshSelectedArmy(
         ?? aggregateTroopStat(groups, 'attack', gameUnit),
       defense: scaledManifestationProfile(comp?.combatProfile?.defense)
         ?? aggregateTroopStat(groups, 'defense', gameUnit),
-      activity,
+      activity: view.upgrade ? `Upgrading · ${view.upgrade.remainingHours.toFixed(1)} game h remaining` : activity,
       activityKind,
+      upgrading: Boolean(view.upgrade),
+      upgradeQuote: view.upgradeQuote,
       activityRemainingSeconds,
       activityDurationSeconds,
       activityProgress,
@@ -2537,21 +2548,21 @@ function refreshSelectedArmy(
       arrivalSeconds: arrivalRemainingMs !== undefined ? arrivalRemainingMs / 1_000 : undefined,
       movementProgress,
       own: view.own,
-      canExtract: session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
+      canExtract: !view.upgrade && session.fresh && view.own && !view.moveOrder && session.extractableNodeAt(view.id) !== null,
       extractableResources: view.actions?.extractableResources,
       awaitingMoveTarget: view.own && awaitingMoveTarget,
       // 'strike' is a nation-level order, not an army targeting mode — the army
       // card never reflects it.
       targetingMode: view.own && targetingMode !== 'strike' ? targetingMode : null,
-      canMove: session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
+      canMove: !view.upgrade && session.fresh && view.own && !inCloseCombat && view.status !== 'retreating'
         && (!NAVAL_TRANSIT_STATUSES.has(view.status) || anchoredAtSea),
-      moveDisabledReason,
-      canAttack: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+      moveDisabledReason: view.upgrade ? 'This army is upgrading and cannot move yet.' : moveDisabledReason,
+      canAttack: !view.upgrade && session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),
-      canRetreat: session.fresh && view.own && view.status === 'engaged' && Boolean(view.legalRetreatExits?.length),
-      canSplit: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+      canRetreat: !view.upgrade && session.fresh && view.own && view.status === 'engaged' && Boolean(view.legalRetreatExits?.length),
+      canSplit: !view.upgrade && session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status),
-      canStop: session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
+      canStop: !view.upgrade && session.fresh && view.own && view.status !== 'engaged' && view.status !== 'retreating'
         && !NAVAL_TRANSIT_STATUSES.has(view.status)
         && (Boolean(view.moveOrder) || view.status === 'extracting' || targetingMode !== null),
       supply: view.supply,

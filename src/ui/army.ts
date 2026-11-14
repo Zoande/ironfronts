@@ -88,7 +88,7 @@ export function describeArmy(army: ArmyStackView): Array<[string, string]> {
 }
 
 export type ArmyPanelCommand =
-  | 'move' | 'attack' | 'retreat' | 'split' | 'stop' | 'extract-food' | 'extract-stone' | 'extract-metal' | 'extract-oil' | 'deselect'
+  | 'upgrade' | 'move' | 'attack' | 'retreat' | 'split' | 'stop' | 'extract-food' | 'extract-stone' | 'extract-metal' | 'extract-oil' | 'deselect'
   | 'stance-attack' | 'stance-attack-defend' | 'stance-defend' | 'stance-defend-retreat' | 'stance-retreat';
 
 const STANCE_OPTIONS: ReadonlyArray<{ command: ArmyPanelCommand; icon: IconName; label: string; description: string }> = [
@@ -401,6 +401,7 @@ export function renderSelectedArmyPanel(
         disabledReason: 'No active order to cancel.',
       }),
     );
+    if (army.upgradeQuote?.entries.length) commands.append(command('Upgrade', 'cmd-upgrade', 'upgrade', !army.upgrading, false, { description: 'Review the whole-army refit, total cost and time. Split first to upgrade fewer troops.' }));
     for (const resource of army.extractableResources ?? []) commands.append(command(
       `Amplify ${resource}`, 'cmd-extract', `extract-${resource}` as ArmyPanelCommand, army.canExtract === true, false,
       {

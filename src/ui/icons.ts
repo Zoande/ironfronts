@@ -41,7 +41,7 @@ export type IconName =
   | 'note-warning' | 'note-combat' | 'note-completed' | 'note-diplomacy' | 'note-information'
   | 'node-stone' | 'node-metal' | 'node-oil' | 'resource-water'
   | 'cmd-move' | 'cmd-attack' | 'cmd-retreat' | 'cmd-split' | 'cmd-stop' | 'cmd-extract'
-  | 'cmd-patrol' | 'cmd-garrison'
+  | 'cmd-upgrade' | 'cmd-patrol' | 'cmd-garrison'
   | 'unit-engineer' | 'unit-infantry' | 'unit-armored-car' | 'unit-light-tank' | 'unit-medium-tank' | 'unit-artillery'
   | 'marker-infantry' | 'marker-engineer' | 'marker-armored-car'
   | 'marker-light-tank' | 'marker-medium-tank' | 'marker-artillery'
@@ -59,6 +59,7 @@ export type IconName =
 interface IconDef { readonly kind: 'img' | 'svg'; readonly value: string; }
 
 const ICONS: Record<IconName, IconDef> = {
+  'cmd-upgrade': { kind: 'img', value: png('upgrade') },
   funds: { kind: 'img', value: png('economics') },
   manpower: { kind: 'img', value: png('population') },
   food: { kind: 'img', value: png('food') },

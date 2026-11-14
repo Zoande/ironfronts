@@ -26,6 +26,7 @@ export const commandPayloadSchema = z.discriminatedUnion('type', [
     groups: z.array(z.object({ typeId: z.string(), count: z.number().int().nonnegative() })).min(1),
     x: z.number().finite(), z: z.number().finite(), confirmedWarCountryIds: confirmedWars,
   }),
+  z.object({ type: z.literal('upgradeArmy'), armyId: z.string(), quoteKey: z.string().min(1).max(8192) }),
   z.object({ type: z.literal('stopArmy'), armyId: z.string() }),
   z.object({ type: z.literal('renameArmy'), armyId: z.string(), name: z.string().trim().min(1).max(24) }),
   z.object({
@@ -165,7 +166,15 @@ export type QueuedArmyOrder =
   | { kind: 'attackProvince'; provinceId: number; x: number; z: number }
   | { kind: 'attackArmy'; targetArmyId: string };
 
+export interface ArmyUpgradeQuote {
+  key: string;
+  entries: Array<{ typeId: string; targetTypeId: string; count: number }>;
+  cost: Partial<Record<'funds' | 'manpower' | 'food' | 'stone' | 'metal' | 'oil', number>>;
+  totalHours: number; canStart: boolean; reason?: string;
+}
 export interface ProjectedArmy {
+  upgradeQuote?: ArmyUpgradeQuote;
+  upgrade?: { remainingHours: number; totalHours: number } | null;
   queuedOrders?: QueuedArmyOrder[];
   queuedOrderError?: string | null;
   id: string;

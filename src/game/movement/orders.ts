@@ -70,6 +70,7 @@ export function issueMoveOrder(
   const army = session.state.armies[armyId];
   if (!army) return { ok: false, reason: 'No such army.' };
   ensureArmyRuntimeState(army);
+  if (army.upgrade) return { ok: false, reason: 'Army is upgrading.' };
   army.battleFrontIds = army.battleFrontIds!.filter((frontId) => {
     const front = session.state.battleFronts[frontId];
     return Boolean(front && armyParticipatesInFront(army.id, front));
